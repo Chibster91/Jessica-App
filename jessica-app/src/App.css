@@ -160,6 +160,8 @@ input, button, textarea {
   border: 1px solid #3a3a48;
   border-radius: 12px;
   padding: 1.5rem;
+  max-height: 90svh;
+  overflow-y: auto;
 }
 
 .modal p {
@@ -421,6 +423,14 @@ input, button, textarea {
     border-top: 1px solid #3a3a48;
     padding-left: 0;
     padding-top: 1rem;
+  }
+
+  .modal {
+    padding: 1rem;
+  }
+
+  .modal-results {
+    max-height: 200px;
   }
 }
 
