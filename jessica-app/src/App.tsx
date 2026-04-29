@@ -197,9 +197,9 @@ const activityLabels: Record<ActivityLevel, string> = {
 };
 
 const goalLabels: Record<GoalType, string> = {
-  lose: "Lose",
+  lose: "Lose weight",
   maintain: "Maintain",
-  gain: "Gain",
+  gain: "Gain weight",
 };
 
 const rateLabels: Record<GoalRate, string> = {
@@ -207,6 +207,9 @@ const rateLabels: Record<GoalRate, string> = {
   moderate: "Moderate",
   aggressive: "Aggressive",
 };
+
+const activityOptions = Object.keys(activityLabels) as ActivityLevel[];
+const goalOptions = Object.keys(goalLabels) as GoalType[];
 
 const brandSynonyms: Record<string, string[]> = {
   "pop tart": ["pop tart", "pop-tart", "poptart", "pop-tarts", "toaster pastry", "toaster pastries"],
@@ -942,6 +945,8 @@ function App() {
   const [calculatorInputs, setCalculatorInputs] = useState<CalculatorInputs>(() =>
     calculatorInputsToForm(getSavedGoals())
   );
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(() => !getSavedGoals());
+  const [isManualGoalsOpen, setIsManualGoalsOpen] = useState(false);
   const [editingCustomFoodId, setEditingCustomFoodId] = useState<number | null>(null);
   const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
   const [libraryCustomFoodForm, setLibraryCustomFoodForm] =
@@ -1254,6 +1259,7 @@ function App() {
     const newGoals = { calories: Math.round(calories), protein, carbs, fat, calculatorInputs };
     setGoals(newGoals);
     localStorage.setItem("goals", JSON.stringify(newGoals));
+    setIsManualGoalsOpen(false);
   }
 
   function updateCalculatorInputs(updates: Partial<CalculatorInputs>) {
@@ -1276,6 +1282,8 @@ function App() {
     setGoals(newGoals);
     setGoalsForm(goalsToForm(newGoals));
     localStorage.setItem("goals", JSON.stringify(newGoals));
+    setIsCalculatorOpen(false);
+    setIsManualGoalsOpen(false);
   }
 
   function cancelLibraryEditing() {
@@ -1409,6 +1417,8 @@ function App() {
     (portionOptions.length === 0 || Boolean(selectedPortion));
   const calculatedGoals = calculateGoalsFromInputs(calculatorInputs);
   const calculatorRates = getValidRates(calculatorInputs.goal);
+  const calculatorAge = Number(calculatorInputs.age);
+  const shouldShowTeenNote = Number.isFinite(calculatorAge) && calculatorAge > 0 && calculatorAge < 18;
 
   const bottomNav = (
     <nav className="bottom-nav" aria-label="Main navigation">
@@ -1556,179 +1566,251 @@ function App() {
           <h1>Profile</h1>
         </div>
 
-        <section className="panel">
-          <h2>Macro Calculator</h2>
-          <p className="week-range">Estimate targets with Mifflin-St Jeor, then save them to your profile.</p>
-
-          <div className="calculator-form">
-            <label>
-              Age
-              <input
-                type="number"
-                min="1"
-                step="1"
-                value={calculatorInputs.age}
-                onChange={(e) => updateCalculatorInputs({ age: e.target.value })}
-              />
-            </label>
-
-            <label>
-              Sex
-              <select
-                value={calculatorInputs.sex}
-                onChange={(e) => updateCalculatorInputs({ sex: e.target.value as Sex })}
-              >
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-              </select>
-            </label>
-
-            <label>
-              Height
-              <div className="compound-input-row">
-                <input
-                  type="number"
-                  min="1"
-                  step="0.1"
-                  value={calculatorInputs.height}
-                  onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
-                />
-                <select
-                  value={calculatorInputs.heightUnit}
-                  onChange={(e) => updateCalculatorInputs({ heightUnit: e.target.value as HeightUnit })}
-                >
-                  <option value="in">in</option>
-                  <option value="cm">cm</option>
-                </select>
-              </div>
-            </label>
-
-            <label>
-              Weight
-              <div className="compound-input-row">
-                <input
-                  type="number"
-                  min="1"
-                  step="0.1"
-                  value={calculatorInputs.weight}
-                  onChange={(e) => updateCalculatorInputs({ weight: e.target.value })}
-                />
-                <select
-                  value={calculatorInputs.weightUnit}
-                  onChange={(e) => updateCalculatorInputs({ weightUnit: e.target.value as WeightUnit })}
-                >
-                  <option value="lb">lb</option>
-                  <option value="kg">kg</option>
-                </select>
-              </div>
-            </label>
-
-            <label>
-              Activity level
-              <select
-                value={calculatorInputs.activityLevel}
-                onChange={(e) =>
-                  updateCalculatorInputs({ activityLevel: e.target.value as ActivityLevel })
-                }
-              >
-                {(Object.keys(activityLabels) as ActivityLevel[]).map((level) => (
-                  <option key={level} value={level}>
-                    {activityLabels[level]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label>
-              Goal
-              <select
-                value={calculatorInputs.goal}
-                onChange={(e) => updateCalculatorInputs({ goal: e.target.value as GoalType })}
-              >
-                {(Object.keys(goalLabels) as GoalType[]).map((goal) => (
-                  <option key={goal} value={goal}>
-                    {goalLabels[goal]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {calculatorInputs.goal !== "maintain" && (
-              <label>
-                Rate
-                <select
-                  value={calculatorInputs.rate}
-                  onChange={(e) => updateCalculatorInputs({ rate: e.target.value as GoalRate })}
-                >
-                  {calculatorRates.map((rate) => (
-                    <option key={rate} value={rate}>
-                      {rateLabels[rate]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-            <div className="calculator-estimate">
-              <span>Estimated target</span>
-              {calculatedGoals ? (
-                <strong>
-                  {calculatedGoals.calories} cal / {calculatedGoals.protein}g P /{" "}
-                  {calculatedGoals.carbs}g C / {calculatedGoals.fat}g F
-                </strong>
-              ) : (
-                <strong>Enter age, height, and weight</strong>
-              )}
+        <section className="panel targets-card">
+          <div className="section-heading-row">
+            <div>
+              <h2>Your Targets</h2>
+              <p className="week-range">Daily nutrition goals used by Home and Log.</p>
             </div>
+          </div>
 
-            <button
-              type="button"
-              className="primary-button"
-              onClick={applyCalculatedGoals}
-              disabled={!calculatedGoals}
-            >
-              Save estimate to goals
+          {goals ? (
+            <div className="targets-grid">
+              <div>
+                <span>Calories</span>
+                <strong>{goals.calories}/day</strong>
+              </div>
+              <div>
+                <span>Protein</span>
+                <strong>{goals.protein}g</strong>
+              </div>
+              <div>
+                <span>Carbs</span>
+                <strong>{goals.carbs}g</strong>
+              </div>
+              <div>
+                <span>Fat</span>
+                <strong>{goals.fat}g</strong>
+              </div>
+            </div>
+          ) : (
+            <p className="empty-meal">No saved targets yet.</p>
+          )}
+
+          <div className="profile-actions">
+            <button type="button" onClick={() => setIsCalculatorOpen(true)}>
+              Recalculate
+            </button>
+            <button type="button" onClick={() => setIsManualGoalsOpen((isOpen) => !isOpen)}>
+              Edit manually
             </button>
           </div>
         </section>
 
         <section className="panel">
-          <h2>Daily Goals</h2>
-          <p className="week-range">Fine-tune your saved targets manually.</p>
+          <button
+            type="button"
+            className="section-toggle"
+            onClick={() => setIsCalculatorOpen((isOpen) => !isOpen)}
+            aria-expanded={isCalculatorOpen}
+          >
+            <span>
+              <strong>Calorie & Macro Calculator</strong>
+              <small>Estimate your daily targets from your stats and goal.</small>
+            </span>
+            <span>{isCalculatorOpen ? "Hide" : "Open"}</span>
+          </button>
 
-          <div className="goals-form">
-            {[
-              { key: "calories" as const, label: "Calories", unit: "cal / day" },
-              { key: "protein" as const, label: "Protein", unit: "g / day" },
-              { key: "carbs" as const, label: "Carbs", unit: "g / day" },
-              { key: "fat" as const, label: "Fat", unit: "g / day" },
-            ].map(({ key, label, unit }) => (
-              <label key={key}>
-                {label}
-                <div className="goals-input-row">
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={goalsForm[key]}
-                    onChange={(e) => setGoalsForm({ ...goalsForm, [key]: e.target.value })}
-                  />
-                  <span>{unit}</span>
+          {isCalculatorOpen && (
+            <div className="calculator-form">
+              <fieldset className="calculator-group">
+                <legend>About You</legend>
+
+                <div className="calculator-fields">
+                  <label>
+                    Age
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={calculatorInputs.age}
+                      onChange={(e) => updateCalculatorInputs({ age: e.target.value })}
+                    />
+                  </label>
+
+                  <label>
+                    Sex
+                    <select
+                      value={calculatorInputs.sex}
+                      onChange={(e) => updateCalculatorInputs({ sex: e.target.value as Sex })}
+                    >
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Height
+                    <div className="compound-input-row">
+                      <input
+                        type="number"
+                        min="1"
+                        step="0.1"
+                        value={calculatorInputs.height}
+                        onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
+                      />
+                      <select
+                        value={calculatorInputs.heightUnit}
+                        onChange={(e) =>
+                          updateCalculatorInputs({ heightUnit: e.target.value as HeightUnit })
+                        }
+                      >
+                        <option value="in">in</option>
+                        <option value="cm">cm</option>
+                      </select>
+                    </div>
+                  </label>
+
+                  <label>
+                    Weight
+                    <div className="compound-input-row">
+                      <input
+                        type="number"
+                        min="1"
+                        step="0.1"
+                        value={calculatorInputs.weight}
+                        onChange={(e) => updateCalculatorInputs({ weight: e.target.value })}
+                      />
+                      <select
+                        value={calculatorInputs.weightUnit}
+                        onChange={(e) =>
+                          updateCalculatorInputs({ weightUnit: e.target.value as WeightUnit })
+                        }
+                      >
+                        <option value="lb">lb</option>
+                        <option value="kg">kg</option>
+                      </select>
+                    </div>
+                  </label>
                 </div>
-              </label>
-            ))}
 
-            <button type="button" className="primary-button" onClick={submitGoals}>
-              Save goals
-            </button>
+                {shouldShowTeenNote && (
+                  <p className="profile-warning">Adult estimates may not be accurate for teens.</p>
+                )}
+              </fieldset>
 
-            {goals && (
-              <p className="empty-meal">
-                Current: {goals.calories} cal / {goals.protein}g P / {goals.carbs}g C / {goals.fat}g F
-              </p>
-            )}
-          </div>
+              <fieldset className="calculator-group">
+                <legend>Activity</legend>
+                <div className="option-card-grid">
+                  {activityOptions.map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={`option-card${
+                        calculatorInputs.activityLevel === level ? " selected" : ""
+                      }`}
+                      onClick={() => updateCalculatorInputs({ activityLevel: level })}
+                    >
+                      {activityLabels[level]}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset className="calculator-group">
+                <legend>Goal</legend>
+                <div className="option-card-grid three">
+                  {goalOptions.map((goal) => (
+                    <button
+                      key={goal}
+                      type="button"
+                      className={`option-card${calculatorInputs.goal === goal ? " selected" : ""}`}
+                      onClick={() => updateCalculatorInputs({ goal })}
+                    >
+                      {goalLabels[goal]}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {calculatorInputs.goal !== "maintain" && (
+                <fieldset className="calculator-group">
+                  <legend>Pace</legend>
+                  <div className="option-card-grid three">
+                    {calculatorRates.map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        className={`option-card${calculatorInputs.rate === rate ? " selected" : ""}`}
+                        onClick={() => updateCalculatorInputs({ rate })}
+                      >
+                        {rateLabels[rate]}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+
+              <div className="calculator-estimate">
+                <span>Estimated target</span>
+                {calculatedGoals ? (
+                  <>
+                    <strong>{calculatedGoals.calories} cal/day</strong>
+                    <small>
+                      {calculatedGoals.protein}g P / {calculatedGoals.carbs}g C /{" "}
+                      {calculatedGoals.fat}g F
+                    </small>
+                  </>
+                ) : (
+                  <strong>Enter age, height, and weight</strong>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="primary-button"
+                onClick={applyCalculatedGoals}
+                disabled={!calculatedGoals}
+              >
+                Save Targets
+              </button>
+            </div>
+          )}
         </section>
+
+        {isManualGoalsOpen && (
+          <section className="panel">
+            <h2>Manual Targets</h2>
+            <p className="week-range">Fine-tune your saved targets manually.</p>
+
+            <div className="goals-form">
+              {[
+                { key: "calories" as const, label: "Calories", unit: "cal / day" },
+                { key: "protein" as const, label: "Protein", unit: "g / day" },
+                { key: "carbs" as const, label: "Carbs", unit: "g / day" },
+                { key: "fat" as const, label: "Fat", unit: "g / day" },
+              ].map(({ key, label, unit }) => (
+                <label key={key}>
+                  {label}
+                  <div className="goals-input-row">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={goalsForm[key]}
+                      onChange={(e) => setGoalsForm({ ...goalsForm, [key]: e.target.value })}
+                    />
+                    <span>{unit}</span>
+                  </div>
+                </label>
+              ))}
+
+              <button type="button" className="primary-button" onClick={submitGoals}>
+                Save goals
+              </button>
+            </div>
+          </section>
+        )}
 
         {bottomNav}
       </main>
