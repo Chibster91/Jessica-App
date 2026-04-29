@@ -304,7 +304,28 @@ function goalsToForm(goals: Goals | null): GoalsForm {
 }
 
 function calculatorInputsToForm(goals: Goals | null): CalculatorInputs {
-  return goals?.calculatorInputs ?? defaultCalculatorInputs;
+  const inputs = goals?.calculatorInputs;
+  if (!inputs) return defaultCalculatorInputs;
+
+  if (inputs.heightUnit === "in") {
+    const totalInches = Number(inputs.height);
+
+    if (Number.isFinite(totalInches) && totalInches > 0) {
+      return {
+        ...inputs,
+        heightFeet: String(Math.floor(totalInches / 12)),
+        heightInches: String(Number((totalInches % 12).toFixed(1))),
+        heightUnit: "ftIn",
+      };
+    }
+
+    return {
+      ...inputs,
+      heightUnit: "ftIn",
+    };
+  }
+
+  return inputs;
 }
 
 function saveRecipes(recipes: Recipe[]) {
