@@ -2129,9 +2129,11 @@ function App() {
                   </p>
                 )}
 
-                <button className="primary-button" onClick={addSelectedFood} disabled={!canAddSelectedFood}>
-                  Add
-                </button>
+                {selectedFood && (
+                  <button className="primary-button" onClick={addSelectedFood} disabled={!canAddSelectedFood}>
+                    Add
+                  </button>
+                )}
                 <button className="secondary-button" onClick={closeAddFood}>
                   Cancel
                 </button>
