@@ -2074,49 +2074,53 @@ function App() {
                   </div>
                 )}
 
-                {usesLocalPortion && (
-                  <label className="portion-row">
-                    Amount ({selectedFood ? getLocalPortionUnit(selectedFood) : "g"})
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={portionAmount}
-                      onChange={(e) => setPortionAmount(e.target.value)}
-                    />
-                    <span className="modal-hint">
-                      calculated from {selectedFood?.servingSize}
-                    </span>
-                  </label>
-                )}
+                {selectedFood && (
+                  <>
+                    {usesLocalPortion && (
+                      <label className="portion-row">
+                        Amount ({getLocalPortionUnit(selectedFood)})
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={portionAmount}
+                          onChange={(e) => setPortionAmount(e.target.value)}
+                        />
+                        <span className="modal-hint">
+                          calculated from {selectedFood.servingSize}
+                        </span>
+                      </label>
+                    )}
 
-                {portionOptions.length > 0 && (
-                  <label className="portion-row">
-                    Portion
-                    <select
-                      value={selectedPortionValue}
-                      onChange={(e) => setSelectedPortionValue(e.target.value)}
-                    >
-                      {portionOptions.map((portion) => (
-                        <option key={portion.value} value={portion.value}>
-                          {portion.label} ({portion.gramWeight}g)
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
+                    {portionOptions.length > 0 && (
+                      <label className="portion-row">
+                        Portion
+                        <select
+                          value={selectedPortionValue}
+                          onChange={(e) => setSelectedPortionValue(e.target.value)}
+                        >
+                          {portionOptions.map((portion) => (
+                            <option key={portion.value} value={portion.value}>
+                              {portion.label} ({portion.gramWeight}g)
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
 
-                {!usesLocalPortion && (
-                  <label className="quantity-row">
-                    Quantity
-                    <input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                    />
-                  </label>
+                    {!usesLocalPortion && (
+                      <label className="quantity-row">
+                        Quantity
+                        <input
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          value={quantity}
+                          onChange={(e) => setQuantity(e.target.value)}
+                        />
+                      </label>
+                    )}
+                  </>
                 )}
 
                 {selectedFood && selectedPortionCalories !== null && (
