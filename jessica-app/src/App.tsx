@@ -512,6 +512,10 @@ function parseCustomFood(form: CustomFoodForm): Food | null {
   };
 }
 
+function formatMacro(value: number) {
+  return Number(value.toFixed(1));
+}
+
 function App() {
   const today = getLocalDateString();
   const [appView, setAppView] = useState<AppView>("day");
@@ -1407,25 +1411,24 @@ function App() {
         </div>
 
         <h2>{selectedDate}</h2>
-        <h3 className="day-total">Daily total: {totalCalories} calories</h3>
 
         <div className="daily-nutrition-summary">
-          <h3>Daily Total</h3>
+          <h3>Daily Nutrition</h3>
           <div>
             <span>Calories</span>
-            <strong>{Math.round(dailyTotals.calories)}</strong>
+            <strong>{totalCalories}</strong>
           </div>
           <div>
             <span>Protein</span>
-            <strong>{Number(dailyTotals.protein.toFixed(1))}g</strong>
+            <strong>{formatMacro(dailyTotals.protein)}g</strong>
           </div>
           <div>
             <span>Carbs</span>
-            <strong>{Number(dailyTotals.carbs.toFixed(1))}g</strong>
+            <strong>{formatMacro(dailyTotals.carbs)}g</strong>
           </div>
           <div>
             <span>Fat</span>
-            <strong>{Number(dailyTotals.fat.toFixed(1))}g</strong>
+            <strong>{formatMacro(dailyTotals.fat)}g</strong>
           </div>
         </div>
 
