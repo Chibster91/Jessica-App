@@ -956,6 +956,55 @@ function getAgeValidationMessage(ageInput: string) {
   return "";
 }
 
+function getHeightValidationMessage(inputs: CalculatorInputs) {
+  if (inputs.heightUnit === "ftIn") {
+    const hasHeightInput = Boolean(inputs.heightFeet || inputs.heightInches);
+    if (!hasHeightInput) return "";
+
+    const feet = Number(inputs.heightFeet || 0);
+    const inches = Number(inputs.heightInches || 0);
+    const totalInches = feet * 12 + inches;
+
+    if (
+      !Number.isFinite(feet) ||
+      !Number.isFinite(inches) ||
+      feet < 0 ||
+      inches < 0 ||
+      inches >= 12 ||
+      totalInches <= 0 ||
+      totalInches > maxHeightInches
+    ) {
+      return "Please enter a valid height.";
+    }
+
+    return "";
+  }
+
+  if (!inputs.height) return "";
+
+  const height = Number(inputs.height);
+  const maxHeight = inputs.heightUnit === "cm" ? maxHeightCm : maxHeightInches;
+
+  if (!Number.isFinite(height) || height <= 0 || height > maxHeight) {
+    return "Please enter a valid height.";
+  }
+
+  return "";
+}
+
+function getWeightValidationMessage(inputs: CalculatorInputs) {
+  if (!inputs.weight) return "";
+
+  const weight = Number(inputs.weight);
+  const maxWeight = inputs.weightUnit === "kg" ? maxWeightKg : maxWeightLb;
+
+  if (!Number.isFinite(weight) || weight <= 0 || weight > maxWeight) {
+    return "Please enter a valid weight.";
+  }
+
+  return "";
+}
+
 function getWeekDates(referenceDate: string) {
   const [year, month, day] = referenceDate.split("-").map(Number);
   const d = new Date(year, month - 1, day);
@@ -1489,6 +1538,8 @@ function App() {
   const calculatedGoals = calculateGoalsFromInputs(calculatorInputs);
   const calculatorRates = getValidRates(calculatorInputs.goal);
   const ageValidationMessage = getAgeValidationMessage(calculatorInputs.age);
+  const heightValidationMessage = getHeightValidationMessage(calculatorInputs);
+  const weightValidationMessage = getWeightValidationMessage(calculatorInputs);
 
   const bottomNav = (
     <nav className="bottom-nav" aria-label="Main navigation">
@@ -1811,6 +1862,12 @@ function App() {
                 </div>
 
                 {ageValidationMessage && <p className="profile-warning">{ageValidationMessage}</p>}
+                {heightValidationMessage && (
+                  <p className="profile-warning">{heightValidationMessage}</p>
+                )}
+                {weightValidationMessage && (
+                  <p className="profile-warning">{weightValidationMessage}</p>
+                )}
               </fieldset>
 
               <fieldset className="calculator-group">
