@@ -1606,15 +1606,6 @@ function App() {
 
             <div className="tab-row" role="tablist" aria-label="Add food source">
               <button
-                className={activeAddFoodTab === "search" ? "active" : ""}
-                type="button"
-                onClick={() => setActiveAddFoodTab("search")}
-                role="tab"
-                aria-selected={activeAddFoodTab === "search"}
-              >
-                Search
-              </button>
-              <button
                 className={activeAddFoodTab === "recent" ? "active" : ""}
                 type="button"
                 onClick={() => setActiveAddFoodTab("recent")}
@@ -1622,6 +1613,15 @@ function App() {
                 aria-selected={activeAddFoodTab === "recent"}
               >
                 Recent
+              </button>
+              <button
+                className={activeAddFoodTab === "search" ? "active" : ""}
+                type="button"
+                onClick={() => setActiveAddFoodTab("search")}
+                role="tab"
+                aria-selected={activeAddFoodTab === "search"}
+              >
+                Search
               </button>
               <button
                 className={activeAddFoodTab === "custom" ? "active" : ""}
