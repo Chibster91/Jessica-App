@@ -76,7 +76,7 @@ type PortionOption = {
 
 type AddFoodTab = "search" | "recent" | "custom" | "recipes";
 
-type AppView = "day" | "library";
+type AppView = "home" | "day" | "library";
 
 type FoodLibraryTab = "recent" | "custom" | "recipes";
 
@@ -731,9 +731,30 @@ function formatMacro(value: number) {
   return Number(value.toFixed(1));
 }
 
+function getWeekDates(referenceDate: string) {
+  const [year, month, day] = referenceDate.split("-").map(Number);
+  const d = new Date(year, month - 1, day);
+  const dow = d.getDay();
+  const daysToMonday = dow === 0 ? -6 : 1 - dow;
+  return Array.from({ length: 7 }, (_, i) => shiftDate(referenceDate, daysToMonday + i));
+}
+
+function getDayLabel(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", { weekday: "short" });
+}
+
+function formatWeekRange(startDate: string, endDate: string) {
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
 function App() {
   const today = getLocalDateString();
-  const [appView, setAppView] = useState<AppView>("day");
+  const [appView, setAppView] = useState<AppView>("home");
   const [selectedDate, setSelectedDate] = useState(today);
   const [log, setLog] = useState<LogItem[]>(() => getSavedLog(today));
   const [pendingCategory, setPendingCategory] = useState<MealCategory | null>(null);
@@ -1065,11 +1086,6 @@ function App() {
     cancelLibraryEditing();
   }
 
-  function closeFoodLibrary() {
-    setAppView("day");
-    setLibrarySelection(null);
-    cancelLibraryEditing();
-  }
 
   function cancelLibraryEditing() {
     setEditingCustomFoodId(null);
@@ -1201,14 +1217,136 @@ function App() {
     (!usesLocalPortion || localPortionScale !== null) &&
     (portionOptions.length === 0 || Boolean(selectedPortion));
 
+  const bottomNav = (
+    <nav className="bottom-nav" aria-label="Main navigation">
+      <button
+        type="button"
+        className={appView === "home" ? "active" : ""}
+        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("home"); }}
+      >
+        <span className="nav-icon">⌂</span>
+        <span>Home</span>
+      </button>
+      <button
+        type="button"
+        className={appView === "day" ? "active" : ""}
+        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("day"); }}
+      >
+        <span className="nav-icon">≡</span>
+        <span>Log</span>
+      </button>
+      <button
+        type="button"
+        className={appView === "library" ? "active" : ""}
+        onClick={openFoodLibrary}
+      >
+        <span className="nav-icon">⊞</span>
+        <span>Library</span>
+      </button>
+    </nav>
+  );
+
+  if (appView === "home") {
+    const weekDates = getWeekDates(today);
+    const weekStats = weekDates.map((date) => {
+      const dayLog = getSavedLog(date);
+      return {
+        date,
+        calories: dayLog.reduce((s, item) => s + Math.round(item.calories * (item.quantity ?? 1)), 0),
+        protein: dayLog.reduce((s, item) => s + item.protein * (item.quantity ?? 1), 0),
+        carbs: dayLog.reduce((s, item) => s + item.carbs * (item.quantity ?? 1), 0),
+        fat: dayLog.reduce((s, item) => s + item.fat * (item.quantity ?? 1), 0),
+      };
+    });
+
+    const loggedDayCount = weekStats.filter((d) => d.calories > 0).length;
+    const weekTotals = weekStats.reduce(
+      (totals, d) => ({
+        calories: totals.calories + d.calories,
+        protein: totals.protein + d.protein,
+        carbs: totals.carbs + d.carbs,
+        fat: totals.fat + d.fat,
+      }),
+      { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    );
+    const weekAvg = {
+      calories: loggedDayCount > 0 ? Math.round(weekTotals.calories / loggedDayCount) : 0,
+      protein: loggedDayCount > 0 ? weekTotals.protein / loggedDayCount : 0,
+      carbs: loggedDayCount > 0 ? weekTotals.carbs / loggedDayCount : 0,
+      fat: loggedDayCount > 0 ? weekTotals.fat / loggedDayCount : 0,
+    };
+    const maxDayCalories = Math.max(...weekStats.map((d) => d.calories), 1);
+
+    return (
+      <main className="app">
+        <div className="top-bar">
+          <h1>Jessica App</h1>
+        </div>
+
+        <section className="panel">
+          <h2>This Week</h2>
+          <p className="week-range">{formatWeekRange(weekDates[0], weekDates[6])}</p>
+
+          <div className="week-summary">
+            <div className="summary-card">
+              <span>Avg Cal / day</span>
+              <strong>{weekAvg.calories}</strong>
+            </div>
+            <div className="summary-card">
+              <span>Avg Protein</span>
+              <strong>{formatMacro(weekAvg.protein)}g</strong>
+            </div>
+            <div className="summary-card">
+              <span>Avg Carbs</span>
+              <strong>{formatMacro(weekAvg.carbs)}g</strong>
+            </div>
+            <div className="summary-card">
+              <span>Avg Fat</span>
+              <strong>{formatMacro(weekAvg.fat)}g</strong>
+            </div>
+          </div>
+
+          <div className="week-bars" aria-label="Calories per day this week">
+            {weekStats.map(({ date, calories }) => {
+              const isToday = date === today;
+              const barHeight =
+                calories > 0 ? Math.max(Math.round((calories / maxDayCalories) * 120), 6) : 3;
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  className="week-bar-col"
+                  onClick={() => { changeSelectedDate(date); setAppView("day"); }}
+                  title={calories > 0 ? `${calories} cal` : "No data"}
+                >
+                  {calories > 0 && <span className="week-bar-val">{calories}</span>}
+                  <div
+                    className={`week-bar${isToday ? " is-today" : ""}`}
+                    style={{ height: barHeight }}
+                  />
+                  <span className={`week-bar-day${isToday ? " is-today" : ""}`}>
+                    {getDayLabel(date)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {loggedDayCount === 0 && (
+            <p className="empty-meal">No food logged this week. Head to Log to get started.</p>
+          )}
+        </section>
+
+        {bottomNav}
+      </main>
+    );
+  }
+
   if (appView === "library") {
     return (
       <main className="app">
         <div className="top-bar">
           <h1>Food Library</h1>
-          <button type="button" onClick={closeFoodLibrary}>
-            Back
-          </button>
         </div>
 
         <section className="panel library-layout">
@@ -1614,6 +1752,8 @@ function App() {
             )}
           </aside>
         </section>
+
+        {bottomNav}
       </main>
     );
   }
@@ -1622,9 +1762,6 @@ function App() {
     <main className="app">
       <div className="top-bar">
         <h1>Jessica App</h1>
-        <button type="button" onClick={openFoodLibrary}>
-          Food Library
-        </button>
       </div>
 
       <section className="panel day-summary">
@@ -2265,6 +2402,8 @@ function App() {
           </div>
         </div>
       )}
+
+      {bottomNav}
     </main>
   );
 }
