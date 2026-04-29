@@ -1,0 +1,424 @@
+.app {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.panel {
+  background: #24242f;
+  border: 1px solid #3a3a48;
+  border-radius: 18px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.search-row,
+.date-row {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.day-summary {
+  text-align: center;
+}
+
+input, button, textarea {
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+}
+
+.grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.food-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: left;
+  background: #30303d;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.food-card.selected {
+  border-color: #c084fc;
+  background: #3a3048;
+}
+
+.day-total {
+  margin: 0 0 1.5rem;
+}
+
+.daily-nutrition-summary {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.daily-nutrition-summary h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.daily-nutrition-summary div {
+  display: grid;
+  gap: 0.25rem;
+  border-top: 1px solid #3a3a48;
+  padding-top: 0.75rem;
+}
+
+.meal-groups {
+  display: grid;
+  gap: 1rem;
+  text-align: left;
+}
+
+.meal-group {
+  border-top: 1px solid #3a3a48;
+  padding-top: 0.75rem;
+}
+
+.meal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.meal-group h4 {
+  display: flex;
+  justify-content: space-between;
+  flex: 1;
+  gap: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.add-food-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.empty-meal {
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 760px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.log-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.5rem 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.modal {
+  width: min(560px, 100%);
+  box-sizing: border-box;
+  background: #24242f;
+  border: 1px solid #3a3a48;
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+.modal p {
+  margin: 0 0 1rem;
+}
+
+.tab-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.tab-row button {
+  background: #30303d;
+  border: 1px solid #3a3a48;
+}
+
+.tab-row button.active {
+  background: #3a3048;
+  border-color: #c084fc;
+}
+
+.modal-results {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 340px;
+  overflow: auto;
+  margin: 1rem 0;
+}
+
+.custom-food-form {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1rem 0;
+  text-align: left;
+}
+
+.custom-food-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.custom-food-form label:first-child,
+.custom-food-form label:nth-child(11),
+.form-actions {
+  grid-column: 1 / -1;
+}
+
+.custom-food-form input,
+.custom-food-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.custom-food-form textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.form-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.recipe-form,
+.recipe-builder {
+  display: grid;
+  gap: 1rem;
+}
+
+.recipe-builder {
+  text-align: left;
+}
+
+.recipe-totals {
+  display: grid;
+  gap: 0.25rem;
+  border-top: 1px solid #3a3a48;
+  padding-top: 0.75rem;
+}
+
+.ingredient-picker {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.ingredient-picker button {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: left;
+}
+
+.ingredient-picker button.selected {
+  background: #3a3048;
+  border-color: #c084fc;
+}
+
+.ingredient-confirm {
+  display: grid;
+  align-items: end;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) 6rem auto auto;
+  border: 1px solid #3a3a48;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.ingredient-confirm div,
+.ingredient-confirm label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ingredient-confirm input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ingredient-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ingredient-row {
+  display: grid;
+  align-items: center;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) 5rem auto auto;
+}
+
+.ingredient-row input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.selected-food-summary {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.portion-row,
+.quantity-row {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.portion-row select,
+.quantity-row input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-error {
+  color: #fca5a5;
+}
+
+.modal-hint {
+  color: #9ca3af;
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+  text-align: left;
+}
+
+.primary-button,
+.danger-button,
+.secondary-button {
+  width: 100%;
+}
+
+.danger-button {
+  background: #7f1d1d;
+  color: #fee2e2;
+  border-color: #b91c1c;
+}
+
+.secondary-button {
+  margin-top: 0.75rem;
+}
+
+.library-layout {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+  text-align: left;
+}
+
+.library-main,
+.library-detail,
+.library-list {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.library-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.library-list {
+  max-height: 62svh;
+  overflow: auto;
+}
+
+.library-detail {
+  border-left: 1px solid #3a3a48;
+  padding-left: 1.5rem;
+}
+
+.nutrition-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem 1rem;
+}
+
+.library-edit-form {
+  border-top: 1px solid #3a3a48;
+  padding-top: 1rem;
+}
+
+@media (max-width: 520px) {
+  .tab-row,
+  .custom-food-form,
+  .form-actions,
+  .ingredient-confirm,
+  .ingredient-row {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-food-form label:first-child,
+  .custom-food-form label:nth-child(11),
+  .form-actions {
+    grid-column: auto;
+  }
+
+  .top-bar,
+  .library-layout,
+  .daily-nutrition-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .top-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .library-detail {
+    border-left: 0;
+    border-top: 1px solid #3a3a48;
+    padding-left: 0;
+    padding-top: 1rem;
+  }
+}
