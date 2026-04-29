@@ -47,9 +47,9 @@ export default {
           dataType: food.dataType,
           servingSize,
           calories: getCaloriesValue(food),
-          protein: getProteinValue(food),
-          carbs: getCarbsValue(food),
-          fat: getFatValue(food),
+          protein: Math.max(0, getProteinValue(food)),
+          carbs: Math.max(0, getCarbsValue(food)),
+          fat: Math.max(0, getFatValue(food)),
         };
       })
       .sort((a: any, b: any) => rankSearchResult(b, query) - rankSearchResult(a, query))
@@ -210,11 +210,29 @@ function getServingSizeText(food: any): string | null {
     : null;
 }
 
+const ENERGY_NAMES = [
+  "Energy",
+  "Energy (Atwater General Factors)",
+  "Energy (Atwater Specific Factors)",
+];
+
 function getCaloriesValue(food: any): number {
   const labelCalories = getLabelCaloriesValue(food);
   if (labelCalories !== null) return labelCalories;
 
-  return getNutrientValue(food, "Energy", "KCAL");
+  const kcal = getNutrientValue(food, ENERGY_NAMES, "KCAL");
+  if (kcal > 0) return Math.round(kcal);
+
+  // Foundation/SR Legacy foods sometimes omit energy from truncated search results —
+  // estimate from macros using Atwater general factors as a fallback.
+  const protein = Math.max(0, getProteinValue(food));
+  const carbs = Math.max(0, getCarbsValue(food));
+  const fat = Math.max(0, getFatValue(food));
+  if (protein > 0 || carbs > 0 || fat > 0) {
+    return Math.round(protein * 4 + carbs * 4 + fat * 9);
+  }
+
+  return 0;
 }
 
 function getLabelCaloriesValue(food: any): number | null {
