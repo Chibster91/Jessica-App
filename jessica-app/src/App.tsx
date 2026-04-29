@@ -547,7 +547,13 @@ function getSearchTokens(value: string) {
 
 function getSearchSynonyms(query: string) {
   const queryText = normalizeSearchText(query);
-  return brandSynonyms[queryText]?.map(normalizeSearchText) ?? [];
+  const compactQuery = queryText.replace(/\s+/g, "");
+  const directSynonyms = brandSynonyms[queryText];
+  const compactSynonyms = Object.entries(brandSynonyms).find(
+    ([key]) => normalizeSearchText(key).replace(/\s+/g, "") === compactQuery
+  )?.[1];
+
+  return [...new Set((directSynonyms ?? compactSynonyms ?? []).map(normalizeSearchText))];
 }
 
 function getFoodSearchScore(food: Food, query: string) {
@@ -580,6 +586,28 @@ function getFoodSearchScore(food: Food, query: string) {
 
 function rankSearchResults(foods: Food[], query: string) {
   return [...foods].sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query));
+}
+
+async function fetchUsdaFoods(query: string) {
+  const res = await fetch(
+    `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(query)}`
+  );
+
+  return (await res.json()) as Food[];
+}
+
+async function searchUsdaFoodsWithSynonyms(query: string) {
+  const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
+  const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
+  const foodsById = new Map<number, Food>();
+
+  for (const foods of resultSets) {
+    for (const food of foods) {
+      if (!foodsById.has(food.id)) foodsById.set(food.id, food);
+    }
+  }
+
+  return rankSearchResults([...foodsById.values()], query);
 }
 
 function getIngredientCalories(ingredient: RecipeIngredient) {
@@ -832,10 +860,7 @@ function App() {
   async function searchModalFood() {
     if (!modalQuery.trim()) return;
 
-    const res = await fetch(
-      `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(modalQuery)}`
-    );
-    setModalFoods(rankSearchResults(await res.json(), modalQuery));
+    setModalFoods(await searchUsdaFoodsWithSynonyms(modalQuery));
   }
 
   async function selectFood(food: Food) {
@@ -955,10 +980,7 @@ function App() {
     setIsSearchingRecipeIngredients(true);
 
     try {
-      const res = await fetch(
-        `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(recipeIngredientQuery)}`
-      );
-      setRecipeIngredientFoods(await res.json());
+      setRecipeIngredientFoods(await searchUsdaFoodsWithSynonyms(recipeIngredientQuery));
     } finally {
       setIsSearchingRecipeIngredients(false);
     }
