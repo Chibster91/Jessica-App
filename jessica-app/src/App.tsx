@@ -129,6 +129,43 @@ const emptyRecipeForm: RecipeForm = {
   notes: "",
 };
 
+const brandSynonyms: Record<string, string[]> = {
+  "pop tart": ["pop tart", "pop-tart", "poptart", "pop-tarts", "toaster pastry", "toaster pastries"],
+  "pop tarts": ["pop tart", "pop-tart", "poptart", "pop-tarts", "toaster pastry", "toaster pastries"],
+  oreo: ["oreo", "oreo cookies", "chocolate sandwich cookie", "sandwich cookies"],
+  oreos: ["oreo", "oreo cookies", "chocolate sandwich cookie", "sandwich cookies"],
+  "cheez it": ["cheez it", "cheez-it", "cheezits", "cheese cracker", "baked cheese cracker"],
+  cheezits: ["cheez it", "cheez-it", "cheezits", "cheese cracker"],
+  doritos: ["doritos", "nacho cheese tortilla chips", "flavored tortilla chips", "tortilla chips"],
+  pringles: ["pringles", "potato crisps", "stacked potato chips", "potato snack crisps"],
+  ramen: ["ramen", "instant noodles", "instant ramen", "noodle soup mix"],
+  "kraft mac and cheese": [
+    "kraft mac and cheese",
+    "mac and cheese",
+    "macaroni and cheese",
+    "boxed macaroni and cheese",
+  ],
+  velveeta: ["velveeta", "processed cheese", "cheese product", "shells and cheese"],
+  nutella: ["nutella", "hazelnut spread", "chocolate hazelnut spread"],
+  spam: ["spam", "canned luncheon meat", "luncheon meat"],
+  gatorade: ["gatorade", "sports drink", "electrolyte drink"],
+  "red bull": ["red bull", "energy drink"],
+  "mountain dew": ["mountain dew", "citrus soda", "soft drink"],
+  coke: ["coke", "coca cola", "cola", "soft drink"],
+  pepsi: ["pepsi", "cola", "soft drink"],
+  benadryl: ["benadryl", "diphenhydramine"],
+  reeses: ["reeses", "reese's", "peanut butter cup", "chocolate peanut butter candy"],
+  snickers: ["snickers", "chocolate candy bar", "peanut caramel candy bar"],
+  twinkie: ["twinkie", "cream filled snack cake", "snack cake"],
+  "hostess cupcake": ["hostess cupcake", "chocolate cupcake", "frosted snack cake"],
+  goldfish: ["goldfish", "cheese crackers", "baked cheese crackers"],
+  ritz: ["ritz", "buttery crackers", "round crackers"],
+  triscuit: ["triscuit", "woven wheat crackers", "whole wheat crackers"],
+  fritos: ["fritos", "corn chips"],
+  cheetos: ["cheetos", "cheese puffs", "cheese curls"],
+  lunchable: ["lunchable", "cracker stacker meal", "packaged lunch kit"],
+};
+
 type MealCategory = (typeof mealCategories)[number];
 
 type LogItem = Food & { logId: string; category: MealCategory; quantity: number };
@@ -508,6 +545,11 @@ function getSearchTokens(value: string) {
   return normalizeSearchText(value).split(/\s+/).filter(Boolean);
 }
 
+function getSearchSynonyms(query: string) {
+  const queryText = normalizeSearchText(query);
+  return brandSynonyms[queryText]?.map(normalizeSearchText) ?? [];
+}
+
 function getFoodSearchScore(food: Food, query: string) {
   const queryText = normalizeSearchText(query);
   const queryWords = getSearchTokens(query);
@@ -518,9 +560,13 @@ function getFoodSearchScore(food: Food, query: string) {
   const compactName = nameText.replace(/\s+/g, "");
   const compactQuery = queryText.replace(/\s+/g, "");
   const matchedNameWords = queryWords.filter((word) => nameText.includes(word));
+  const synonymMatches = getSearchSynonyms(query).filter(
+    (synonym) => nameText.includes(synonym) || brandText.includes(synonym)
+  );
   let score = 0;
 
   if (nameText.includes(queryText) || compactName.includes(compactQuery)) score += 100;
+  if (synonymMatches.length > 0) score += 95 + synonymMatches.length * 8;
   if (matchedNameWords.length === queryWords.length) score += 70;
   if (nameText.startsWith(queryText)) score += 50;
   if (brandText.includes(queryText) || queryWords.some((word) => brandText.includes(word))) score += 35;
