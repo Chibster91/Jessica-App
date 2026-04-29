@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { recognize } from "tesseract.js";
 import "./App.css";
 
 type Food = {
@@ -12,6 +13,7 @@ type Food = {
   carbs: number;
   fat: number;
   fiber?: number;
+  sugar?: number;
   sodium?: number;
   notes?: string;
 };
@@ -136,9 +138,17 @@ type CustomFoodForm = {
   carbs: string;
   fat: string;
   fiber: string;
+  sugar: string;
   sodium: string;
   notes: string;
 };
+
+type ScannedNutritionFields = Partial<
+  Pick<
+    CustomFoodForm,
+    "servingSize" | "servingUnit" | "calories" | "fat" | "carbs" | "protein" | "sugar" | "fiber" | "sodium"
+  >
+>;
 
 type RecipeForm = {
   name: string;
@@ -159,6 +169,7 @@ const emptyCustomFoodForm: CustomFoodForm = {
   carbs: "",
   fat: "",
   fiber: "",
+  sugar: "",
   sodium: "",
   notes: "",
 };
@@ -504,6 +515,7 @@ function scaleFoodNutrition(food: Food, factor: number, servingSize: string): Fo
     carbs: food.carbs * factor,
     fat: food.fat * factor,
     fiber: food.fiber === undefined ? undefined : food.fiber * factor,
+    sugar: food.sugar === undefined ? undefined : food.sugar * factor,
     sodium: food.sodium === undefined ? undefined : food.sodium * factor,
   };
 }
@@ -745,7 +757,10 @@ function getIngredientCalories(ingredient: RecipeIngredient) {
   return Math.round(ingredient.food.calories * ingredient.quantity);
 }
 
-function getIngredientMacro(ingredient: RecipeIngredient, key: "protein" | "carbs" | "fat" | "fiber" | "sodium") {
+function getIngredientMacro(
+  ingredient: RecipeIngredient,
+  key: "protein" | "carbs" | "fat" | "fiber" | "sugar" | "sodium"
+) {
   return (ingredient.food[key] ?? 0) * ingredient.quantity;
 }
 
@@ -757,6 +772,7 @@ function getRecipeTotals(ingredients: RecipeIngredient[]) {
       carbs: totals.carbs + getIngredientMacro(ingredient, "carbs"),
       fat: totals.fat + getIngredientMacro(ingredient, "fat"),
       fiber: totals.fiber + getIngredientMacro(ingredient, "fiber"),
+      sugar: totals.sugar + getIngredientMacro(ingredient, "sugar"),
       sodium: totals.sodium + getIngredientMacro(ingredient, "sodium"),
     }),
     {
@@ -765,6 +781,7 @@ function getRecipeTotals(ingredients: RecipeIngredient[]) {
       carbs: 0,
       fat: 0,
       fiber: 0,
+      sugar: 0,
       sodium: 0,
     }
   );
@@ -789,6 +806,7 @@ function parseRecipe(form: RecipeForm, ingredients: RecipeIngredient[]): Recipe 
     carbs: totals.carbs,
     fat: totals.fat,
     fiber: totals.fiber,
+    sugar: totals.sugar,
     sodium: totals.sodium,
     notes: form.notes.trim() || undefined,
     ingredients,
@@ -808,6 +826,7 @@ function foodToCustomFoodForm(food: Food): CustomFoodForm {
     carbs: String(food.carbs),
     fat: String(food.fat),
     fiber: String(food.fiber ?? 0),
+    sugar: String(food.sugar ?? 0),
     sodium: String(food.sodium ?? 0),
     notes: food.notes ?? "",
   };
@@ -833,13 +852,14 @@ function parseCustomFood(form: CustomFoodForm): Food | null {
   const carbs = Number(form.carbs || 0);
   const fat = Number(form.fat || 0);
   const fiber = Number(form.fiber || 0);
+  const sugar = Number(form.sugar || 0);
   const sodium = Number(form.sodium || 0);
 
   if (!name || !servingSize || !servingUnit || !Number.isFinite(calories) || calories < 0) {
     return null;
   }
 
-  if (![protein, carbs, fat, fiber, sodium].every((value) => Number.isFinite(value) && value >= 0)) {
+  if (![protein, carbs, fat, fiber, sugar, sodium].every((value) => Number.isFinite(value) && value >= 0)) {
     return null;
   }
 
@@ -853,8 +873,113 @@ function parseCustomFood(form: CustomFoodForm): Food | null {
     carbs,
     fat,
     fiber,
+    sugar,
     sodium,
     notes: form.notes.trim() || undefined,
+  };
+}
+
+function normalizeOcrText(text: string) {
+  return text
+    .replace(/\r/g, "\n")
+    .replace(/[|]/g, " ")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function parseOcrNumber(value: string) {
+  const normalized = value.replace(/,/g, "").replace(/[oO]/g, "0");
+  const fractionMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+
+  if (fractionMatch) {
+    const numerator = Number(fractionMatch[1]);
+    const denominator = Number(fractionMatch[2]);
+    return denominator ? numerator / denominator : null;
+  }
+
+  const number = Number(normalized);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatScannedNumber(value: number, decimals = 1) {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(decimals)));
+}
+
+function getNutritionLine(text: string, labelPattern: RegExp) {
+  return text.split("\n").find((line) => labelPattern.test(line.toLowerCase())) ?? "";
+}
+
+function extractNutritionAmount(text: string, labelPattern: RegExp, unit: "g" | "mg" | "any" = "g") {
+  const line = getNutritionLine(text, labelPattern);
+  if (!line) return "";
+
+  const amountMatch =
+    unit === "mg"
+      ? line.match(/(\d+(?:[.,]\d+)?)\s*(mg|g)\b/i)
+      : unit === "g"
+        ? line.match(/(\d+(?:[.,]\d+)?)\s*g\b/i)
+        : line.match(/(\d+(?:[.,]\d+)?)/);
+
+  if (!amountMatch) return "";
+
+  const amount = parseOcrNumber(amountMatch[1].replace(",", "."));
+  if (amount === null) return "";
+
+  if (unit === "mg" && amountMatch[2]?.toLowerCase() === "g") {
+    return formatScannedNumber(amount * 1000, 0);
+  }
+
+  return formatScannedNumber(amount, unit === "mg" ? 0 : 1);
+}
+
+function extractCalories(text: string) {
+  const line = getNutritionLine(text, /\bcalories\b/);
+  const match = line.match(/\bcalories\b\D{0,12}(\d{1,4})\b/i) ?? line.match(/\b(\d{1,4})\b/);
+  const calories = match ? parseOcrNumber(match[1]) : null;
+
+  return calories === null ? "" : formatScannedNumber(calories, 0);
+}
+
+function extractServingSize(text: string) {
+  const line = getNutritionLine(text, /\bserving size\b/);
+  if (!line) return {};
+
+  const servingText = line.replace(/.*?\bserving size\b[:\s]*/i, "").trim();
+  const parenGramMatch = servingText.match(/\((\d+(?:[.,]\d+)?)\s*(g|ml|mL)\)/);
+  const amountUnitMatch = servingText.match(
+    /(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|piece|pieces|bar|bars|slice|slices|container|package|packet|pouch|bottle|can|serving|g|gram|grams|ml|mL|oz|ounce|ounces)\b/i
+  );
+
+  if (amountUnitMatch) {
+    return {
+      servingSize: amountUnitMatch[1].replace(/\s+/g, ""),
+      servingUnit: amountUnitMatch[2],
+    };
+  }
+
+  if (parenGramMatch) {
+    return {
+      servingSize: parenGramMatch[1].replace(",", "."),
+      servingUnit: parenGramMatch[2],
+    };
+  }
+
+  return {};
+}
+
+function parseNutritionLabelText(text: string): ScannedNutritionFields {
+  const normalizedText = normalizeOcrText(text);
+
+  return {
+    ...extractServingSize(normalizedText),
+    calories: extractCalories(normalizedText),
+    fat: extractNutritionAmount(normalizedText, /\btotal fat\b/),
+    carbs: extractNutritionAmount(normalizedText, /\b(total carbohydrate|total carbs|carbohydrate)\b/),
+    protein: extractNutritionAmount(normalizedText, /\bprotein\b/),
+    sugar: extractNutritionAmount(normalizedText, /\b(total sugars|sugars|sugar)\b/),
+    fiber: extractNutritionAmount(normalizedText, /\b(dietary fiber|fiber)\b/),
+    sodium: extractNutritionAmount(normalizedText, /\bsodium\b/, "mg"),
   };
 }
 
@@ -1028,6 +1153,7 @@ function formatWeekRange(startDate: string, endDate: string) {
 
 function App() {
   const today = getLocalDateString();
+  const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
   const [appView, setAppView] = useState<AppView>("home");
   const [selectedDate, setSelectedDate] = useState(today);
   const [log, setLog] = useState<LogItem[]>(() => getSavedLog(today));
@@ -1039,6 +1165,9 @@ function App() {
   const [customQuery, setCustomQuery] = useState("");
   const [isCustomFormOpen, setIsCustomFormOpen] = useState(false);
   const [customFoodForm, setCustomFoodForm] = useState<CustomFoodForm>(emptyCustomFoodForm);
+  const [customFoodOcrText, setCustomFoodOcrText] = useState("");
+  const [customFoodOcrError, setCustomFoodOcrError] = useState("");
+  const [isScanningCustomFood, setIsScanningCustomFood] = useState(false);
   const [recipes, setRecipes] = useState<Recipe[]>(() => getSavedRecipes());
   const [recipeQuery, setRecipeQuery] = useState("");
   const [isRecipeFormOpen, setIsRecipeFormOpen] = useState(false);
@@ -1129,6 +1258,9 @@ function App() {
     setCustomQuery("");
     setIsCustomFormOpen(false);
     setCustomFoodForm(emptyCustomFoodForm);
+    setCustomFoodOcrText("");
+    setCustomFoodOcrError("");
+    setIsScanningCustomFood(false);
     setRecipeQuery("");
     setIsRecipeFormOpen(false);
     setRecipeForm(emptyRecipeForm);
@@ -1156,6 +1288,9 @@ function App() {
     setPortionAmount("100");
     setDetailError("");
     setIsCustomFormOpen(false);
+    setCustomFoodOcrText("");
+    setCustomFoodOcrError("");
+    setIsScanningCustomFood(false);
     setIsRecipeFormOpen(false);
   }
 
@@ -1210,6 +1345,8 @@ function App() {
     setPortionAmount("100");
     setDetailError("");
     setQuantity("1");
+    setCustomFoodOcrText("");
+    setCustomFoodOcrError("");
     setIsCustomFormOpen(true);
   }
 
@@ -1235,9 +1372,41 @@ function App() {
 
     setCustomFoods([customFood, ...customFoods]);
     setCustomFoodForm(emptyCustomFoodForm);
+    setCustomFoodOcrText("");
+    setCustomFoodOcrError("");
     setIsCustomFormOpen(false);
     setActiveAddFoodTab("custom");
     selectLocalFood(customFood);
+  }
+
+  async function scanCustomFoodLabel(file: File | undefined) {
+    if (!file) return;
+
+    setCustomFoodOcrError("");
+    setIsScanningCustomFood(true);
+
+    try {
+      const result = await recognize(file, "eng");
+      const text = normalizeOcrText(result.data.text);
+      const scannedFields = parseNutritionLabelText(text);
+      const nextForm = { ...customFoodForm };
+
+      for (const [key, value] of Object.entries(scannedFields) as [keyof ScannedNutritionFields, string][]) {
+        if (value) nextForm[key] = value;
+      }
+
+      setCustomFoodForm(nextForm);
+      setCustomFoodOcrText(text);
+
+      if (!Object.values(scannedFields).some(Boolean)) {
+        setCustomFoodOcrError("OCR finished, but no nutrition fields were recognized. You can still enter them manually.");
+      }
+    } catch {
+      setCustomFoodOcrError("Could not scan that image. Try a clearer photo or enter the values manually.");
+    } finally {
+      setIsScanningCustomFood(false);
+      if (customFoodScanInputRef.current) customFoodScanInputRef.current.value = "";
+    }
   }
 
   function selectRecipeIngredient(food: Food) {
@@ -2136,6 +2305,8 @@ function App() {
                   <strong>{Number(librarySelection.food.fat.toFixed(1))}g</strong>
                   <span>Fiber</span>
                   <strong>{Number((librarySelection.food.fiber ?? 0).toFixed(1))}g</strong>
+                  <span>Sugar</span>
+                  <strong>{Number((librarySelection.food.sugar ?? 0).toFixed(1))}g</strong>
                   <span>Sodium</span>
                   <strong>{Number((librarySelection.food.sodium ?? 0).toFixed(1))}mg</strong>
                 </div>
@@ -2261,6 +2432,18 @@ function App() {
                     value={libraryCustomFoodForm.fiber}
                     onChange={(e) =>
                       setLibraryCustomFoodForm({ ...libraryCustomFoodForm, fiber: e.target.value })
+                    }
+                  />
+                </label>
+                <label>
+                  Sugar
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={libraryCustomFoodForm.sugar}
+                    onChange={(e) =>
+                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, sugar: e.target.value })
                     }
                   />
                 </label>
@@ -2616,6 +2799,34 @@ function App() {
 
                 {isCustomFormOpen && (
                   <div className="custom-food-form">
+                    <div className="scan-food-panel">
+                      <input
+                        ref={customFoodScanInputRef}
+                        className="visually-hidden"
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={(e) => scanCustomFoodLabel(e.target.files?.[0])}
+                      />
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => customFoodScanInputRef.current?.click()}
+                        disabled={isScanningCustomFood}
+                      >
+                        {isScanningCustomFood ? "Scanning label..." : "Scan Nutrition Label"}
+                      </button>
+                      {isScanningCustomFood && (
+                        <p className="scan-status">Reading the nutrition label. This can take a moment.</p>
+                      )}
+                      {customFoodOcrError && <p className="form-error">{customFoodOcrError}</p>}
+                      {customFoodOcrText && (
+                        <details className="ocr-debug">
+                          <summary>OCR raw text</summary>
+                          <pre>{customFoodOcrText}</pre>
+                        </details>
+                      )}
+                    </div>
                     <label>
                       Name
                       <input
@@ -2710,6 +2921,18 @@ function App() {
                         value={customFoodForm.fiber}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, fiber: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Sugar
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        value={customFoodForm.sugar}
+                        onChange={(e) =>
+                          setCustomFoodForm({ ...customFoodForm, sugar: e.target.value })
                         }
                       />
                     </label>
