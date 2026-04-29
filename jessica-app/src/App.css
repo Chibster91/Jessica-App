@@ -394,6 +394,7 @@ input, button, textarea {
 
 @media (max-width: 520px) {
   .tab-row,
+  .calculator-form,
   .custom-food-form,
   .form-actions,
   .ingredient-confirm,
@@ -403,6 +404,8 @@ input, button, textarea {
 
   .custom-food-form label:first-child,
   .custom-food-form label:nth-child(11),
+  .calculator-estimate,
+  .calculator-form .primary-button,
   .form-actions {
     grid-column: auto;
   }
@@ -597,6 +600,53 @@ input, button, textarea {
 }
 
 /* Profile / goals form */
+.calculator-form {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.calculator-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.calculator-form input,
+.calculator-form select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+}
+
+.compound-input-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) 5rem;
+}
+
+.calculator-estimate {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.25rem;
+  background: #30303d;
+  border: 1px solid #3a3a48;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+}
+
+.calculator-estimate span {
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.calculator-form .primary-button {
+  grid-column: 1 / -1;
+}
+
 .goals-form {
   display: grid;
   gap: 1.1rem;

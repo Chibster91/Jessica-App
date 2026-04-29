@@ -80,16 +80,41 @@ type AppView = "home" | "day" | "library" | "profile";
 
 type FoodLibraryTab = "recent" | "custom" | "recipes";
 
+type Sex = "female" | "male";
+
+type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "veryActive";
+
+type GoalType = "lose" | "maintain" | "gain";
+
+type GoalRate = "mild" | "moderate" | "aggressive";
+
+type HeightUnit = "cm" | "in";
+
+type WeightUnit = "kg" | "lb";
+
 type LibrarySelection =
   | { type: "recent"; food: Food & { loggedCount?: number; lastLoggedDate?: string } }
   | { type: "custom"; food: Food }
   | { type: "recipe"; food: Recipe };
+
+type CalculatorInputs = {
+  age: string;
+  sex: Sex;
+  height: string;
+  heightUnit: HeightUnit;
+  weight: string;
+  weightUnit: WeightUnit;
+  activityLevel: ActivityLevel;
+  goal: GoalType;
+  rate: GoalRate;
+};
 
 type Goals = {
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
+  calculatorInputs?: CalculatorInputs;
 };
 
 type GoalsForm = {
@@ -141,6 +166,46 @@ const emptyRecipeForm: RecipeForm = {
   servingSize: "",
   servingUnit: "",
   notes: "",
+};
+
+const defaultCalculatorInputs: CalculatorInputs = {
+  age: "",
+  sex: "female",
+  height: "",
+  heightUnit: "in",
+  weight: "",
+  weightUnit: "lb",
+  activityLevel: "moderate",
+  goal: "maintain",
+  rate: "moderate",
+};
+
+const activityMultipliers: Record<ActivityLevel, number> = {
+  sedentary: 1.2,
+  light: 1.375,
+  moderate: 1.55,
+  active: 1.725,
+  veryActive: 1.9,
+};
+
+const activityLabels: Record<ActivityLevel, string> = {
+  sedentary: "Sedentary",
+  light: "Light",
+  moderate: "Moderate",
+  active: "Active",
+  veryActive: "Very active",
+};
+
+const goalLabels: Record<GoalType, string> = {
+  lose: "Lose",
+  maintain: "Maintain",
+  gain: "Gain",
+};
+
+const rateLabels: Record<GoalRate, string> = {
+  mild: "Mild",
+  moderate: "Moderate",
+  aggressive: "Aggressive",
 };
 
 const brandSynonyms: Record<string, string[]> = {
@@ -229,6 +294,10 @@ function goalsToForm(goals: Goals | null): GoalsForm {
     carbs: String(goals.carbs),
     fat: String(goals.fat),
   };
+}
+
+function calculatorInputsToForm(goals: Goals | null): CalculatorInputs {
+  return goals?.calculatorInputs ?? defaultCalculatorInputs;
 }
 
 function saveRecipes(recipes: Recipe[]) {
@@ -761,6 +830,58 @@ function formatMacro(value: number) {
   return Number(value.toFixed(1));
 }
 
+function getValidRates(goal: GoalType): GoalRate[] {
+  if (goal === "maintain") return ["moderate"];
+  if (goal === "gain") return ["mild", "moderate"];
+  return ["mild", "moderate", "aggressive"];
+}
+
+function getGoalAdjustment(goal: GoalType, rate: GoalRate) {
+  if (goal === "maintain") return 0;
+  if (goal === "lose") {
+    return {
+      mild: -250,
+      moderate: -500,
+      aggressive: -750,
+    }[rate];
+  }
+
+  return {
+    mild: 250,
+    moderate: 500,
+    aggressive: 500,
+  }[rate];
+}
+
+function getMacroGoals(goalCalories: number) {
+  return {
+    calories: Math.round(goalCalories),
+    protein: Math.round((goalCalories * 0.3) / 4),
+    carbs: Math.round((goalCalories * 0.4) / 4),
+    fat: Math.round((goalCalories * 0.3) / 9),
+  };
+}
+
+function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
+  const age = Number(inputs.age);
+  const height = Number(inputs.height);
+  const weight = Number(inputs.weight);
+
+  if (![age, height, weight].every((value) => Number.isFinite(value) && value > 0)) return null;
+
+  const heightCm = inputs.heightUnit === "cm" ? height : height * 2.54;
+  const weightKg = inputs.weightUnit === "kg" ? weight : weight * 0.45359237;
+  const bmr =
+    10 * weightKg + 6.25 * heightCm - 5 * age + (inputs.sex === "female" ? -161 : 5);
+  const tdee = bmr * activityMultipliers[inputs.activityLevel];
+  const calorieGoal = tdee + getGoalAdjustment(inputs.goal, inputs.rate);
+
+  return {
+    ...getMacroGoals(calorieGoal),
+    calculatorInputs: inputs,
+  };
+}
+
 function getWeekDates(referenceDate: string) {
   const [year, month, day] = referenceDate.split("-").map(Number);
   const d = new Date(year, month - 1, day);
@@ -818,6 +939,9 @@ function App() {
   const [librarySelection, setLibrarySelection] = useState<LibrarySelection | null>(null);
   const [goals, setGoals] = useState<Goals | null>(() => getSavedGoals());
   const [goalsForm, setGoalsForm] = useState<GoalsForm>(() => goalsToForm(getSavedGoals()));
+  const [calculatorInputs, setCalculatorInputs] = useState<CalculatorInputs>(() =>
+    calculatorInputsToForm(getSavedGoals())
+  );
   const [editingCustomFoodId, setEditingCustomFoodId] = useState<number | null>(null);
   const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
   const [libraryCustomFoodForm, setLibraryCustomFoodForm] =
@@ -1127,11 +1251,32 @@ function App() {
     if (!Number.isFinite(calories) || calories <= 0) return;
     if (![protein, carbs, fat].every((v) => Number.isFinite(v) && v >= 0)) return;
 
-    const newGoals = { calories: Math.round(calories), protein, carbs, fat };
+    const newGoals = { calories: Math.round(calories), protein, carbs, fat, calculatorInputs };
     setGoals(newGoals);
     localStorage.setItem("goals", JSON.stringify(newGoals));
   }
 
+  function updateCalculatorInputs(updates: Partial<CalculatorInputs>) {
+    setCalculatorInputs((currentInputs) => {
+      const nextInputs = { ...currentInputs, ...updates };
+      const validRates = getValidRates(nextInputs.goal);
+
+      if (!validRates.includes(nextInputs.rate)) {
+        nextInputs.rate = validRates[0];
+      }
+
+      return nextInputs;
+    });
+  }
+
+  function applyCalculatedGoals() {
+    const newGoals = calculateGoalsFromInputs(calculatorInputs);
+    if (!newGoals) return;
+
+    setGoals(newGoals);
+    setGoalsForm(goalsToForm(newGoals));
+    localStorage.setItem("goals", JSON.stringify(newGoals));
+  }
 
   function cancelLibraryEditing() {
     setEditingCustomFoodId(null);
@@ -1262,6 +1407,8 @@ function App() {
     !isLoadingDetail &&
     (!usesLocalPortion || localPortionScale !== null) &&
     (portionOptions.length === 0 || Boolean(selectedPortion));
+  const calculatedGoals = calculateGoalsFromInputs(calculatorInputs);
+  const calculatorRates = getValidRates(calculatorInputs.goal);
 
   const bottomNav = (
     <nav className="bottom-nav" aria-label="Main navigation">
@@ -1410,8 +1557,144 @@ function App() {
         </div>
 
         <section className="panel">
+          <h2>Macro Calculator</h2>
+          <p className="week-range">Estimate targets with Mifflin-St Jeor, then save them to your profile.</p>
+
+          <div className="calculator-form">
+            <label>
+              Age
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={calculatorInputs.age}
+                onChange={(e) => updateCalculatorInputs({ age: e.target.value })}
+              />
+            </label>
+
+            <label>
+              Sex
+              <select
+                value={calculatorInputs.sex}
+                onChange={(e) => updateCalculatorInputs({ sex: e.target.value as Sex })}
+              >
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+            </label>
+
+            <label>
+              Height
+              <div className="compound-input-row">
+                <input
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  value={calculatorInputs.height}
+                  onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
+                />
+                <select
+                  value={calculatorInputs.heightUnit}
+                  onChange={(e) => updateCalculatorInputs({ heightUnit: e.target.value as HeightUnit })}
+                >
+                  <option value="in">in</option>
+                  <option value="cm">cm</option>
+                </select>
+              </div>
+            </label>
+
+            <label>
+              Weight
+              <div className="compound-input-row">
+                <input
+                  type="number"
+                  min="1"
+                  step="0.1"
+                  value={calculatorInputs.weight}
+                  onChange={(e) => updateCalculatorInputs({ weight: e.target.value })}
+                />
+                <select
+                  value={calculatorInputs.weightUnit}
+                  onChange={(e) => updateCalculatorInputs({ weightUnit: e.target.value as WeightUnit })}
+                >
+                  <option value="lb">lb</option>
+                  <option value="kg">kg</option>
+                </select>
+              </div>
+            </label>
+
+            <label>
+              Activity level
+              <select
+                value={calculatorInputs.activityLevel}
+                onChange={(e) =>
+                  updateCalculatorInputs({ activityLevel: e.target.value as ActivityLevel })
+                }
+              >
+                {(Object.keys(activityLabels) as ActivityLevel[]).map((level) => (
+                  <option key={level} value={level}>
+                    {activityLabels[level]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              Goal
+              <select
+                value={calculatorInputs.goal}
+                onChange={(e) => updateCalculatorInputs({ goal: e.target.value as GoalType })}
+              >
+                {(Object.keys(goalLabels) as GoalType[]).map((goal) => (
+                  <option key={goal} value={goal}>
+                    {goalLabels[goal]}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {calculatorInputs.goal !== "maintain" && (
+              <label>
+                Rate
+                <select
+                  value={calculatorInputs.rate}
+                  onChange={(e) => updateCalculatorInputs({ rate: e.target.value as GoalRate })}
+                >
+                  {calculatorRates.map((rate) => (
+                    <option key={rate} value={rate}>
+                      {rateLabels[rate]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="calculator-estimate">
+              <span>Estimated target</span>
+              {calculatedGoals ? (
+                <strong>
+                  {calculatedGoals.calories} cal / {calculatedGoals.protein}g P /{" "}
+                  {calculatedGoals.carbs}g C / {calculatedGoals.fat}g F
+                </strong>
+              ) : (
+                <strong>Enter age, height, and weight</strong>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="primary-button"
+              onClick={applyCalculatedGoals}
+              disabled={!calculatedGoals}
+            >
+              Save estimate to goals
+            </button>
+          </div>
+        </section>
+
+        <section className="panel">
           <h2>Daily Goals</h2>
-          <p className="week-range">Set your targets and track progress in the Log and Home views.</p>
+          <p className="week-range">Fine-tune your saved targets manually.</p>
 
           <div className="goals-form">
             {[
