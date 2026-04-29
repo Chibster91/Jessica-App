@@ -500,6 +500,42 @@ function matchesFoodQuery(food: Food, query: string) {
   return `${food.name} ${food.brand ?? ""}`.toLowerCase().includes(normalizedQuery);
 }
 
+function normalizeSearchText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function getSearchTokens(value: string) {
+  return normalizeSearchText(value).split(/\s+/).filter(Boolean);
+}
+
+function getFoodSearchScore(food: Food, query: string) {
+  const queryText = normalizeSearchText(query);
+  const queryWords = getSearchTokens(query);
+  if (!queryText || queryWords.length === 0) return 0;
+
+  const nameText = normalizeSearchText(food.name);
+  const brandText = normalizeSearchText(food.brand ?? "");
+  const compactName = nameText.replace(/\s+/g, "");
+  const compactQuery = queryText.replace(/\s+/g, "");
+  const matchedNameWords = queryWords.filter((word) => nameText.includes(word));
+  let score = 0;
+
+  if (nameText.includes(queryText) || compactName.includes(compactQuery)) score += 100;
+  if (matchedNameWords.length === queryWords.length) score += 70;
+  if (nameText.startsWith(queryText)) score += 50;
+  if (brandText.includes(queryText) || queryWords.some((word) => brandText.includes(word))) score += 35;
+  score += matchedNameWords.length * 12;
+
+  if (queryWords.length > 1 && matchedNameWords.length === 1) score -= 45;
+  if (matchedNameWords.length === 0 && !brandText.includes(queryText)) score -= 60;
+
+  return score;
+}
+
+function rankSearchResults(foods: Food[], query: string) {
+  return [...foods].sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query));
+}
+
 function getIngredientCalories(ingredient: RecipeIngredient) {
   return Math.round(ingredient.food.calories * ingredient.quantity);
 }
@@ -753,7 +789,7 @@ function App() {
     const res = await fetch(
       `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(modalQuery)}`
     );
-    setModalFoods(await res.json());
+    setModalFoods(rankSearchResults(await res.json(), modalQuery));
   }
 
   async function selectFood(food: Food) {
