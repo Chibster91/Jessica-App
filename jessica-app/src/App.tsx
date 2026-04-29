@@ -214,6 +214,10 @@ const rateLabels: Record<GoalRate, string> = {
 
 const activityOptions = Object.keys(activityLabels) as ActivityLevel[];
 const goalOptions = Object.keys(goalLabels) as GoalType[];
+const maxHeightInches = 108;
+const maxHeightCm = maxHeightInches * 2.54;
+const maxWeightLb = 1400;
+const maxWeightKg = maxWeightLb * 0.45359237;
 
 const brandSynonyms: Record<string, string[]> = {
   "pop tart": ["pop tart", "pop-tart", "poptart", "pop-tarts", "toaster pastry", "toaster pastries"],
@@ -893,12 +897,14 @@ function getMacroGoals(goalCalories: number) {
 function getHeightCm(inputs: CalculatorInputs) {
   if (inputs.heightUnit === "cm") {
     const height = Number(inputs.height);
-    return Number.isFinite(height) && height > 0 ? height : null;
+    return Number.isFinite(height) && height > 0 && height <= maxHeightCm ? height : null;
   }
 
   if (inputs.heightUnit === "in") {
     const height = Number(inputs.height);
-    return Number.isFinite(height) && height > 0 ? height * 2.54 : null;
+    return Number.isFinite(height) && height > 0 && height <= maxHeightInches
+      ? height * 2.54
+      : null;
   }
 
   const feet = Number(inputs.heightFeet || 0);
@@ -907,13 +913,14 @@ function getHeightCm(inputs: CalculatorInputs) {
   if (!Number.isFinite(feet) || !Number.isFinite(inches) || feet < 0 || inches < 0) return null;
 
   const totalInches = feet * 12 + inches;
-  return totalInches > 0 ? totalInches * 2.54 : null;
+  return totalInches > 0 && totalInches <= maxHeightInches ? totalInches * 2.54 : null;
 }
 
 function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
   const age = Number(inputs.age);
   const weight = Number(inputs.weight);
   const heightCm = getHeightCm(inputs);
+  const weightKg = inputs.weightUnit === "kg" ? weight : weight * 0.45359237;
 
   if (
     !Number.isFinite(age) ||
@@ -921,12 +928,13 @@ function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
     age > 120 ||
     !Number.isFinite(weight) ||
     weight <= 0 ||
+    !Number.isFinite(weightKg) ||
+    weightKg > maxWeightKg ||
     heightCm === null
   ) {
     return null;
   }
 
-  const weightKg = inputs.weightUnit === "kg" ? weight : weight * 0.45359237;
   const bmr =
     10 * weightKg + 6.25 * heightCm - 5 * age + (inputs.sex === "female" ? -161 : 5);
   const tdee = bmr * activityMultipliers[inputs.activityLevel];
@@ -1726,6 +1734,7 @@ function App() {
                             aria-label="Height feet"
                             type="number"
                             min="0"
+                            max="9"
                             step="1"
                             placeholder="ft"
                             value={calculatorInputs.heightFeet ?? ""}
@@ -1737,6 +1746,7 @@ function App() {
                             aria-label="Height inches"
                             type="number"
                             min="0"
+                            max="11.5"
                             step="0.5"
                             placeholder="in"
                             value={calculatorInputs.heightInches ?? ""}
@@ -1749,6 +1759,11 @@ function App() {
                         <input
                           type="number"
                           min="1"
+                          max={
+                            calculatorInputs.heightUnit === "cm"
+                              ? Number(maxHeightCm.toFixed(2))
+                              : maxHeightInches
+                          }
                           step="0.1"
                           value={calculatorInputs.height}
                           onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
@@ -1773,6 +1788,11 @@ function App() {
                       <input
                         type="number"
                         min="1"
+                        max={
+                          calculatorInputs.weightUnit === "kg"
+                            ? Number(maxWeightKg.toFixed(1))
+                            : maxWeightLb
+                        }
                         step="0.1"
                         value={calculatorInputs.weight}
                         onChange={(e) => updateCalculatorInputs({ weight: e.target.value })}
