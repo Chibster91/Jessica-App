@@ -88,7 +88,7 @@ type GoalType = "lose" | "maintain" | "gain";
 
 type GoalRate = "mild" | "moderate" | "aggressive";
 
-type HeightUnit = "cm" | "in";
+type HeightUnit = "ftIn" | "cm" | "in";
 
 type WeightUnit = "kg" | "lb";
 
@@ -101,6 +101,8 @@ type CalculatorInputs = {
   age: string;
   sex: Sex;
   height: string;
+  heightFeet?: string;
+  heightInches?: string;
   heightUnit: HeightUnit;
   weight: string;
   weightUnit: WeightUnit;
@@ -172,7 +174,9 @@ const defaultCalculatorInputs: CalculatorInputs = {
   age: "",
   sex: "female",
   height: "",
-  heightUnit: "in",
+  heightFeet: "",
+  heightInches: "",
+  heightUnit: "ftIn",
   weight: "",
   weightUnit: "lb",
   activityLevel: "moderate",
@@ -865,14 +869,35 @@ function getMacroGoals(goalCalories: number) {
   };
 }
 
+function getHeightCm(inputs: CalculatorInputs) {
+  if (inputs.heightUnit === "cm") {
+    const height = Number(inputs.height);
+    return Number.isFinite(height) && height > 0 ? height : null;
+  }
+
+  if (inputs.heightUnit === "in") {
+    const height = Number(inputs.height);
+    return Number.isFinite(height) && height > 0 ? height * 2.54 : null;
+  }
+
+  const feet = Number(inputs.heightFeet || 0);
+  const inches = Number(inputs.heightInches || 0);
+
+  if (!Number.isFinite(feet) || !Number.isFinite(inches) || feet < 0 || inches < 0) return null;
+
+  const totalInches = feet * 12 + inches;
+  return totalInches > 0 ? totalInches * 2.54 : null;
+}
+
 function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
   const age = Number(inputs.age);
-  const height = Number(inputs.height);
   const weight = Number(inputs.weight);
+  const heightCm = getHeightCm(inputs);
 
-  if (![age, height, weight].every((value) => Number.isFinite(value) && value > 0)) return null;
+  if (![age, weight].every((value) => Number.isFinite(value) && value > 0) || heightCm === null) {
+    return null;
+  }
 
-  const heightCm = inputs.heightUnit === "cm" ? height : height * 2.54;
   const weightKg = inputs.weightUnit === "kg" ? weight : weight * 0.45359237;
   const bmr =
     10 * weightKg + 6.25 * heightCm - 5 * age + (inputs.sex === "female" ? -161 : 5);
@@ -1651,21 +1676,55 @@ function App() {
 
                   <label>
                     Height
-                    <div className="compound-input-row">
-                      <input
-                        type="number"
-                        min="1"
-                        step="0.1"
-                        value={calculatorInputs.height}
-                        onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
-                      />
+                    <div
+                      className={
+                        calculatorInputs.heightUnit === "ftIn"
+                          ? "height-input-row"
+                          : "compound-input-row"
+                      }
+                    >
+                      {calculatorInputs.heightUnit === "ftIn" ? (
+                        <>
+                          <input
+                            aria-label="Height feet"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="ft"
+                            value={calculatorInputs.heightFeet ?? ""}
+                            onChange={(e) =>
+                              updateCalculatorInputs({ heightFeet: e.target.value })
+                            }
+                          />
+                          <input
+                            aria-label="Height inches"
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            placeholder="in"
+                            value={calculatorInputs.heightInches ?? ""}
+                            onChange={(e) =>
+                              updateCalculatorInputs({ heightInches: e.target.value })
+                            }
+                          />
+                        </>
+                      ) : (
+                        <input
+                          type="number"
+                          min="1"
+                          step="0.1"
+                          value={calculatorInputs.height}
+                          onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
+                        />
+                      )}
                       <select
                         value={calculatorInputs.heightUnit}
                         onChange={(e) =>
                           updateCalculatorInputs({ heightUnit: e.target.value as HeightUnit })
                         }
                       >
-                        <option value="in">in</option>
+                        <option value="ftIn">ft/in</option>
+                        <option value="in">in only</option>
                         <option value="cm">cm</option>
                       </select>
                     </div>

@@ -410,6 +410,14 @@ input, button, textarea {
     grid-template-columns: 1fr;
   }
 
+  .height-input-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .height-input-row select {
+    grid-column: 1 / -1;
+  }
+
   .custom-food-form label:first-child,
   .custom-food-form label:nth-child(11),
   .form-actions {
@@ -724,6 +732,12 @@ input, button, textarea {
   display: grid;
   gap: 0.5rem;
   grid-template-columns: minmax(0, 1fr) 5rem;
+}
+
+.height-input-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 6rem;
 }
 
 .calculator-estimate {
