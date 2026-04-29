@@ -877,3 +877,246 @@ input, button, textarea {
   font-size: 0.85rem;
   white-space: nowrap;
 }
+
+/* Mobile-first responsive layout */
+.app {
+  width: 100%;
+  max-width: 1000px;
+  padding: clamp(0.75rem, 4vw, 2rem) clamp(0.75rem, 4vw, 2rem)
+    calc(6rem + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+}
+
+.panel {
+  width: 100%;
+  max-width: 100%;
+  border-radius: clamp(10px, 4vw, 18px);
+  padding: clamp(1rem, 4vw, 1.5rem);
+}
+
+.top-bar,
+.search-row,
+.date-row,
+.meal-header,
+.log-item,
+.section-heading-row,
+.goals-input-row {
+  flex-wrap: wrap;
+}
+
+.search-row,
+.date-row {
+  justify-content: stretch;
+}
+
+.search-row input,
+.date-row input,
+.goals-input-row input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.search-row button,
+.date-row button {
+  flex: 1 1 auto;
+}
+
+input,
+button,
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+button {
+  overflow-wrap: anywhere;
+}
+
+.grid,
+.week-summary,
+.targets-grid,
+.option-card-grid,
+.option-card-grid.three {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+}
+
+.daily-nutrition-summary {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.5rem), 1fr));
+}
+
+.tab-row {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
+}
+
+.custom-food-form,
+.form-actions,
+.calculator-fields,
+.profile-actions,
+.ingredient-confirm,
+.ingredient-row,
+.compound-input-row,
+.height-input-row,
+.library-layout {
+  grid-template-columns: 1fr;
+}
+
+.custom-food-form > label:first-of-type,
+.custom-food-form > label:nth-of-type(12),
+.scan-food-panel,
+.form-actions {
+  grid-column: auto;
+}
+
+.modal-backdrop {
+  align-items: stretch;
+  place-items: stretch;
+  padding: 0;
+}
+
+.modal {
+  width: 100%;
+  max-width: 100%;
+  height: 100svh;
+  max-height: 100svh;
+  border-radius: 0;
+  border-inline: 0;
+  padding: clamp(0.85rem, 4vw, 1.5rem);
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+}
+
+.modal-results,
+.library-list {
+  max-height: none;
+}
+
+.library-detail {
+  border-left: 0;
+  border-top: 1px solid #3a3a48;
+  padding-left: 0;
+  padding-top: 1rem;
+}
+
+.nutrition-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+}
+
+.week-bars {
+  gap: clamp(0.2rem, 1.8vw, 0.4rem);
+  height: clamp(120px, 44vw, 160px);
+}
+
+.summary-card,
+.targets-grid div,
+.calculator-estimate {
+  padding: clamp(0.7rem, 3vw, 1rem);
+}
+
+.bottom-nav {
+  padding: 0.35rem max(0.4rem, env(safe-area-inset-left))
+    calc(0.35rem + env(safe-area-inset-bottom)) max(0.4rem, env(safe-area-inset-right));
+}
+
+.bottom-nav button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.35rem 0.25rem;
+}
+
+@media (min-width: 480px) {
+  .form-actions,
+  .profile-actions,
+  .height-input-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .height-input-row select {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 640px) {
+  .custom-food-form,
+  .calculator-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .custom-food-form > label:first-of-type,
+  .custom-food-form > label:nth-of-type(12),
+  .scan-food-panel,
+  .form-actions {
+    grid-column: 1 / -1;
+  }
+
+  .ingredient-confirm {
+    grid-template-columns: minmax(0, 1fr) 6rem auto auto;
+  }
+
+  .ingredient-row {
+    grid-template-columns: minmax(0, 1fr) 5rem auto auto;
+  }
+
+  .modal-backdrop {
+    place-items: center;
+    padding: 1rem;
+  }
+
+  .modal {
+    width: min(560px, 100%);
+    height: auto;
+    max-height: 90svh;
+    border: 1px solid #3a3a48;
+    border-radius: 12px;
+  }
+
+  .modal-results {
+    max-height: 340px;
+  }
+}
+
+@media (min-width: 760px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .daily-nutrition-summary,
+  .week-summary,
+  .targets-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .option-card-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .option-card-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .compound-input-row {
+    grid-template-columns: minmax(0, 1fr) 5rem;
+  }
+
+  .height-input-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 6rem;
+  }
+
+  .height-input-row select {
+    grid-column: auto;
+  }
+
+  .library-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+  }
+
+  .library-list {
+    max-height: 62svh;
+  }
+
+  .library-detail {
+    border-left: 1px solid #3a3a48;
+    border-top: 0;
+    padding-left: 1.5rem;
+    padding-top: 0;
+  }
+}
