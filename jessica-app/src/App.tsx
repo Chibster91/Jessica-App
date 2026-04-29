@@ -129,6 +129,8 @@ type GoalsForm = {
   fat: string;
 };
 
+type WeightRange = "1M" | "3M" | "6M" | "1Y" | "All";
+
 type WeightEntry = {
   id: string;
   date: string;
@@ -173,6 +175,7 @@ type RecipeForm = {
 };
 
 const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
+const poundsPerKilogram = 2.2046226218;
 
 const emptyCustomFoodForm: CustomFoodForm = {
   name: "",
@@ -1232,13 +1235,6 @@ function getDayLabel(date: string) {
   return new Date(year, month - 1, day).toLocaleDateString("en-US", { weekday: "short" });
 }
 
-function formatWeekRange(startDate: string, endDate: string) {
-  const [sy, sm, sd] = startDate.split("-").map(Number);
-  const [ey, em, ed] = endDate.split("-").map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const end = new Date(ey, em - 1, ed);
-  return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-}
 
 function formatShortDate(date: string) {
   const [year, month, day] = date.split("-").map(Number);
@@ -1248,8 +1244,62 @@ function formatShortDate(date: string) {
   });
 }
 
+function formatEntryDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatNavDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatDateRange(startDate: string, endDate: string) {
+  const [sy, sm, sd] = startDate.split("-").map(Number);
+  const [ey, em, ed] = endDate.split("-").map(Number);
+  const start = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
+  const sameYear = start.getFullYear() === end.getFullYear();
+
+  return sameYear
+    ? `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+    : `${start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
 function formatWeightValue(weight: number, unit: WeightUnit) {
   return `${Number(weight.toFixed(1))} ${unit}`;
+}
+
+function convertWeightValue(weight: number, fromUnit: WeightUnit, toUnit: WeightUnit) {
+  if (fromUnit === toUnit) return weight;
+  if (fromUnit === "kg" && toUnit === "lb") return weight * poundsPerKilogram;
+  if (fromUnit === "lb" && toUnit === "kg") return weight / poundsPerKilogram;
+  return weight;
+}
+
+function formatWeightValueInUnit(weight: number, fromUnit: WeightUnit, toUnit: WeightUnit) {
+  return formatWeightValue(convertWeightValue(weight, fromUnit, toUnit), toUnit);
+}
+
+function roundToIncrement(value: number, increment: number) {
+  return Math.round(value / increment) * increment;
+}
+
+function getNiceWeightStep(range: number) {
+  return range <= 6 ? 0.5 : 1;
+}
+
+function getWeightTickLabel(value: number, step: number, unit: WeightUnit) {
+  const precision = step === 0.5 ? 1 : 0;
+  return `${Number(value.toFixed(precision))} ${unit}`;
 }
 
 function sortWeightEntriesNewestFirst(entries: WeightEntry[]) {
@@ -1262,6 +1312,26 @@ function sortWeightEntriesOldestFirst(entries: WeightEntry[]) {
 
 function getPreferredWeightUnit(goals: Goals | null): WeightUnit {
   return goals?.calculatorInputs?.weightUnit ?? "lb";
+}
+
+function getWeightRangeStartDate(range: WeightRange, referenceDate: string) {
+  if (range === "All") return "";
+
+  const [year, month, day] = referenceDate.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  const monthOffsets: Record<Exclude<WeightRange, "All">, number> = {
+    "1M": 1,
+    "3M": 3,
+    "6M": 6,
+    "1Y": 12,
+  };
+
+  date.setMonth(date.getMonth() - monthOffsets[range]);
+  return date.toISOString().slice(0, 10);
+}
+
+function getWeightRangeLabel(range: WeightRange) {
+  return range;
 }
 
 function App() {
@@ -1313,7 +1383,10 @@ function App() {
     weight: "",
     note: "",
   });
+  const [weightRange, setWeightRange] = useState<WeightRange>("All");
+  const [weightChartPointId, setWeightChartPointId] = useState<string | null>(null);
   const [weightEntryToDelete, setWeightEntryToDelete] = useState<WeightEntry | null>(null);
+  const [editingWeightEntryId, setEditingWeightEntryId] = useState<string | null>(null);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(() => !getSavedGoals());
   const [isManualGoalsOpen, setIsManualGoalsOpen] = useState(false);
   const [editingCustomFoodId, setEditingCustomFoodId] = useState<number | null>(null);
@@ -1655,21 +1728,46 @@ function App() {
   }
 
   function saveWeightEntry() {
-    const weight = Number(weightForm.weight);
-    if (!Number.isFinite(weight) || weight <= 0) return;
+  const weight = Number(weightForm.weight);
+  if (!Number.isFinite(weight) || weight <= 0) return;
 
-    const entry: WeightEntry = {
-      id: crypto.randomUUID(),
-      date: weightForm.date || today,
-      weight,
-      unit: getPreferredWeightUnit(goals),
-      note: weightForm.note.trim() || undefined,
-    };
+  const entry: WeightEntry = {
+    id: editingWeightEntryId ?? crypto.randomUUID(),
+    date: weightForm.date || today,
+    weight,
+    unit: getPreferredWeightUnit(goals),
+    note: weightForm.note.trim() || undefined,
+  };
 
+  if (editingWeightEntryId) {
+    setWeightEntries(
+      weightEntries.map((item) =>
+        item.id === editingWeightEntryId ? entry : item
+      )
+    );
+  } else {
     setWeightEntries([entry, ...weightEntries]);
-    setWeightForm({ date: today, weight: "", note: "" });
   }
 
+  setEditingWeightEntryId(null);
+  setWeightForm({
+    date: today,
+    weight: "",
+    note: "",
+  });
+}
+
+function startEditWeightEntry(entry: WeightEntry) {
+  setEditingWeightEntryId(entry.id);
+
+  setWeightForm({
+    date: entry.date,
+    weight: String(entry.weight),
+    note: entry.note ?? "",
+  });
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
   function confirmDeleteWeightEntry() {
     if (!weightEntryToDelete) return;
 
@@ -1934,25 +2032,13 @@ function App() {
   const weightUnit = getPreferredWeightUnit(goals);
   const sortedWeightEntriesNewest = sortWeightEntriesNewestFirst(weightEntries);
   const sortedWeightEntriesOldest = sortWeightEntriesOldestFirst(weightEntries);
+  const weightRangeStartDate = getWeightRangeStartDate(weightRange, today);
+  const chartWeightEntries =
+    weightRange === "All"
+      ? sortedWeightEntriesOldest
+      : sortedWeightEntriesOldest.filter((entry) => entry.date >= weightRangeStartDate);
   const currentWeightEntry = sortedWeightEntriesNewest[0] ?? null;
   const startingWeightEntry = sortedWeightEntriesOldest[0] ?? null;
-  const totalWeightChange =
-    currentWeightEntry && startingWeightEntry
-      ? currentWeightEntry.weight - startingWeightEntry.weight
-      : null;
-  const weightGoal = goals?.calculatorInputs?.goal;
-  const weightChangeVerb =
-    totalWeightChange === null
-      ? "Changed"
-      : weightGoal === "lose"
-      ? totalWeightChange <= 0
-        ? "Lost"
-        : "Gained"
-      : weightGoal === "gain"
-      ? totalWeightChange >= 0
-        ? "Gained"
-        : "Lost"
-      : "Changed";
   const isWeightFormValid = Number(weightForm.weight) > 0 && Number.isFinite(Number(weightForm.weight));
   const canAddSelectedFood =
     Boolean(selectedFood) &&
@@ -2011,9 +2097,9 @@ function App() {
   );
 
   if (appView === "home") {
-    const weekDates = getWeekDates(today);
+    const weekDates = getWeekDates(selectedDate);
     const weekStats = weekDates.map((date) => {
-      const dayLog = getSavedLog(date);
+      const dayLog = date === selectedDate ? log : getSavedLog(date);
       return {
         date,
         calories: dayLog.reduce((s, item) => s + Math.round(item.calories * (item.quantity ?? 1)), 0),
@@ -2023,108 +2109,250 @@ function App() {
       };
     });
 
-    const loggedDayCount = weekStats.filter((d) => d.calories > 0).length;
-    const weekTotals = weekStats.reduce(
-      (totals, d) => ({
-        calories: totals.calories + d.calories,
-        protein: totals.protein + d.protein,
-        carbs: totals.carbs + d.carbs,
-        fat: totals.fat + d.fat,
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
-    );
-    const weekAvg = {
-      calories: loggedDayCount > 0 ? Math.round(weekTotals.calories / loggedDayCount) : 0,
-      protein: loggedDayCount > 0 ? weekTotals.protein / loggedDayCount : 0,
-      carbs: loggedDayCount > 0 ? weekTotals.carbs / loggedDayCount : 0,
-      fat: loggedDayCount > 0 ? weekTotals.fat / loggedDayCount : 0,
-    };
+    const selIdx = weekDates.indexOf(selectedDate);
+    const selStats = weekStats[selIdx] ?? { calories: 0, protein: 0, carbs: 0, fat: 0, date: selectedDate };
+    const todayCalories = selStats.calories;
+    const todayProtein = selStats.protein;
+    const todayCarbs = selStats.carbs;
+    const todayFat = selStats.fat;
+    const goalCal = goals?.calories ?? 0;
+    const remaining = goalCal - todayCalories;
+
+    const loggedDays = weekStats.filter((d) => d.calories > 0);
+    const weekAvgCal = loggedDays.length > 0
+      ? Math.round(loggedDays.reduce((s, d) => s + d.calories, 0) / loggedDays.length) : 0;
+
+    const pastDaysInWeek = weekStats.filter((d) => d.date < selectedDate);
+    const budgetDelta = goals
+      ? pastDaysInWeek.reduce((sum, d) => sum + (goals.calories - d.calories), 0) : 0;
+
     const maxDayCalories = Math.max(...weekStats.map((d) => d.calories), 1);
+
+    const totalMacroGrams = todayFat + todayCarbs + todayProtein;
+    const DONUT_R = 36;
+    const DONUT_CIRC = 2 * Math.PI * DONUT_R;
+    const fatArc = totalMacroGrams > 0 ? (todayFat / totalMacroGrams) * DONUT_CIRC : 0;
+    const carbsArc = totalMacroGrams > 0 ? (todayCarbs / totalMacroGrams) * DONUT_CIRC : 0;
+    const proteinArc = totalMacroGrams > 0 ? (todayProtein / totalMacroGrams) * DONUT_CIRC : 0;
+
+    const avgFat = loggedDays.length > 0 ? loggedDays.reduce((s, d) => s + d.fat, 0) / loggedDays.length : 0;
+    const avgCarbs = loggedDays.length > 0 ? loggedDays.reduce((s, d) => s + d.carbs, 0) / loggedDays.length : 0;
+    const avgProtein = loggedDays.length > 0 ? loggedDays.reduce((s, d) => s + d.protein, 0) / loggedDays.length : 0;
+    const avgMacroTotal = avgFat + avgCarbs + avgProtein;
+    const avgFatPct = avgMacroTotal > 0 ? Math.round((avgFat / avgMacroTotal) * 100) : 0;
+    const avgCarbsPct = avgMacroTotal > 0 ? Math.round((avgCarbs / avgMacroTotal) * 100) : 0;
+    const avgProteinPct = avgMacroTotal > 0 ? Math.round((avgProtein / avgMacroTotal) * 100) : 0;
+
+    const maxWeekMacros = Math.max(...weekStats.map((d) => d.fat + d.carbs + d.protein), 1);
+
+    let streak = 0;
+    let streakDate = today;
+    for (let i = 0; i < 365; i++) {
+      const dayLog = streakDate === selectedDate ? log : getSavedLog(streakDate);
+      if (!dayLog.some((item) => item.calories * (item.quantity ?? 1) > 0)) break;
+      streak++;
+      streakDate = shiftDate(streakDate, -1);
+    }
+
+    const homeWeightDisplay = currentWeightEntry
+      ? formatWeightValueInUnit(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit)
+      : null;
 
     return (
       <main className="app">
-        <div className="top-bar">
-          <h1>Jessica App</h1>
+        {/* Date navigator */}
+        <div className="home-date-nav">
+          <button
+            type="button"
+            className="home-date-arrow"
+            onClick={() => changeSelectedDate(shiftDate(selectedDate, -1))}
+            aria-label="Previous day"
+          >
+            ‹
+          </button>
+          <span className="home-date-label">{formatNavDate(selectedDate)}</span>
+          <button
+            type="button"
+            className="home-date-arrow"
+            onClick={() => changeSelectedDate(shiftDate(selectedDate, 1))}
+            aria-label="Next day"
+          >
+            ›
+          </button>
         </div>
 
-        <section className="panel">
-          <h2>This Week</h2>
-          <p className="week-range">{formatWeekRange(weekDates[0], weekDates[6])}</p>
-
-          <div className="week-summary">
-            {[
-              { label: "Avg Cal / day", value: weekAvg.calories, goal: goals?.calories ?? null, unit: "", isInt: true },
-              { label: "Avg Protein", value: weekAvg.protein, goal: goals?.protein ?? null, unit: "g", isInt: false },
-              { label: "Avg Carbs", value: weekAvg.carbs, goal: goals?.carbs ?? null, unit: "g", isInt: false },
-              { label: "Avg Fat", value: weekAvg.fat, goal: goals?.fat ?? null, unit: "g", isInt: false },
-            ].map(({ label, value, goal, unit, isInt }) => (
-              <div className="summary-card" key={label}>
-                <span>{label}</span>
-                <strong>
-                  {isInt ? value : formatMacro(value)}{unit}
-                  {goal ? ` / ${goal}${unit}` : ""}
-                </strong>
-                {goal && goal > 0 && (
-                  <div className="macro-bar-track">
-                    <div
-                      className={`macro-bar-fill${value > goal ? " over" : ""}`}
-                      style={{ width: `${Math.min(100, Math.round((value / goal) * 100))}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
+        {/* Calories card */}
+        <section className="panel home-cal-card">
+          <div className="home-cal-hero">
+            <div className="home-cal-main">
+              <span className="home-cal-big" style={{ color: remaining < 0 ? "#f87171" : "#f3f4f6" }}>
+                {Math.abs(remaining).toLocaleString()}
+              </span>
+              <span className="home-cal-sublabel">
+                {goalCal > 0 ? (remaining >= 0 ? "calories remaining" : "calories over") : "calories eaten"}
+              </span>
+            </div>
+            <div className="home-cal-meta">
+              {goalCal > 0 && <span>{goalCal.toLocaleString()} goal</span>}
+              <span>{todayCalories.toLocaleString()} eaten</span>
+              {goalCal > 0 && (
+                <div className="macro-bar-track home-cal-bar-track">
+                  <div
+                    className={`macro-bar-fill${todayCalories > goalCal ? " over" : ""}`}
+                    style={{ width: `${Math.min(100, goalCal > 0 ? Math.round((todayCalories / goalCal) * 100) : 0)}%` }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="week-bars" aria-label="Calories per day this week">
+          <div className="home-week-bars" aria-label="Calories this week">
             {weekStats.map(({ date, calories }) => {
+              const isSel = date === selectedDate;
               const isToday = date === today;
-              const barHeight =
-                calories > 0 ? Math.max(Math.round((calories / maxDayCalories) * 120), 6) : 3;
+              const barH = calories > 0 ? Math.max(4, Math.round((calories / maxDayCalories) * 56)) : 0;
               return (
                 <button
                   key={date}
                   type="button"
-                  className="week-bar-col"
-                  onClick={() => { changeSelectedDate(date); setAppView("day"); }}
+                  className={`home-week-col${isSel ? " selected" : ""}`}
+                  onClick={() => changeSelectedDate(date)}
                   title={calories > 0 ? `${calories} cal` : "No data"}
                 >
-                  {calories > 0 && <span className="week-bar-val">{calories}</span>}
-                  <div
-                    className={`week-bar${isToday ? " is-today" : ""}`}
-                    style={{ height: barHeight }}
-                  />
-                  <span className={`week-bar-day${isToday ? " is-today" : ""}`}>
-                    {getDayLabel(date)}
+                  <div className="home-bar-wrap">
+                    {barH > 0
+                      ? <div className={`home-cal-bar${isToday ? " today" : ""}${isSel ? " sel" : ""}`} style={{ height: barH }} />
+                      : <div className="home-bar-nub" />}
+                  </div>
+                  <span className={`home-bar-label${isSel ? " selected" : ""}${isToday ? " today" : ""}`}>
+                    {getDayLabel(date).slice(0, 1)}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          {loggedDayCount === 0 && (
-            <p className="empty-meal">No food logged this week. Head to Log to get started.</p>
+          {goals && pastDaysInWeek.length > 0 && (
+            <p className="home-budget-status">
+              {Math.abs(Math.round(budgetDelta)).toLocaleString()} cal{" "}
+              <span className={budgetDelta >= 0 ? "home-budget-good" : "home-budget-over"}>
+                {budgetDelta >= 0 ? "under" : "over"}
+              </span>{" "}
+              budget so far this week
+            </p>
           )}
         </section>
 
-        {weightEntryToDelete && (
-          <div className="modal-backdrop" role="presentation">
-            <div className="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-weight-title">
-              <h2 id="remove-weight-title">Delete weight entry?</h2>
-              <p>
-                {formatWeightValue(weightEntryToDelete.weight, weightEntryToDelete.unit)} from{" "}
-                {formatShortDate(weightEntryToDelete.date)} will be deleted.
-              </p>
+        {/* Macros card */}
+        <section className="panel home-macro-card">
+          <div className="home-macro-layout">
+            <div className="home-donut-col">
+              <svg viewBox="0 0 100 100" className="home-donut-svg" aria-label="Macro split today">
+                {totalMacroGrams === 0 ? (
+                  <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#3a3a48" strokeWidth="10" />
+                ) : (
+                  <>
+                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#f59e0b" strokeWidth="10"
+                      strokeDasharray={`${fatArc} ${DONUT_CIRC}`}
+                      strokeDashoffset={0}
+                      transform="rotate(-90 50 50)"
+                    />
+                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#3b82f6" strokeWidth="10"
+                      strokeDasharray={`${carbsArc} ${DONUT_CIRC}`}
+                      strokeDashoffset={-fatArc}
+                      transform="rotate(-90 50 50)"
+                    />
+                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#10b981" strokeWidth="10"
+                      strokeDasharray={`${proteinArc} ${DONUT_CIRC}`}
+                      strokeDashoffset={-(fatArc + carbsArc)}
+                      transform="rotate(-90 50 50)"
+                    />
+                  </>
+                )}
+                {todayCalories > 0 && (
+                  <>
+                    <text x="50" y="47" textAnchor="middle" className="home-donut-val">{todayCalories}</text>
+                    <text x="50" y="60" textAnchor="middle" className="home-donut-unit">kcal</text>
+                  </>
+                )}
+                {todayCalories === 0 && (
+                  <text x="50" y="54" textAnchor="middle" className="home-donut-unit">no data</text>
+                )}
+              </svg>
+              <div className="home-macro-pills">
+                <span className="home-macro-pill fat">F {avgFatPct > 0 ? `${avgFatPct}%` : "—"}</span>
+                <span className="home-macro-pill carbs">C {avgCarbsPct > 0 ? `${avgCarbsPct}%` : "—"}</span>
+                <span className="home-macro-pill protein">P {avgProteinPct > 0 ? `${avgProteinPct}%` : "—"}</span>
+              </div>
+            </div>
 
-              <button className="danger-button" onClick={confirmDeleteWeightEntry}>
-                Delete
-              </button>
-              <button className="secondary-button" onClick={() => setWeightEntryToDelete(null)}>
-                Cancel
-              </button>
+            <div className="home-macro-bars" aria-label="Macros this week">
+              {weekStats.map(({ date, fat, carbs, protein }) => {
+                const total = fat + carbs + protein;
+                const isSel = date === selectedDate;
+                const barH = total > 0 ? Math.max(4, Math.round((total / maxWeekMacros) * 64)) : 0;
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    className={`home-week-col${isSel ? " selected" : ""}`}
+                    onClick={() => changeSelectedDate(date)}
+                  >
+                    <div className="home-bar-wrap">
+                      {barH > 0 ? (
+                        <div className="home-stacked-bar" style={{ height: barH }}>
+                          <div style={{ flex: protein, background: "#10b981", minHeight: protein > 0 ? 2 : 0 }} />
+                          <div style={{ flex: carbs, background: "#3b82f6", minHeight: carbs > 0 ? 2 : 0 }} />
+                          <div style={{ flex: fat, background: "#f59e0b", minHeight: fat > 0 ? 2 : 0 }} />
+                        </div>
+                      ) : (
+                        <div className="home-bar-nub" />
+                      )}
+                    </div>
+                    <span className={`home-bar-label${isSel ? " selected" : ""}`}>
+                      {getDayLabel(date).slice(0, 1)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
-        )}
+        </section>
+
+        {/* Stat cards */}
+        <div className="home-stat-grid">
+          <div className="home-stat-card" role="button" tabIndex={0} onClick={() => setAppView("weight")}
+            onKeyDown={(e) => e.key === "Enter" && setAppView("weight")}>
+            <span className="home-stat-label">Streak</span>
+            <strong className="home-stat-val">{streak > 0 ? streak : "—"}</strong>
+            <span className="home-stat-sub">{streak !== 1 ? "days" : "day"}</span>
+          </div>
+          <div className="home-stat-card" role="button" tabIndex={0} onClick={() => setAppView("weight")}
+            onKeyDown={(e) => e.key === "Enter" && setAppView("weight")}>
+            <span className="home-stat-label">Weight</span>
+            <strong className="home-stat-val">{homeWeightDisplay ?? "—"}</strong>
+            <span className="home-stat-sub">
+              {currentWeightEntry ? formatShortDate(currentWeightEntry.date) : "no entry"}
+            </span>
+          </div>
+          <div className="home-stat-card">
+            <span className="home-stat-label">Avg this week</span>
+            <strong className="home-stat-val">{weekAvgCal > 0 ? weekAvgCal.toLocaleString() : "—"}</strong>
+            <span className="home-stat-sub">cal / day</span>
+          </div>
+          <div className="home-stat-card">
+            <span className="home-stat-label">Protein today</span>
+            <strong
+              className="home-stat-val"
+              style={{ color: goals?.protein && todayProtein >= goals.protein ? "#6ee7a8" : undefined }}
+            >
+              {Math.round(todayProtein)}g
+            </strong>
+            <span className="home-stat-sub">
+              {goals?.protein ? `/ ${goals.protein}g goal` : "no goal set"}
+            </span>
+          </div>
+        </div>
 
         {bottomNav}
       </main>
@@ -2440,30 +2668,97 @@ function App() {
   }
 
   if (appView === "weight") {
-    const chartWidth = 320;
-    const chartHeight = 180;
-    const chartPadding = 28;
-    const chartWeights = sortedWeightEntriesOldest.map((entry) => entry.weight);
-    const minWeight = chartWeights.length ? Math.min(...chartWeights) : 0;
-    const maxWeight = chartWeights.length ? Math.max(...chartWeights) : 0;
-    const chartRange = Math.max(1, maxWeight - minWeight);
-    const chartMin = minWeight - chartRange * 0.12;
-    const chartMax = maxWeight + chartRange * 0.12;
-    const chartValueRange = Math.max(1, chartMax - chartMin);
-    const chartPoints = sortedWeightEntriesOldest.map((entry, index) => {
-      const x =
-        chartPadding +
-        (index / Math.max(1, sortedWeightEntriesOldest.length - 1)) *
-          (chartWidth - chartPadding * 2);
-      const y =
-        chartHeight -
-        chartPadding -
-        ((entry.weight - chartMin) / chartValueRange) * (chartHeight - chartPadding * 2);
+    const displayUnit = weightUnit;
+    const chartWidth = 360;
+    const chartHeight = 240;
+    const chartLeft = 60;
+    const chartRight = 24;
+    const chartTop = 18;
+    const chartBottom = 48;
+    const chartPlotWidth = chartWidth - chartLeft - chartRight;
+    const chartPlotHeight = chartHeight - chartTop - chartBottom;
+    const chartEntries = chartWeightEntries.map((entry) => ({
+      ...entry,
+      displayWeight: convertWeightValue(entry.weight, entry.unit, displayUnit),
+    }));
+    const chartWeights = chartEntries.map((entry) => entry.displayWeight);
+    const minDisplayWeight = chartWeights.length ? Math.min(...chartWeights) : 0;
+    const maxDisplayWeight = chartWeights.length ? Math.max(...chartWeights) : 0;
+    const chartRange = Math.max(1, maxDisplayWeight - minDisplayWeight);
+    const chartStep = getNiceWeightStep(chartRange);
+    const chartMin = roundToIncrement(minDisplayWeight, chartStep) - chartStep;
+    const chartMax = roundToIncrement(maxDisplayWeight, chartStep) + chartStep;
+    const chartDomainRange = Math.max(chartStep, chartMax - chartMin);
+    const chartTickValues = [
+      chartMin,
+      chartMin + chartDomainRange * 0.25,
+      chartMin + chartDomainRange * 0.5,
+      chartMin + chartDomainRange * 0.75,
+      chartMax,
+    ].map((value) => roundToIncrement(value, chartStep));
+    const chartExtraTickValues = [
+      chartMin + chartDomainRange * 0.125,
+      chartMin + chartDomainRange * 0.375,
+      chartMin + chartDomainRange * 0.625,
+      chartMin + chartDomainRange * 0.875,
+    ].map((value) => roundToIncrement(value, chartStep));
+    const chartXIndexMid = Math.round((chartEntries.length - 1) / 2);
+    const chartPoints = chartEntries.map((entry, index) => {
+      const x = chartLeft + (index / Math.max(1, chartEntries.length - 1)) * chartPlotWidth;
+      const y = chartTop + ((chartMax - entry.displayWeight) / chartDomainRange) * chartPlotHeight;
 
       return { ...entry, x, y };
     });
     const chartLinePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(" ");
-    const weightChangeAmount = totalWeightChange === null ? null : Math.abs(totalWeightChange);
+    const chartYAxisTicks = [...new Set(chartTickValues)];
+    for (const value of chartExtraTickValues) {
+      if (chartYAxisTicks.length >= 5) break;
+      if (!chartYAxisTicks.includes(value)) {
+        chartYAxisTicks.push(value);
+      }
+    }
+    chartYAxisTicks.sort((a, b) => a - b);
+    const chartYAxisPositions = chartYAxisTicks.map((value) => chartTop + ((chartMax - value) / chartDomainRange) * chartPlotHeight);
+    const chartXAxisPositions = [
+      chartPoints[0]?.x ?? chartLeft,
+      chartPoints[chartXIndexMid]?.x ?? chartLeft,
+      chartPoints[chartPoints.length - 1]?.x ?? chartLeft,
+    ];
+    const chartFirstDate = chartEntries[0]?.date ?? "";
+    const chartMiddleDate = chartEntries[chartXIndexMid]?.date ?? "";
+    const chartLastDate = chartEntries[chartEntries.length - 1]?.date ?? "";
+    const chartRangeLabel =
+      chartEntries.length > 0 ? formatDateRange(chartFirstDate, chartLastDate) : "No entries";
+    const chartHighest = chartEntries.length > 0 ? Math.max(...chartWeights) : 0;
+    const chartLowest = chartEntries.length > 0 ? Math.min(...chartWeights) : 0;
+    const chartAverage =
+      chartEntries.length > 0
+        ? chartWeights.reduce((sum, value) => sum + value, 0) / chartEntries.length
+        : 0;
+    const chartDelta =
+      chartEntries.length > 1
+        ? chartEntries[chartEntries.length - 1].displayWeight - chartEntries[0].displayWeight
+        : null;
+    const selectedChartPoint =
+      chartPoints.find((point) => point.id === weightChartPointId) ?? chartPoints[chartPoints.length - 1] ?? null;
+    const summaryCurrentWeight = currentWeightEntry
+      ? convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit)
+      : null;
+    const summaryStartingWeight = startingWeightEntry
+      ? convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, displayUnit)
+      : null;
+    const summaryChange =
+      summaryCurrentWeight !== null && summaryStartingWeight !== null
+        ? summaryCurrentWeight - summaryStartingWeight
+        : null;
+    const summaryChangeLabel =
+      summaryChange === null
+        ? "No entry"
+        : summaryChange === 0
+        ? "No change"
+        : summaryChange < 0
+        ? `Lost ${formatWeightValue(Math.abs(summaryChange), displayUnit)}`
+        : `Gained ${formatWeightValue(summaryChange, displayUnit)}`;
 
     return (
       <main className="app">
@@ -2477,7 +2772,7 @@ function App() {
               <span>Current</span>
               <strong>
                 {currentWeightEntry
-                  ? formatWeightValue(currentWeightEntry.weight, currentWeightEntry.unit)
+                  ? formatWeightValueInUnit(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit)
                   : "No entry"}
               </strong>
             </div>
@@ -2485,16 +2780,14 @@ function App() {
               <span>Starting</span>
               <strong>
                 {startingWeightEntry
-                  ? formatWeightValue(startingWeightEntry.weight, startingWeightEntry.unit)
+                  ? formatWeightValueInUnit(startingWeightEntry.weight, startingWeightEntry.unit, displayUnit)
                   : "No entry"}
               </strong>
             </div>
             <div>
               <span>Total change</span>
               <strong>
-                {weightChangeAmount === null
-                  ? "No entry"
-                  : `${weightChangeVerb} ${formatWeightValue(weightChangeAmount, currentWeightEntry?.unit ?? weightUnit)}`}
+                {summaryChangeLabel}
               </strong>
             </div>
             <div>
@@ -2534,13 +2827,69 @@ function App() {
                 onChange={(e) => setWeightForm({ ...weightForm, note: e.target.value })}
               />
             </label>
-            <button type="button" className="primary-button" onClick={saveWeightEntry} disabled={!isWeightFormValid}>
-              Save
-            </button>
+            <button
+  type="button"
+  className="primary-button"
+  onClick={saveWeightEntry}
+  disabled={!isWeightFormValid}
+>
+  {editingWeightEntryId ? "Update" : "Save"}
+</button>
+
+{editingWeightEntryId && (
+  <button
+    type="button"
+    className="secondary-button"
+    onClick={() => {
+      setEditingWeightEntryId(null);
+      setWeightForm({ date: today, weight: "", note: "" });
+    }}
+  >
+    Cancel
+  </button>
+)}
           </div>
         </section>
 
         <section className="panel">
+          <div className="weight-chart-header">
+            <div>
+              <span>Date Range</span>
+              <strong>{chartRangeLabel}</strong>
+            </div>
+            <div>
+              <span>Highest Weight</span>
+              <strong>{chartEntries.length ? formatWeightValue(chartHighest, displayUnit) : "No entry"}</strong>
+            </div>
+            <div>
+              <span>Lowest Weight</span>
+              <strong>{chartEntries.length ? formatWeightValue(chartLowest, displayUnit) : "No entry"}</strong>
+            </div>
+            <div>
+              <span>Net Change</span>
+              <strong>{chartDelta === null ? "No entry" : `${chartDelta < 0 ? "Lost" : "Gained"} ${formatWeightValue(Math.abs(chartDelta), displayUnit)}`}</strong>
+            </div>
+            <div>
+              <span>Average Weight</span>
+              <strong>{chartEntries.length ? formatWeightValue(chartAverage, displayUnit) : "No entry"}</strong>
+            </div>
+          </div>
+
+          <div className="weight-range-controls" role="tablist" aria-label="Weight chart range">
+            {(["1M", "3M", "6M", "1Y", "All"] as WeightRange[]).map((range) => (
+              <button
+                key={range}
+                type="button"
+                className={weightRange === range ? "active" : ""}
+                onClick={() => setWeightRange(range)}
+                role="tab"
+                aria-selected={weightRange === range}
+              >
+                {getWeightRangeLabel(range)}
+              </button>
+            ))}
+          </div>
+
           <div className="section-heading-row">
             <h2>Trend</h2>
           </div>
@@ -2554,44 +2903,114 @@ function App() {
           )}
 
           {sortedWeightEntriesOldest.length >= 2 && (
-            <div className="weight-chart" aria-label="Weight trend graph">
-              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img">
-                <line
-                  className="weight-chart-axis"
-                  x1={chartPadding}
-                  y1={chartHeight - chartPadding}
-                  x2={chartWidth - chartPadding}
-                  y2={chartHeight - chartPadding}
-                />
-                <line
-                  className="weight-chart-axis"
-                  x1={chartPadding}
-                  y1={chartPadding}
-                  x2={chartPadding}
-                  y2={chartHeight - chartPadding}
-                />
-                <polyline className="weight-chart-line" points={chartLinePoints} />
-                {chartPoints.map((point) => (
-                  <g key={point.id}>
-                    <circle className="weight-chart-dot" cx={point.x} cy={point.y} r="3.5" />
-                    <title>
-                      {formatShortDate(point.date)}: {formatWeightValue(point.weight, point.unit)}
-                    </title>
-                  </g>
-                ))}
-                <text className="weight-chart-label" x={chartPadding} y={chartHeight - 6}>
-                  {formatShortDate(sortedWeightEntriesOldest[0].date)}
-                </text>
-                <text className="weight-chart-label" x={chartWidth - chartPadding} y={chartHeight - 6} textAnchor="end">
-                  {formatShortDate(sortedWeightEntriesOldest[sortedWeightEntriesOldest.length - 1].date)}
-                </text>
-                <text className="weight-chart-label" x="4" y={chartPadding + 4}>
-                  {Number(maxWeight.toFixed(1))}
-                </text>
-                <text className="weight-chart-label" x="4" y={chartHeight - chartPadding}>
-                  {Number(minWeight.toFixed(1))}
-                </text>
-              </svg>
+            <div className="weight-chart-shell">
+              <div className="weight-chart" aria-label="Weight trend graph">
+                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img">
+                  {chartYAxisPositions.map((y, index) => (
+                    <line
+                      key={`h-${index}`}
+                      className="weight-chart-grid"
+                      x1={chartLeft}
+                      y1={y}
+                      x2={chartWidth - chartRight}
+                      y2={y}
+                    />
+                  ))}
+                  {chartXAxisPositions.map((x, index) => (
+                    <line
+                      key={`v-${index}`}
+                      className="weight-chart-grid"
+                      x1={x}
+                      y1={chartTop}
+                      x2={x}
+                      y2={chartHeight - chartBottom}
+                    />
+                  ))}
+                  <line
+                    className="weight-chart-axis"
+                    x1={chartLeft}
+                    y1={chartHeight - chartBottom}
+                    x2={chartWidth - chartRight}
+                    y2={chartHeight - chartBottom}
+                  />
+                  <line
+                    className="weight-chart-axis"
+                    x1={chartLeft}
+                    y1={chartTop}
+                    x2={chartLeft}
+                    y2={chartHeight - chartBottom}
+                  />
+                  <polyline className="weight-chart-line" points={chartLinePoints} />
+                  {chartPoints.map((point) => {
+                    const tooltip = [
+                      formatShortDate(point.date),
+                      formatWeightValue(point.displayWeight, displayUnit),
+                      point.note ? `Note: ${point.note}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join("\n");
+
+                    return (
+                      <g key={point.id}>
+                        <circle
+                          className="weight-chart-dot"
+                          cx={point.x}
+                          cy={point.y}
+                          r="4"
+                          tabIndex={0}
+                          aria-label={tooltip}
+                          onMouseEnter={() => setWeightChartPointId(point.id)}
+                          onFocus={() => setWeightChartPointId(point.id)}
+                          onClick={() => setWeightChartPointId(point.id)}
+                        >
+                          <title>{tooltip}</title>
+                        </circle>
+                      </g>
+                    );
+                  })}
+                  {chartYAxisTicks.map((value, index) => (
+                    <text
+                      key={`y-label-${index}`}
+                      className="weight-chart-label"
+                      x={chartLeft - 10}
+                      y={chartYAxisPositions[index] + 4}
+                      textAnchor="end"
+                    >
+                      {getWeightTickLabel(value, chartStep, displayUnit)}
+                    </text>
+                  ))}
+                  {[
+                    { value: chartFirstDate, x: chartXAxisPositions[0], anchor: "start" as const },
+                    {
+                      value: chartMiddleDate,
+                      x: chartXAxisPositions[1],
+                      anchor: "middle" as const,
+                    },
+                    {
+                      value: chartLastDate,
+                      x: chartXAxisPositions[2],
+                      anchor: "end" as const,
+                    },
+                  ].map((label, index) => (
+                    <text
+                      key={`x-label-${index}`}
+                      className="weight-chart-label"
+                      x={label.x}
+                      y={chartHeight - 10}
+                      textAnchor={label.anchor}
+                    >
+                      {formatShortDate(label.value)}
+                    </text>
+                  ))}
+                </svg>
+              </div>
+              {selectedChartPoint && (
+                <div className="weight-chart-point-card" aria-live="polite">
+                  <strong>{formatShortDate(selectedChartPoint.date)}</strong>
+                  <span>{formatWeightValue(selectedChartPoint.displayWeight, displayUnit)}</span>
+                  {selectedChartPoint.note && <small>{selectedChartPoint.note}</small>}
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -2604,20 +3023,71 @@ function App() {
           )}
 
           <div className="weight-entry-list">
-            {sortedWeightEntriesNewest.map((entry) => (
-              <div className="weight-entry-row" key={entry.id}>
-                <div>
-                  <strong>{formatShortDate(entry.date)}</strong>
-                  <span>{formatWeightValue(entry.weight, entry.unit)}</span>
-                  {entry.note && <small>{entry.note}</small>}
-                </div>
-                <button type="button" onClick={() => setWeightEntryToDelete(entry)}>
-                  Delete
-                </button>
-              </div>
-            ))}
+            {sortedWeightEntriesNewest.map((entry) => {
+  const chronological = sortedWeightEntriesOldest;
+  const index = chronological.findIndex((item) => item.id === entry.id);
+  const previous = index > 0 ? chronological[index - 1] : null;
+
+  const entryWeight = convertWeightValue(entry.weight, entry.unit, displayUnit);
+  const previousWeight = previous
+    ? convertWeightValue(previous.weight, previous.unit, displayUnit)
+    : null;
+
+  const change = previousWeight === null ? null : entryWeight - previousWeight;
+
+  return (
+    <div className="weight-entry-row" key={entry.id}>
+      <div className="weight-entry-info">
+        <strong>{formatEntryDate(entry.date)} — {formatWeightValue(entryWeight, displayUnit)}</strong>
+        {change !== null && (
+          <span
+            className={
+              change < 0
+                ? "weight-change-loss"
+                : change > 0
+                ? "weight-change-gain"
+                : "weight-change-neutral"
+            }
+          >
+            {change > 0 ? "+" : ""}{formatWeightValue(change, displayUnit)}
+          </span>
+        )}
+        {entry.note && <small className="weight-entry-note">{entry.note}</small>}
+      </div>
+
+      <div className="weight-entry-actions">
+        <button type="button" onClick={() => startEditWeightEntry(entry)}>Edit</button>
+        <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
+      </div>
+    </div>
+  );
+})}
           </div>
         </section>
+
+        {weightEntryToDelete && (
+          <div className="modal-backdrop" role="presentation">
+            <div
+              className="modal confirm-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="remove-weight-title"
+            >
+              <h2 id="remove-weight-title">Delete weight entry?</h2>
+              <p>
+                {formatWeightValue(weightEntryToDelete.weight, weightEntryToDelete.unit)} from{" "}
+                {formatShortDate(weightEntryToDelete.date)} will be deleted.
+              </p>
+
+              <button className="danger-button" onClick={confirmDeleteWeightEntry}>
+                Delete
+              </button>
+              <button className="secondary-button" onClick={() => setWeightEntryToDelete(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {bottomNav}
       </main>
