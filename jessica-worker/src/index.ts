@@ -50,9 +50,9 @@ export default {
           dataType: food.dataType,
           servingSize,
           calories: getCaloriesValue(food),
-          protein: getNutrientValue(food, "Protein"),
-          carbs: getNutrientValue(food, "Carbohydrate, by difference"),
-          fat: getNutrientValue(food, "Total lipid (fat)"),
+          protein: getProteinValue(food),
+          carbs: getCarbsValue(food),
+          fat: getFatValue(food),
         };
       })
       .sort((a: any, b: any) => rankSearchResult(b, query) - rankSearchResult(a, query))
@@ -122,16 +122,16 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
     labelNutrients: food.labelNutrients || null,
     nutrients: {
       calories: getCaloriesValue(food),
-      protein: getNutrientValue(food, "Protein"),
-      carbs: getNutrientValue(food, "Carbohydrate, by difference"),
-      fat: getNutrientValue(food, "Total lipid (fat)"),
-      fiber: getNutrientValue(food, "Fiber, total dietary"),
+      protein: getProteinValue(food),
+      carbs: getCarbsValue(food),
+      fat: getFatValue(food),
+      fiber: getFiberValue(food),
       sugars: getNutrientValue(food, [
         "Sugars, total including NLEA",
         "Total Sugars",
         "Sugars, total",
       ]),
-      sodium: getNutrientValue(food, "Sodium, Na"),
+      sodium: getSodiumValue(food),
     },
     foodNutrients: food.foodNutrients || [],
   });
@@ -160,6 +160,11 @@ async function enrichBrandedSearchResults(foods: any[], apiKey: string): Promise
           ...food,
           servingSize: getServingSizeText(detail) ?? food.servingSize,
           calories: labelCalories,
+          protein: getProteinValue(detail),
+          carbs: getCarbsValue(detail),
+          fat: getFatValue(detail),
+          fiber: getFiberValue(detail),
+          sodium: getSodiumValue(detail),
         };
       } catch {
         return food;
@@ -213,10 +218,35 @@ function getCaloriesValue(food: any): number {
 }
 
 function getLabelCaloriesValue(food: any): number | null {
-  const labelCalories = food.labelNutrients?.calories?.value;
-  return typeof labelCalories === "number" && Number.isFinite(labelCalories)
+  const labelCalories = getLabelNutrientValue(food, "calories");
+  return labelCalories !== null
     ? Math.round(labelCalories)
     : null;
+}
+
+function getProteinValue(food: any): number {
+  return getLabelNutrientValue(food, "protein") ?? getNutrientValue(food, "Protein");
+}
+
+function getCarbsValue(food: any): number {
+  return getLabelNutrientValue(food, "carbohydrates") ?? getNutrientValue(food, "Carbohydrate, by difference");
+}
+
+function getFatValue(food: any): number {
+  return getLabelNutrientValue(food, "fat") ?? getNutrientValue(food, "Total lipid (fat)");
+}
+
+function getFiberValue(food: any): number {
+  return getLabelNutrientValue(food, "fiber") ?? getNutrientValue(food, "Fiber, total dietary");
+}
+
+function getSodiumValue(food: any): number {
+  return getLabelNutrientValue(food, "sodium") ?? getNutrientValue(food, "Sodium, Na");
+}
+
+function getLabelNutrientValue(food: any, key: string): number | null {
+  const value = food.labelNutrients?.[key]?.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function getNutrientValue(food: any, name: string | string[], unit?: string): number {

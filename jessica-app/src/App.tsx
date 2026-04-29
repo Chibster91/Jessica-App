@@ -5,6 +5,7 @@ type Food = {
   id: number;
   name: string;
   brand: string | null;
+  dataType?: string | null;
   servingSize: string;
   calories: number;
   protein: number;
@@ -57,6 +58,14 @@ type FoodDetail = {
   } | null;
   foodPortions?: FoodPortion[];
   foodNutrients?: FoodNutrient[];
+  nutrients?: {
+    calories?: number;
+    protein?: number;
+    carbs?: number;
+    fat?: number;
+    fiber?: number;
+    sodium?: number;
+  };
 };
 
 type PortionOption = {
@@ -201,6 +210,15 @@ function formatGramWeight(gramWeight: number) {
   return Number.isInteger(gramWeight) ? `${gramWeight}g` : `${Number(gramWeight.toFixed(1))}g`;
 }
 
+function getLocalPortionUnit(food: Food) {
+  return parseServingSize(food.servingSize)?.unit === "ml" ? "ml" : "g";
+}
+
+function formatLocalPortionAmount(food: Food, amount: number) {
+  const value = Number.isInteger(amount) ? amount : Number(amount.toFixed(1));
+  return `${value}${getLocalPortionUnit(food)}`;
+}
+
 function getPortionLabel(portion: FoodPortion, foodName: string) {
   const amount = formatPortionAmount(portion.amount);
   const modifier = cleanPortionText(portion.modifier);
@@ -277,6 +295,17 @@ function parseServingSize(value: string | number | null | undefined, fallbackUni
   };
 }
 
+function isGramUnit(unit: string) {
+  return unit === "g" || unit === "gram" || unit === "grams" || unit === "ml";
+}
+
+function getScaleFromServingBasis(food: Food, amount: number) {
+  const basis = parseServingSize(food.servingSize);
+  if (!basis || !isGramUnit(basis.unit)) return null;
+
+  return amount / basis.amount;
+}
+
 function getServingSizeBasis(detail: FoodDetail | null, food: Food) {
   return (
     parseServingSize(detail?.servingSize, detail?.servingSizeUnit ?? "") ??
@@ -284,26 +313,102 @@ function getServingSizeBasis(detail: FoodDetail | null, food: Food) {
   );
 }
 
+function isBrandedFood(food: Food) {
+  return food.dataType?.toLowerCase() === "branded" || Boolean(food.brand);
+}
+
+function hasUsableSearchNutrition(food: Food) {
+  const basis = parseServingSize(food.servingSize);
+  return !isBrandedFood(food) && Boolean(basis && isGramUnit(basis.unit) && food.calories > 0);
+}
+
 function getServingSizeLabel(detail: FoodDetail | null, food: Food) {
   const basis = getServingSizeBasis(detail, food);
   return basis ? `${basis.amount} ${basis.unit}`.trim() : food.servingSize;
 }
 
-function getCaloriesPerServing(food: Food, detail: FoodDetail | null, portion?: PortionOption) {
-  const labelCalories = getLabelCaloriesPerServing(detail);
-  if (labelCalories !== null) return labelCalories;
+function scaleFoodNutrition(food: Food, factor: number, servingSize: string): Food {
+  return {
+    ...food,
+    servingSize,
+    calories: Math.round(food.calories * factor),
+    protein: food.protein * factor,
+    carbs: food.carbs * factor,
+    fat: food.fat * factor,
+    fiber: food.fiber === undefined ? undefined : food.fiber * factor,
+    sodium: food.sodium === undefined ? undefined : food.sodium * factor,
+  };
+}
 
+function foodFromDetailNutrition(food: Food, detail: FoodDetail, servingSize: string): Food {
+  return {
+    ...food,
+    servingSize,
+    calories: Math.round(detail.nutrients?.calories ?? food.calories),
+    protein: detail.nutrients?.protein ?? food.protein,
+    carbs: detail.nutrients?.carbs ?? food.carbs,
+    fat: detail.nutrients?.fat ?? food.fat,
+    fiber: detail.nutrients?.fiber ?? food.fiber,
+    sodium: detail.nutrients?.sodium ?? food.sodium,
+  };
+}
+
+function getFoodForSelectedPortion(
+  food: Food,
+  detail: FoodDetail | null,
+  portion: PortionOption | undefined,
+  amount: number
+): Food {
+  const localScale =
+    hasUsableSearchNutrition(food) && Number.isFinite(amount) && amount > 0
+      ? getScaleFromServingBasis(food, amount)
+      : null;
+
+  if (localScale !== null) {
+    return scaleFoodNutrition(food, localScale, formatLocalPortionAmount(food, amount));
+  }
+
+  if (portion && detail) {
+    const servingSize = `${portion.label} (${portion.gramWeight}g)`;
+    const portionScale = getScaleFromServingBasis(food, portion.gramWeight);
+    const portionFood =
+      portionScale !== null
+        ? scaleFoodNutrition(food, portionScale, servingSize)
+        : foodFromDetailNutrition(food, detail, servingSize);
+
+    return {
+      ...portionFood,
+      calories: getCaloriesPerServing(food, detail, portion),
+    };
+  }
+
+  if (detail) {
+    const servingSize = getServingSizeLabel(detail, food);
+
+    return {
+      ...foodFromDetailNutrition(food, detail, servingSize),
+      calories: getCaloriesPerServing(food, detail),
+    };
+  }
+
+  return food;
+}
+
+function getCaloriesPerServing(food: Food, detail: FoodDetail | null, portion?: PortionOption) {
   const caloriesPer100Units = getEnergyCaloriesPer100Units(detail);
 
   if (portion && caloriesPer100Units !== null) {
     return Math.round((caloriesPer100Units * portion.gramWeight) / 100);
   }
 
+  const labelCalories = getLabelCaloriesPerServing(detail);
+  if (labelCalories !== null) return labelCalories;
+
   const basis = getServingSizeBasis(detail, food);
   if (
     caloriesPer100Units !== null &&
     basis &&
-    (basis.unit === "g" || basis.unit === "gram" || basis.unit === "grams" || basis.unit === "ml")
+    isGramUnit(basis.unit)
   ) {
     return Math.round((caloriesPer100Units * basis.amount) / 100);
   }
@@ -542,6 +647,7 @@ function App() {
   const [selectedFood, setSelectedFood] = useState<Food | null>(null);
   const [selectedFoodDetail, setSelectedFoodDetail] = useState<FoodDetail | null>(null);
   const [selectedPortionValue, setSelectedPortionValue] = useState("");
+  const [portionAmount, setPortionAmount] = useState("100");
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -623,6 +729,7 @@ function App() {
     setSelectedFood(null);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
+    setPortionAmount("100");
     setIsLoadingDetail(false);
     setDetailError("");
     setQuantity("1");
@@ -634,6 +741,7 @@ function App() {
     setSelectedFood(null);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
+    setPortionAmount("100");
     setDetailError("");
     setIsCustomFormOpen(false);
     setIsRecipeFormOpen(false);
@@ -652,10 +760,16 @@ function App() {
     setSelectedFood(food);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
+    setPortionAmount(String(parseServingSize(food.servingSize)?.amount ?? 100));
     setDetailError("");
-    setIsLoadingDetail(true);
+
+    if (hasUsableSearchNutrition(food)) {
+      setIsLoadingDetail(false);
+      return;
+    }
 
     try {
+      setIsLoadingDetail(true);
       const res = await fetch(
         `https://jessica-worker.snack-bunker.workers.dev/detail?id=${encodeURIComponent(food.id)}`
       );
@@ -675,6 +789,7 @@ function App() {
     setSelectedFood(food);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
+    setPortionAmount(String(parseServingSize(food.servingSize)?.amount ?? 100));
     setDetailError("");
     setIsLoadingDetail(false);
   }
@@ -683,6 +798,7 @@ function App() {
     setSelectedFood(null);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
+    setPortionAmount("100");
     setDetailError("");
     setQuantity("1");
     setIsCustomFormOpen(true);
@@ -692,6 +808,7 @@ function App() {
     setSelectedFood(null);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
+    setPortionAmount("100");
     setDetailError("");
     setQuantity("1");
     setRecipeForm(emptyRecipeForm);
@@ -806,20 +923,17 @@ function App() {
 
     const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood.name);
     const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
-    const caloriesPerServing = getCaloriesPerServing(
+    const selectedFoodServing = getFoodForSelectedPortion(
       selectedFood,
       selectedFoodDetail,
-      selectedPortion
+      selectedPortion,
+      Number(portionAmount)
     );
 
     setLog([
       ...log,
       {
-        ...selectedFood,
-        calories: caloriesPerServing,
-        servingSize: selectedPortion
-          ? `${selectedPortion.label} (${selectedPortion.gramWeight}g)`
-          : getServingSizeLabel(selectedFoodDetail, selectedFood),
+        ...selectedFoodServing,
         category: pendingCategory,
         quantity: servings,
         logId: crypto.randomUUID(),
@@ -946,8 +1060,21 @@ function App() {
 
   const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood?.name);
   const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
+  const localPortionAmount = Number(portionAmount);
+  const localPortionScale =
+    selectedFood &&
+    hasUsableSearchNutrition(selectedFood) &&
+    Number.isFinite(localPortionAmount) &&
+    localPortionAmount > 0
+      ? getScaleFromServingBasis(selectedFood, localPortionAmount)
+      : null;
+  const usesLocalPortion = Boolean(selectedFood && hasUsableSearchNutrition(selectedFood));
   const selectedPortionCalories = selectedFood
-    ? getCaloriesPerServing(selectedFood, selectedFoodDetail, selectedPortion)
+    ? usesLocalPortion && localPortionScale === null
+      ? null
+      : localPortionScale !== null
+      ? Math.round(selectedFood.calories * localPortionScale)
+      : getCaloriesPerServing(selectedFood, selectedFoodDetail, selectedPortion)
     : null;
   const recentFoods = getRecentFoods(selectedDate);
   const filteredCustomFoods = customFoods.filter((food) => matchesFoodQuery(food, customQuery));
@@ -967,6 +1094,7 @@ function App() {
   const canAddSelectedFood =
     Boolean(selectedFood) &&
     !isLoadingDetail &&
+    (!usesLocalPortion || localPortionScale !== null) &&
     (portionOptions.length === 0 || Boolean(selectedPortion));
 
   if (appView === "library") {
@@ -1944,6 +2072,22 @@ function App() {
                     {isLoadingDetail && <span>Loading portions...</span>}
                     {detailError && <span className="modal-error">{detailError}</span>}
                   </div>
+                )}
+
+                {usesLocalPortion && (
+                  <label className="portion-row">
+                    Amount ({selectedFood ? getLocalPortionUnit(selectedFood) : "g"})
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={portionAmount}
+                      onChange={(e) => setPortionAmount(e.target.value)}
+                    />
+                    <span className="modal-hint">
+                      calculated from {selectedFood?.servingSize}
+                    </span>
+                  </label>
                 )}
 
                 {portionOptions.length > 0 && (
