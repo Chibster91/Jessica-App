@@ -915,7 +915,14 @@ function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
   const weight = Number(inputs.weight);
   const heightCm = getHeightCm(inputs);
 
-  if (![age, weight].every((value) => Number.isFinite(value) && value > 0) || heightCm === null) {
+  if (
+    !Number.isFinite(age) ||
+    age < 18 ||
+    age > 120 ||
+    !Number.isFinite(weight) ||
+    weight <= 0 ||
+    heightCm === null
+  ) {
     return null;
   }
 
@@ -929,6 +936,16 @@ function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
     ...getMacroGoals(calorieGoal),
     calculatorInputs: inputs,
   };
+}
+
+function getAgeValidationMessage(ageInput: string) {
+  const age = Number(ageInput);
+
+  if (!Number.isFinite(age) || ageInput === "") return "";
+  if (age < 18) return "Calculator is for adults only.";
+  if (age > 120) return "Please enter a valid age.";
+
+  return "";
 }
 
 function getWeekDates(referenceDate: string) {
@@ -1463,8 +1480,7 @@ function App() {
     (portionOptions.length === 0 || Boolean(selectedPortion));
   const calculatedGoals = calculateGoalsFromInputs(calculatorInputs);
   const calculatorRates = getValidRates(calculatorInputs.goal);
-  const calculatorAge = Number(calculatorInputs.age);
-  const shouldShowTeenNote = Number.isFinite(calculatorAge) && calculatorAge > 0 && calculatorAge < 18;
+  const ageValidationMessage = getAgeValidationMessage(calculatorInputs.age);
 
   const bottomNav = (
     <nav className="bottom-nav" aria-label="Main navigation">
@@ -1774,9 +1790,7 @@ function App() {
                   </label>
                 </div>
 
-                {shouldShowTeenNote && (
-                  <p className="profile-warning">Adult estimates may not be accurate for teens.</p>
-                )}
+                {ageValidationMessage && <p className="profile-warning">{ageValidationMessage}</p>}
               </fieldset>
 
               <fieldset className="calculator-group">
