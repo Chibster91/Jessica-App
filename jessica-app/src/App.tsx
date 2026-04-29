@@ -114,11 +114,15 @@ type CalculatorInputs = {
   rate: GoalRate;
 };
 
+type TopFoodEntry = { name: string; count: number };
+
 type Goals = {
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
+  goalWeight?: number;
+  goalWeightUnit?: WeightUnit;
   calculatorInputs?: CalculatorInputs;
 };
 
@@ -127,6 +131,7 @@ type GoalsForm = {
   protein: string;
   carbs: string;
   fat: string;
+  goalWeight: string;
 };
 
 type WeightRange = "1M" | "3M" | "6M" | "1Y" | "All";
@@ -331,6 +336,23 @@ function saveWeightEntries(entries: WeightEntry[]) {
   localStorage.setItem("weightEntries", JSON.stringify(entries));
 }
 
+function getSavedCompletedDays(): string[] {
+  const saved = localStorage.getItem("completedDays");
+  if (!saved) return [];
+  return JSON.parse(saved) as string[];
+}
+function saveCompletedDays(days: string[]): void {
+  localStorage.setItem("completedDays", JSON.stringify(days));
+}
+function getSavedTopFoods(): TopFoodEntry[] {
+  const saved = localStorage.getItem("topFoods");
+  if (!saved) return [];
+  return JSON.parse(saved) as TopFoodEntry[];
+}
+function saveTopFoods(foods: TopFoodEntry[]): void {
+  localStorage.setItem("topFoods", JSON.stringify(foods));
+}
+
 function getSavedGoals(): Goals | null {
   const saved = localStorage.getItem("goals");
   if (!saved) return null;
@@ -338,12 +360,13 @@ function getSavedGoals(): Goals | null {
 }
 
 function goalsToForm(goals: Goals | null): GoalsForm {
-  if (!goals) return { calories: "", protein: "", carbs: "", fat: "" };
+  if (!goals) return { calories: "", protein: "", carbs: "", fat: "", goalWeight: "" };
   return {
     calories: String(goals.calories),
     protein: String(goals.protein),
     carbs: String(goals.carbs),
     fat: String(goals.fat),
+    goalWeight: goals.goalWeight ? String(goals.goalWeight) : "",
   };
 }
 
@@ -1230,12 +1253,6 @@ function getWeekDates(referenceDate: string) {
   return Array.from({ length: 7 }, (_, i) => shiftDate(referenceDate, daysToMonday + i));
 }
 
-function getDayLabel(date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", { weekday: "short" });
-}
-
-
 function formatShortDate(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   return new Date(year, month - 1, day).toLocaleDateString("en-US", {
@@ -1253,13 +1270,18 @@ function formatEntryDate(date: string) {
   });
 }
 
-function formatNavDate(date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+function formatWeekOf(start: string, end: string): string {
+  const [sy, sm, sd] = start.split("-").map(Number);
+  const [ey, em, ed] = end.split("-").map(Number);
+  const s = new Date(sy, sm - 1, sd);
+  const e = new Date(ey, em - 1, ed);
+  return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function getDayLetter(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const dow = new Date(y, m - 1, d).getDay(); // 0=Sun
+  return ["S", "M", "T", "W", "R", "F", "S"][dow];
 }
 
 function formatDateRange(startDate: string, endDate: string) {
@@ -1397,6 +1419,9 @@ function App() {
     useState<CustomFoodForm>(emptyCustomFoodForm);
   const [libraryRecipeForm, setLibraryRecipeForm] = useState<RecipeForm>(emptyRecipeForm);
   const [libraryRecipeIngredients, setLibraryRecipeIngredients] = useState<RecipeIngredient[]>([]);
+  const [completedDays, setCompletedDays] = useState<string[]>(() => getSavedCompletedDays());
+  const [showStreakPopup, setShowStreakPopup] = useState(false);
+  const [topFoods, setTopFoods] = useState<TopFoodEntry[]>(() => getSavedTopFoods());
 
   useEffect(() => {
     localStorage.setItem(`log-${selectedDate}`, JSON.stringify(log));
@@ -1414,6 +1439,9 @@ function App() {
     saveWeightEntries(weightEntries);
   }, [weightEntries]);
 
+  useEffect(() => { saveCompletedDays(completedDays); }, [completedDays]);
+  useEffect(() => { saveTopFoods(topFoods); }, [topFoods]);
+
   function changeSelectedDate(date: string) {
     setSelectedDate(date);
     setLog(getSavedLog(date));
@@ -1421,6 +1449,25 @@ function App() {
 
   function moveSelectedDate(dayOffset: number) {
     changeSelectedDate(shiftDate(selectedDate, dayOffset));
+  }
+
+  function markDayComplete() {
+    if (!completedDays.includes(selectedDate)) {
+      setCompletedDays((prev) => [...prev, selectedDate]);
+    }
+    setShowStreakPopup(true);
+  }
+
+  function getCompletedStreak(): number {
+    const set = new Set(completedDays);
+    let streak = 0;
+    let d = today;
+    for (let i = 0; i < 365; i++) {
+      if (!set.has(d)) break;
+      streak++;
+      d = shiftDate(d, -1);
+    }
+    return streak;
   }
 
   function getItemCalories(item: LogItem) {
@@ -1713,6 +1760,16 @@ function App() {
         logId: crypto.randomUUID(),
       },
     ]);
+
+    const foodName = selectedFoodServing.name;
+    setTopFoods((prev) => {
+      const existing = prev.find((f) => f.name === foodName);
+      const updated = existing
+        ? prev.map((f) => f.name === foodName ? { ...f, count: f.count + 1 } : f)
+        : [...prev, { name: foodName, count: 1 }];
+      return updated.sort((a, b) => b.count - a.count).slice(0, 10);
+    });
+
     closeAddFood();
   }
 
@@ -1792,7 +1849,16 @@ function startEditWeightEntry(entry: WeightEntry) {
     if (!Number.isFinite(calories) || calories <= 0) return;
     if (![protein, carbs, fat].every((v) => Number.isFinite(v) && v >= 0)) return;
 
-    const newGoals = { calories: Math.round(calories), protein, carbs, fat, calculatorInputs };
+    const newGoals: Goals = {
+      calories: Math.round(calories),
+      protein,
+      carbs,
+      fat,
+      ...(goalsForm.goalWeight && Number(goalsForm.goalWeight) > 0
+        ? { goalWeight: Number(goalsForm.goalWeight), goalWeightUnit: weightUnit }
+        : {}),
+      calculatorInputs: goals?.calculatorInputs,
+    };
     setGoals(newGoals);
     localStorage.setItem("goals", JSON.stringify(newGoals));
     setIsManualGoalsOpen(false);
@@ -2118,15 +2184,8 @@ function startEditWeightEntry(entry: WeightEntry) {
     const goalCal = goals?.calories ?? 0;
     const remaining = goalCal - todayCalories;
 
-    const loggedDays = weekStats.filter((d) => d.calories > 0);
-    const weekAvgCal = loggedDays.length > 0
-      ? Math.round(loggedDays.reduce((s, d) => s + d.calories, 0) / loggedDays.length) : 0;
-
-    const pastDaysInWeek = weekStats.filter((d) => d.date < selectedDate);
-    const budgetDelta = goals
-      ? pastDaysInWeek.reduce((sum, d) => sum + (goals.calories - d.calories), 0) : 0;
-
     const maxDayCalories = Math.max(...weekStats.map((d) => d.calories), 1);
+    const maxWeekMacros = Math.max(...weekStats.map((d) => d.fat + d.carbs + d.protein), 1);
 
     const totalMacroGrams = todayFat + todayCarbs + todayProtein;
     const DONUT_R = 36;
@@ -2135,224 +2194,248 @@ function startEditWeightEntry(entry: WeightEntry) {
     const carbsArc = totalMacroGrams > 0 ? (todayCarbs / totalMacroGrams) * DONUT_CIRC : 0;
     const proteinArc = totalMacroGrams > 0 ? (todayProtein / totalMacroGrams) * DONUT_CIRC : 0;
 
-    const avgFat = loggedDays.length > 0 ? loggedDays.reduce((s, d) => s + d.fat, 0) / loggedDays.length : 0;
-    const avgCarbs = loggedDays.length > 0 ? loggedDays.reduce((s, d) => s + d.carbs, 0) / loggedDays.length : 0;
-    const avgProtein = loggedDays.length > 0 ? loggedDays.reduce((s, d) => s + d.protein, 0) / loggedDays.length : 0;
-    const avgMacroTotal = avgFat + avgCarbs + avgProtein;
-    const avgFatPct = avgMacroTotal > 0 ? Math.round((avgFat / avgMacroTotal) * 100) : 0;
-    const avgCarbsPct = avgMacroTotal > 0 ? Math.round((avgCarbs / avgMacroTotal) * 100) : 0;
-    const avgProteinPct = avgMacroTotal > 0 ? Math.round((avgProtein / avgMacroTotal) * 100) : 0;
-
-    const maxWeekMacros = Math.max(...weekStats.map((d) => d.fat + d.carbs + d.protein), 1);
-
-    let streak = 0;
-    let streakDate = today;
-    for (let i = 0; i < 365; i++) {
-      const dayLog = streakDate === selectedDate ? log : getSavedLog(streakDate);
-      if (!dayLog.some((item) => item.calories * (item.quantity ?? 1) > 0)) break;
-      streak++;
-      streakDate = shiftDate(streakDate, -1);
-    }
-
-    const homeWeightDisplay = currentWeightEntry
-      ? formatWeightValueInUnit(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit)
-      : null;
+    const completedStreak = getCompletedStreak();
+    const weekLabel = formatWeekOf(weekDates[0], weekDates[6]);
+    const calPct = goalCal > 0 ? Math.min(100, Math.round((todayCalories / goalCal) * 100)) : 0;
+    const weekTotalProtein = weekStats.reduce((s, d) => s + d.protein, 0);
+    const weekTotalCarbs = weekStats.reduce((s, d) => s + d.carbs, 0);
+    const weekTotalFat = weekStats.reduce((s, d) => s + d.fat, 0);
 
     return (
       <main className="app">
-        {/* Date navigator */}
-        <div className="home-date-nav">
-          <button
-            type="button"
-            className="home-date-arrow"
-            onClick={() => changeSelectedDate(shiftDate(selectedDate, -1))}
-            aria-label="Previous day"
-          >
-            ‹
-          </button>
-          <span className="home-date-label">{formatNavDate(selectedDate)}</span>
-          <button
-            type="button"
-            className="home-date-arrow"
-            onClick={() => changeSelectedDate(shiftDate(selectedDate, 1))}
-            aria-label="Next day"
-          >
-            ›
-          </button>
+        {/* Week navigation */}
+        <div className="dash-week-nav">
+          <button type="button" className="dash-week-arrow" onClick={() => changeSelectedDate(shiftDate(selectedDate, -7))} aria-label="Previous week">‹</button>
+          <span className="dash-week-label">Week of: {weekLabel}</span>
+          <button type="button" className="dash-week-arrow" onClick={() => changeSelectedDate(shiftDate(selectedDate, 7))} aria-label="Next week">›</button>
         </div>
 
-        {/* Calories card */}
-        <section className="panel home-cal-card">
-          <div className="home-cal-hero">
-            <div className="home-cal-main">
-              <span className="home-cal-big" style={{ color: remaining < 0 ? "#f87171" : "#f3f4f6" }}>
-                {Math.abs(remaining).toLocaleString()}
-              </span>
-              <span className="home-cal-sublabel">
-                {goalCal > 0 ? (remaining >= 0 ? "calories remaining" : "calories over") : "calories eaten"}
-              </span>
+        {/* CALORIES CARD */}
+        <section className="panel dash-card">
+          <p className="dash-card-label">CALORIES</p>
+          <div className="dash-cal-hero">
+            <div className="dash-cal-bar-bg">
+              <div className="dash-cal-bar-fill" style={{ width: `${calPct}%` }} />
             </div>
-            <div className="home-cal-meta">
-              {goalCal > 0 && <span>{goalCal.toLocaleString()} goal</span>}
-              <span>{todayCalories.toLocaleString()} eaten</span>
-              {goalCal > 0 && (
-                <div className="macro-bar-track home-cal-bar-track">
-                  <div
-                    className={`macro-bar-fill${todayCalories > goalCal ? " over" : ""}`}
-                    style={{ width: `${Math.min(100, goalCal > 0 ? Math.round((todayCalories / goalCal) * 100) : 0)}%` }}
-                  />
-                </div>
-              )}
-            </div>
+            <span className="dash-cal-number" style={{ color: remaining < 0 ? "#f87171" : "#f3f4f6" }}>
+              {todayCalories.toLocaleString()}
+            </span>
+            <span className="dash-cal-sub">
+              {goalCal > 0
+                ? (remaining >= 0 ? `${remaining.toLocaleString()} remaining` : `${Math.abs(remaining).toLocaleString()} over`)
+                : "calories eaten"}
+            </span>
           </div>
-
-          <div className="home-week-bars" aria-label="Calories this week">
+          <div className="dash-day-bars" aria-label="Weekly calorie bars">
             {weekStats.map(({ date, calories }) => {
               const isSel = date === selectedDate;
               const isToday = date === today;
-              const barH = calories > 0 ? Math.max(4, Math.round((calories / maxDayCalories) * 56)) : 0;
+              const barH = calories > 0 ? Math.max(4, Math.round((calories / maxDayCalories) * 52)) : 0;
+              const dayLetter = getDayLetter(date);
               return (
-                <button
-                  key={date}
-                  type="button"
-                  className={`home-week-col${isSel ? " selected" : ""}`}
-                  onClick={() => changeSelectedDate(date)}
-                  title={calories > 0 ? `${calories} cal` : "No data"}
-                >
-                  <div className="home-bar-wrap">
+                <button key={date} type="button"
+                  className={`dash-day-col${isSel ? " selected" : ""}`}
+                  onClick={() => changeSelectedDate(date)}>
+                  <div className="dash-bar-wrap">
                     {barH > 0
-                      ? <div className={`home-cal-bar${isToday ? " today" : ""}${isSel ? " sel" : ""}`} style={{ height: barH }} />
-                      : <div className="home-bar-nub" />}
+                      ? <div className={`dash-cal-bar${isToday ? " today" : ""}${isSel ? " sel" : ""}`} style={{ height: barH }} />
+                      : <div className="dash-bar-nub" />}
                   </div>
-                  <span className={`home-bar-label${isSel ? " selected" : ""}${isToday ? " today" : ""}`}>
-                    {getDayLabel(date).slice(0, 1)}
-                  </span>
+                  <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{dayLetter}</span>
                 </button>
               );
             })}
           </div>
-
-          {goals && pastDaysInWeek.length > 0 && (
-            <p className="home-budget-status">
-              {Math.abs(Math.round(budgetDelta)).toLocaleString()} cal{" "}
-              <span className={budgetDelta >= 0 ? "home-budget-good" : "home-budget-over"}>
-                {budgetDelta >= 0 ? "under" : "over"}
-              </span>{" "}
-              budget so far this week
-            </p>
-          )}
         </section>
 
-        {/* Macros card */}
-        <section className="panel home-macro-card">
-          <div className="home-macro-layout">
-            <div className="home-donut-col">
-              <svg viewBox="0 0 100 100" className="home-donut-svg" aria-label="Macro split today">
+        {/* MACROS CARD */}
+        <section className="panel dash-card">
+          <div className="dash-macro-layout">
+            <div className="dash-pie-wrap">
+              <svg viewBox="0 0 100 100" className="dash-pie-svg" aria-label="Macro split">
                 {totalMacroGrams === 0 ? (
-                  <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#3a3a48" strokeWidth="10" />
+                  <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#3E505B" strokeWidth="10" />
                 ) : (
                   <>
-                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#f59e0b" strokeWidth="10"
-                      strokeDasharray={`${fatArc} ${DONUT_CIRC}`}
-                      strokeDashoffset={0}
-                      transform="rotate(-90 50 50)"
-                    />
-                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#3b82f6" strokeWidth="10"
-                      strokeDasharray={`${carbsArc} ${DONUT_CIRC}`}
-                      strokeDashoffset={-fatArc}
-                      transform="rotate(-90 50 50)"
-                    />
-                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#10b981" strokeWidth="10"
-                      strokeDasharray={`${proteinArc} ${DONUT_CIRC}`}
-                      strokeDashoffset={-(fatArc + carbsArc)}
-                      transform="rotate(-90 50 50)"
-                    />
+                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#ffbb00" strokeWidth="10"
+                      strokeDasharray={`${fatArc} ${DONUT_CIRC}`} strokeDashoffset={0} transform="rotate(-90 50 50)" />
+                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#2e44b3" strokeWidth="10"
+                      strokeDasharray={`${carbsArc} ${DONUT_CIRC}`} strokeDashoffset={-fatArc} transform="rotate(-90 50 50)" />
+                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#a32c2c" strokeWidth="10"
+                      strokeDasharray={`${proteinArc} ${DONUT_CIRC}`} strokeDashoffset={-(fatArc + carbsArc)} transform="rotate(-90 50 50)" />
                   </>
                 )}
-                {todayCalories > 0 && (
+                {todayCalories > 0 ? (
                   <>
                     <text x="50" y="47" textAnchor="middle" className="home-donut-val">{todayCalories}</text>
                     <text x="50" y="60" textAnchor="middle" className="home-donut-unit">kcal</text>
                   </>
-                )}
-                {todayCalories === 0 && (
+                ) : (
                   <text x="50" y="54" textAnchor="middle" className="home-donut-unit">no data</text>
                 )}
               </svg>
-              <div className="home-macro-pills">
-                <span className="home-macro-pill fat">F {avgFatPct > 0 ? `${avgFatPct}%` : "—"}</span>
-                <span className="home-macro-pill carbs">C {avgCarbsPct > 0 ? `${avgCarbsPct}%` : "—"}</span>
-                <span className="home-macro-pill protein">P {avgProteinPct > 0 ? `${avgProteinPct}%` : "—"}</span>
-              </div>
             </div>
-
-            <div className="home-macro-bars" aria-label="Macros this week">
+            <div className="dash-macro-bars-col" aria-label="Weekly macro bars">
               {weekStats.map(({ date, fat, carbs, protein }) => {
                 const total = fat + carbs + protein;
                 const isSel = date === selectedDate;
-                const barH = total > 0 ? Math.max(4, Math.round((total / maxWeekMacros) * 64)) : 0;
+                const barH = total > 0 ? Math.max(4, Math.round((total / maxWeekMacros) * 60)) : 0;
+                const dayLetter = getDayLetter(date);
                 return (
-                  <button
-                    key={date}
-                    type="button"
-                    className={`home-week-col${isSel ? " selected" : ""}`}
-                    onClick={() => changeSelectedDate(date)}
-                  >
-                    <div className="home-bar-wrap">
+                  <button key={date} type="button"
+                    className={`dash-day-col${isSel ? " selected" : ""}`}
+                    onClick={() => changeSelectedDate(date)}>
+                    <div className="dash-bar-wrap">
                       {barH > 0 ? (
-                        <div className="home-stacked-bar" style={{ height: barH }}>
-                          <div style={{ flex: protein, background: "#10b981", minHeight: protein > 0 ? 2 : 0 }} />
-                          <div style={{ flex: carbs, background: "#3b82f6", minHeight: carbs > 0 ? 2 : 0 }} />
-                          <div style={{ flex: fat, background: "#f59e0b", minHeight: fat > 0 ? 2 : 0 }} />
+                        <div className="dash-stacked-bar" style={{ height: barH }}>
+                          <div style={{ flex: protein, background: "#a32c2c", minHeight: protein > 0 ? 1 : 0 }} />
+                          <div style={{ flex: carbs, background: "#2e44b3", minHeight: carbs > 0 ? 1 : 0 }} />
+                          <div style={{ flex: fat, background: "#ffbb00", minHeight: fat > 0 ? 1 : 0 }} />
                         </div>
-                      ) : (
-                        <div className="home-bar-nub" />
-                      )}
+                      ) : <div className="dash-bar-nub" />}
                     </div>
-                    <span className={`home-bar-label${isSel ? " selected" : ""}`}>
-                      {getDayLabel(date).slice(0, 1)}
-                    </span>
+                    <span className={`dash-bar-day${isSel ? " sel" : ""}`}>{dayLetter}</span>
                   </button>
                 );
               })}
             </div>
           </div>
+          <div className="dash-macro-legend">
+            <span className="dash-legend-item protein">● Protein</span>
+            <span className="dash-legend-item fat">● Fat</span>
+            <span className="dash-legend-item carbs">● Carbs</span>
+          </div>
         </section>
 
-        {/* Stat cards */}
-        <div className="home-stat-grid">
-          <div className="home-stat-card" role="button" tabIndex={0} onClick={() => setAppView("weight")}
-            onKeyDown={(e) => e.key === "Enter" && setAppView("weight")}>
-            <span className="home-stat-label">Streak</span>
-            <strong className="home-stat-val">{streak > 0 ? streak : "—"}</strong>
-            <span className="home-stat-sub">{streak !== 1 ? "days" : "day"}</span>
+        {/* QUAD CARD */}
+        <section className="panel dash-card dash-quad-grid">
+          {/* Top Left: Streak */}
+          <div className="dash-quad-cell">
+            <p className="dash-quad-label">Streak</p>
+            <strong className="dash-streak-num">{completedStreak > 0 ? completedStreak : "—"}</strong>
+            <span className="dash-quad-sub">days completed</span>
           </div>
-          <div className="home-stat-card" role="button" tabIndex={0} onClick={() => setAppView("weight")}
-            onKeyDown={(e) => e.key === "Enter" && setAppView("weight")}>
-            <span className="home-stat-label">Weight</span>
-            <strong className="home-stat-val">{homeWeightDisplay ?? "—"}</strong>
-            <span className="home-stat-sub">
-              {currentWeightEntry ? formatShortDate(currentWeightEntry.date) : "no entry"}
-            </span>
+
+          {/* Top Right: Weekly Macro Goals */}
+          <div className="dash-quad-cell">
+            <p className="dash-quad-label">Weekly Goals</p>
+            {goals ? (
+              <div className="dash-macro-progress-list">
+                {[
+                  { label: "P", total: weekTotalProtein, goal: goals.protein * 7, color: "#a32c2c" },
+                  { label: "F", total: weekTotalFat, goal: goals.fat * 7, color: "#ffbb00" },
+                  { label: "C", total: weekTotalCarbs, goal: goals.carbs * 7, color: "#2e44b3" },
+                ].map(({ label, total, goal, color }) => (
+                  <div key={label} className="dash-macro-prog-row">
+                    <span className="dash-macro-prog-label">{label}</span>
+                    <div className="dash-macro-prog-track">
+                      <div className="dash-macro-prog-fill" style={{ width: `${Math.min(100, goal > 0 ? Math.round((total / goal) * 100) : 0)}%`, background: color }} />
+                    </div>
+                    <span className="dash-macro-prog-pct">{goal > 0 ? `${Math.round((total / goal) * 100)}%` : "—"}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="dash-quad-sub">Set goals in Profile</p>
+            )}
           </div>
-          <div className="home-stat-card">
-            <span className="home-stat-label">Avg this week</span>
-            <strong className="home-stat-val">{weekAvgCal > 0 ? weekAvgCal.toLocaleString() : "—"}</strong>
-            <span className="home-stat-sub">cal / day</span>
+
+          {/* Bottom Left: Weight */}
+          <div className="dash-quad-cell">
+            <p className="dash-quad-label">Weight</p>
+            {currentWeightEntry ? (
+              <>
+                <strong className="dash-weight-num">
+                  {formatWeightValueInUnit(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit)}
+                </strong>
+                {startingWeightEntry && startingWeightEntry.id !== currentWeightEntry.id && (() => {
+                  const cur = convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit);
+                  const start = convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit);
+                  const diff = cur - start;
+                  return (
+                    <span className="dash-quad-sub" style={{ color: diff <= 0 ? "#c75c56" : "#f87171" }}>
+                      {diff < 0 ? `↓ ${formatWeightValue(Math.abs(diff), weightUnit)} lost` : `↑ ${formatWeightValue(diff, weightUnit)} gained`}
+                    </span>
+                  );
+                })()}
+                {goals?.goalWeight && (() => {
+                  const cur = convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit);
+                  const goal = goals.goalWeightUnit
+                    ? convertWeightValue(goals.goalWeight, goals.goalWeightUnit, weightUnit)
+                    : goals.goalWeight;
+                  const remaining = Math.abs(cur - goal);
+                  const pct = startingWeightEntry
+                    ? Math.min(100, Math.max(0, Math.round(
+                        Math.abs(cur - convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit)) /
+                        Math.abs(goal - convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit)) * 100
+                      )))
+                    : 0;
+                  return (
+                    <>
+                      <span className="dash-quad-sub">Goal: {formatWeightValue(goal, weightUnit)}</span>
+                      <div className="dash-macro-prog-track" style={{ marginTop: "0.3rem" }}>
+                        <div className="dash-macro-prog-fill" style={{ width: `${pct}%`, background: "#8AB0AB" }} />
+                      </div>
+                      <span className="dash-quad-sub">{formatWeightValue(remaining, weightUnit)} remaining</span>
+                    </>
+                  );
+                })()}
+                {!goals?.goalWeight && (
+                  <span className="dash-quad-sub">Last: {formatShortDate(currentWeightEntry.date)}</span>
+                )}
+              </>
+            ) : (
+              <span className="dash-quad-sub">No entries yet</span>
+            )}
           </div>
-          <div className="home-stat-card">
-            <span className="home-stat-label">Protein today</span>
-            <strong
-              className="home-stat-val"
-              style={{ color: goals?.protein && todayProtein >= goals.protein ? "#6ee7a8" : undefined }}
-            >
-              {Math.round(todayProtein)}g
-            </strong>
-            <span className="home-stat-sub">
-              {goals?.protein ? `/ ${goals.protein}g goal` : "no goal set"}
-            </span>
+
+          {/* Bottom Right: Top 3 Foods */}
+          <div className="dash-quad-cell">
+            <p className="dash-quad-label">Top Foods</p>
+            {topFoods.length > 0 ? (
+              <ol className="dash-top-foods">
+                {topFoods.slice(0, 3).map((f) => (
+                  <li key={f.name} className="dash-top-food-item">
+                    <span className="dash-food-name">{f.name}</span>
+                    <span className="dash-food-count">×{f.count}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <span className="dash-quad-sub">Log foods to see top items</span>
+            )}
           </div>
-        </div>
+        </section>
+
+        {/* Streak popup */}
+        {showStreakPopup && (() => {
+          const popupWeekDates = getWeekDates(today);
+          const completedSet = new Set(completedDays);
+          return (
+            <div className="modal-backdrop" role="presentation" onClick={() => setShowStreakPopup(false)}>
+              <div className="modal streak-popup" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+                <h2 className="streak-popup-title">Day Logged! 🎉</h2>
+                <div className="streak-popup-num">{completedStreak}</div>
+                <p className="streak-popup-label">day streak</p>
+                <div className="streak-week-grid">
+                  {popupWeekDates.map((d) => {
+                    const done = completedSet.has(d);
+                    const letter = getDayLetter(d);
+                    return (
+                      <div key={d} className={`streak-day-cell${done ? " done" : ""}`}>
+                        <span className="streak-day-check">{done ? "✓" : ""}</span>
+                        <span className="streak-day-letter">{letter}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button type="button" className="primary-button" onClick={() => setShowStreakPopup(false)}>
+                  Close
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {bottomNav}
       </main>
@@ -2654,6 +2737,20 @@ function startEditWeightEntry(entry: WeightEntry) {
                   </div>
                 </label>
               ))}
+
+              <label key="goalWeight">
+                Goal Weight
+                <div className="goals-input-row">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={goalsForm.goalWeight}
+                    onChange={(e) => setGoalsForm({ ...goalsForm, goalWeight: e.target.value })}
+                  />
+                  <span>{weightUnit}</span>
+                </div>
+              </label>
 
               <button type="button" className="primary-button" onClick={submitGoals}>
                 Save goals
@@ -3693,6 +3790,16 @@ function startEditWeightEntry(entry: WeightEntry) {
               </div>
             </section>
           ))}
+        </div>
+
+        <div className="finished-logging-row">
+          <button
+            type="button"
+            className={`finished-logging-btn${completedDays.includes(selectedDate) ? " done" : ""}`}
+            onClick={markDayComplete}
+          >
+            {completedDays.includes(selectedDate) ? "✓ Day Logged!" : "Finished Logging for the Day"}
+          </button>
         </div>
       </section>
 
