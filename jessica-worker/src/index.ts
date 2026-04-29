@@ -36,10 +36,7 @@ export default {
 
     const foods = (data.foods || [])
       .map((food: any) => {
-        const servingSize =
-          food.servingSize && food.servingSizeUnit
-            ? `${food.servingSize} ${food.servingSizeUnit}`
-            : "100 g";
+        const servingSize = getServingSizeText(food) ?? "100 g";
 
         return {
           id: food.fdcId,
@@ -100,10 +97,7 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
 
     throw error;
   }
-  const servingSize =
-    food.servingSize && food.servingSizeUnit
-      ? `${food.servingSize} ${food.servingSizeUnit}`
-      : null;
+  const servingSize = getServingSizeText(food);
 
   return json({
     id: food.fdcId,
@@ -204,8 +198,14 @@ function isPackagedFood(food: any): boolean {
   return normalizeSearchText(food.dataType) === "branded" || Boolean(food.brand);
 }
 
+function isHumanServingUnit(unit: unknown): boolean {
+  if (typeof unit !== "string" || !unit.trim()) return false;
+  const upper = unit.trim().toUpperCase();
+  return upper !== "RACC" && upper !== "PORTION";
+}
+
 function getServingSizeText(food: any): string | null {
-  return food.servingSize && food.servingSizeUnit
+  return food.servingSize && isHumanServingUnit(food.servingSizeUnit)
     ? `${food.servingSize} ${food.servingSizeUnit}`
     : null;
 }
