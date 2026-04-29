@@ -918,7 +918,7 @@ function App() {
   function addSelectedFood() {
     if (!selectedFood || !pendingCategory) return;
 
-    const servings = Number(quantity);
+    const servings = hasUsableSearchNutrition(selectedFood) ? 1 : Number(quantity);
     if (!Number.isFinite(servings) || servings <= 0) return;
 
     const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood.name);
@@ -2106,16 +2106,18 @@ function App() {
                   </label>
                 )}
 
-                <label className="quantity-row">
-                  Quantity
-                  <input
-                    type="number"
-                    min="0.1"
-                    step="0.1"
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                  />
-                </label>
+                {!usesLocalPortion && (
+                  <label className="quantity-row">
+                    Quantity
+                    <input
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                    />
+                  </label>
+                )}
 
                 {selectedFood && selectedPortionCalories !== null && (
                   <p className="modal-hint">
