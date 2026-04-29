@@ -706,23 +706,35 @@ function getFoodSearchScore(food: Food, query: string) {
 
   const nameText = normalizeSearchText(food.name);
   const brandText = normalizeSearchText(food.brand ?? "");
+  const servingText = normalizeSearchText(food.servingSize);
+  const dataTypeText = normalizeSearchText(food.dataType ?? "");
+  const searchableText = `${nameText} ${brandText} ${servingText}`.trim();
   const compactName = nameText.replace(/\s+/g, "");
   const compactQuery = queryText.replace(/\s+/g, "");
   const matchedNameWords = queryWords.filter((word) => nameText.includes(word));
+  const matchedSearchWords = queryWords.filter((word) => searchableText.includes(word));
   const synonymMatches = getSearchSynonyms(query).filter(
     (synonym) => nameText.includes(synonym) || brandText.includes(synonym)
   );
   let score = 0;
 
+  if (dataTypeText === "branded") score += 25;
+  if (dataTypeText === "foundation" || dataTypeText === "sr legacy" || dataTypeText.includes("survey")) {
+    score -= queryWords.length > 2 ? 30 : 0;
+  }
+  if (searchableText.includes(queryText)) score += 130;
+  if (matchedSearchWords.length === queryWords.length) score += 95;
   if (nameText.includes(queryText) || compactName.includes(compactQuery)) score += 100;
   if (synonymMatches.length > 0) score += 95 + synonymMatches.length * 8;
   if (matchedNameWords.length === queryWords.length) score += 70;
   if (nameText.startsWith(queryText)) score += 50;
-  if (brandText.includes(queryText) || queryWords.some((word) => brandText.includes(word))) score += 35;
+  if (brandText.includes(queryText) || queryWords.some((word) => brandText.includes(word))) score += 45;
+  if (brandText && getSearchTokens(brandText).every((word) => queryWords.includes(word))) score += 40;
+  score += matchedSearchWords.length * 16;
   score += matchedNameWords.length * 12;
 
-  if (queryWords.length > 1 && matchedNameWords.length === 1) score -= 45;
-  if (matchedNameWords.length === 0 && !brandText.includes(queryText)) score -= 60;
+  if (queryWords.length > 1 && matchedSearchWords.length === 1) score -= 45;
+  if (matchedSearchWords.length === 0 && !brandText.includes(queryText)) score -= 60;
 
   return score;
 }

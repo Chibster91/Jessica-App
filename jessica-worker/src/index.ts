@@ -1,9 +1,27 @@
 const DETAIL_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SEARCH_DETAIL_ENRICH_LIMIT = 8;
+const SEARCH_RESULT_LIMIT = 15;
+const USDA_SEARCH_PAGE_SIZE = 50;
+const UNIT_LABELS: Record<string, string> = {
+  MLT: "ml",
+  GRM: "g",
+  G: "g",
+  MG: "mg",
+  MCG: "mcg",
+  LBR: "lb",
+  ONZ: "oz",
+  OZA: "oz",
+};
 
 type DetailCacheEntry = {
   expiresAt: number;
   food: any;
+};
+
+type SearchRequest = {
+  query: string;
+  brandOwner?: string;
+  brandedOnly?: boolean;
 };
 
 const detailCache = new Map<string, DetailCacheEntry>();
@@ -21,20 +39,27 @@ export default {
       return missingUsdaApiKey();
     }
 
-    const searchUrl = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
-    searchUrl.searchParams.set("query", query);
-    searchUrl.searchParams.set("pageSize", "25");
-    searchUrl.searchParams.set("api_key", apiKey);
+    let resultSets: any[];
+    try {
+      resultSets = await Promise.all(expandSearchRequests(query).map((request) => searchUsdaFoods(request, apiKey)));
+    } catch (error) {
+      if (isUsdaRequestError(error)) {
+        return json(
+          {
+            error: error.message,
+            status: error.status,
+            detail: error.detail,
+          },
+          error.status
+        );
+      }
 
-    const r = await fetch(searchUrl.toString());
-    if (!r.ok) {
-      return usdaError(r);
+      throw error;
     }
-
-    const data: any = await r.json();
+    const dataFoods = resultSets.flatMap((data) => data.foods || []);
     const seen = new Set();
 
-    const foods = (data.foods || [])
+    const foods = dataFoods
       .map((food: any) => {
         const servingSize = getServingSizeText(food) ?? "100 g";
 
@@ -54,16 +79,38 @@ export default {
       })
       .sort((a: any, b: any) => rankSearchResult(b, query) - rankSearchResult(a, query))
       .filter((food: any) => {
-        const key = `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
+        const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       })
-      .slice(0, 15);
+      .slice(0, SEARCH_RESULT_LIMIT);
 
     return json(await enrichBrandedSearchResults(foods, apiKey));
   },
 };
+
+async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<any> {
+  const searchUrl = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+  searchUrl.searchParams.set("query", request.query);
+  searchUrl.searchParams.set("pageSize", String(USDA_SEARCH_PAGE_SIZE));
+  searchUrl.searchParams.set("api_key", apiKey);
+
+  if (request.brandedOnly) {
+    searchUrl.searchParams.set("dataType", "Branded");
+  }
+
+  if (request.brandOwner) {
+    searchUrl.searchParams.set("brandOwner", request.brandOwner);
+  }
+
+  const r = await fetch(searchUrl.toString());
+  if (!r.ok) {
+    throw await toUsdaRequestError(r);
+  }
+
+  return r.json();
+}
 
 async function handleDetail(url: URL, env: any): Promise<Response> {
   const id = url.searchParams.get("id");
@@ -110,9 +157,9 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
     gtinUpc: food.gtinUpc || null,
     servingSize,
     servingSizeValue: food.servingSize || null,
-    servingSizeUnit: food.servingSizeUnit || null,
+    servingSizeUnit: normalizeServingUnit(food.servingSizeUnit),
     householdServingFullText: food.householdServingFullText || null,
-    foodPortions: food.foodPortions || [],
+    foodPortions: normalizeFoodPortions(food.foodPortions || []),
     labelNutrients: food.labelNutrients || null,
     nutrients: {
       calories: getCaloriesValue(food),
@@ -205,9 +252,32 @@ function isHumanServingUnit(unit: unknown): boolean {
 }
 
 function getServingSizeText(food: any): string | null {
-  return food.servingSize && isHumanServingUnit(food.servingSizeUnit)
-    ? `${food.servingSize} ${food.servingSizeUnit}`
+  const unit = normalizeServingUnit(food.servingSizeUnit);
+
+  return food.servingSize && isHumanServingUnit(unit)
+    ? `${food.servingSize} ${unit}`
     : null;
+}
+
+function normalizeServingUnit(unit: unknown): string | null {
+  if (typeof unit !== "string" || !unit.trim()) return null;
+
+  const trimmedUnit = unit.trim();
+  return UNIT_LABELS[trimmedUnit.toUpperCase()] ?? trimmedUnit.toLowerCase();
+}
+
+function normalizeFoodPortions(portions: any[]): any[] {
+  return portions.map((portion) => ({
+    ...portion,
+    measureUnit: portion.measureUnit
+      ? {
+          ...portion.measureUnit,
+          name: normalizeServingUnit(portion.measureUnit.name) ?? portion.measureUnit.name,
+          abbreviation:
+            normalizeServingUnit(portion.measureUnit.abbreviation) ?? portion.measureUnit.abbreviation,
+        }
+      : portion.measureUnit,
+  }));
 }
 
 const ENERGY_NAMES = [
@@ -279,17 +349,107 @@ function getNutrientValue(food: any, name: string | string[], unit?: string): nu
   return nutrient?.value ?? nutrient?.amount ?? 0;
 }
 
+function expandSearchRequests(query: string): SearchRequest[] {
+  const normalizedQuery = normalizeSearchText(query);
+  const queryWithoutPunctuation = normalizeSearchForMatching(query);
+  const brandMatch = getKnownBrandMatch(normalizedQuery);
+  const requests: SearchRequest[] = [
+    { query },
+    { query, brandedOnly: true },
+  ];
+
+  if (brandMatch) {
+    const productQuery = normalizeSearchForMatching(normalizedQuery.slice(brandMatch.key.length)).trim();
+    const productQueryWithCategory = addLikelyProductCategory(productQuery);
+
+    if (productQuery) {
+      requests.push(
+        { query: productQuery, brandOwner: brandMatch.brandOwner, brandedOnly: true },
+        { query: productQueryWithCategory, brandOwner: brandMatch.brandOwner, brandedOnly: true }
+      );
+    }
+  }
+
+  const categoryQuery = addLikelyProductCategory(queryWithoutPunctuation);
+  if (categoryQuery !== queryWithoutPunctuation) {
+    requests.push({ query: categoryQuery, brandedOnly: true });
+  }
+
+  return dedupeSearchRequests(requests.filter((request) => request.query.trim()));
+}
+
+function getKnownBrandMatch(queryText: string): { key: string; brandOwner: string } | null {
+  const knownBrands = [
+    { key: "international delight", brandOwner: "International Delight" },
+    { key: "coffee mate", brandOwner: "Coffee Mate" },
+    { key: "coffeemate", brandOwner: "Coffee Mate" },
+    { key: "chobani", brandOwner: "Chobani" },
+    { key: "dannon", brandOwner: "Dannon" },
+    { key: "yoplait", brandOwner: "Yoplait" },
+    { key: "oikos", brandOwner: "Oikos" },
+    { key: "fairlife", brandOwner: "Fairlife" },
+    { key: "quest", brandOwner: "Quest" },
+    { key: "kellogg", brandOwner: "Kellogg" },
+    { key: "kelloggs", brandOwner: "Kellogg" },
+    { key: "general mills", brandOwner: "General Mills" },
+    { key: "great value", brandOwner: "Great Value" },
+    { key: "market pantry", brandOwner: "Market Pantry" },
+    { key: "good and gather", brandOwner: "Good & Gather" },
+  ];
+
+  return knownBrands.find((brand) => queryText.startsWith(brand.key)) ?? null;
+}
+
+function addLikelyProductCategory(queryText: string): string {
+  if (
+    /\b(international delight|coffee mate|coffeemate|creamer|creamers)\b/.test(queryText) &&
+    !/\bcoffee creamer\b/.test(queryText)
+  ) {
+    return `${queryText} coffee creamer`;
+  }
+
+  return queryText;
+}
+
+function dedupeSearchRequests(requests: SearchRequest[]): SearchRequest[] {
+  const seen = new Set<string>();
+
+  return requests.filter((request) => {
+    const key = [
+      normalizeSearchForMatching(request.query),
+      normalizeSearchForMatching(request.brandOwner || ""),
+      request.brandedOnly ? "branded" : "all",
+    ].join("|");
+
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function rankSearchResult(food: any, query: string): number {
-  const queryText = normalizeSearchText(query);
-  const name = normalizeSearchText(food.name);
-  const dataType = normalizeSearchText(food.dataType);
+  const queryText = normalizeSearchForMatching(query);
+  const queryWords = getSearchWords(queryText);
+  const name = normalizeSearchForMatching(food.name);
+  const brand = normalizeSearchForMatching(food.brand);
+  const category = normalizeSearchForMatching(food.category);
+  const searchableText = `${name} ${brand} ${category}`.trim();
+  const dataType = normalizeSearchForMatching(food.dataType);
+  const matchedWords = queryWords.filter((word) => hasSearchWord(searchableText, word));
   let score = 0;
 
-  if (dataType === "foundation" || dataType === "sr legacy" || dataType.includes("survey")) {
-    score += 40;
-  } else if (dataType === "branded") {
-    score -= 30;
+  if (dataType === "branded") {
+    score += 25;
+  } else if (dataType === "foundation" || dataType === "sr legacy" || dataType.includes("survey")) {
+    score -= queryWords.length > 2 ? 35 : 0;
   }
+
+  if (searchableText.includes(queryText)) score += 120;
+  if (matchedWords.length === queryWords.length && queryWords.length > 0) score += 90;
+  if (name.includes(queryText)) score += 80;
+  if (brand && queryText.includes(brand)) score += 55;
+  if (brand && getSearchWords(brand).every((word) => hasSearchWord(queryText, word))) score += 35;
+  score += matchedWords.length * 16;
 
   if (isBasicSearchQuery(queryText) && /\b(raw|cooked|plain)\b/.test(name)) {
     score += 15;
@@ -314,6 +474,14 @@ function hasSearchWord(text: string, word: string): boolean {
 
 function normalizeSearchText(value: unknown): string {
   return String(value || "").toLowerCase();
+}
+
+function normalizeSearchForMatching(value: unknown): string {
+  return normalizeSearchText(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function getSearchWords(value: string): string[] {
+  return value.split(/\s+/).filter((word) => word.length > 1);
 }
 
 function getUsdaApiKey(env: any): string | null {
