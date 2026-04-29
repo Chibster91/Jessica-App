@@ -61,6 +61,13 @@ input, button, textarea {
   background: #3a3048;
 }
 
+.food-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 .day-total {
   margin: 0 0 1.5rem;
 }
@@ -210,6 +217,7 @@ input, button, textarea {
   gap: 0.35rem;
 }
 
+.custom-food-form h2,
 .custom-food-form > label:first-of-type,
 .custom-food-form > label:nth-of-type(12),
 .scan-food-panel,
@@ -477,6 +485,7 @@ input, button, textarea {
     grid-column: 1 / -1;
   }
 
+  .custom-food-form h2,
   .custom-food-form > label:first-of-type,
   .custom-food-form > label:nth-of-type(12),
   .scan-food-panel,
@@ -878,6 +887,93 @@ input, button, textarea {
   white-space: nowrap;
 }
 
+.weight-entry-panel {
+  text-align: left;
+}
+
+.weight-form {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: 1fr;
+  margin-top: 1rem;
+}
+
+.weight-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.weight-form input {
+  width: 100%;
+}
+
+.weight-chart {
+  width: 100%;
+  overflow: hidden;
+}
+
+.weight-chart svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.weight-chart-axis {
+  stroke: #3a3a48;
+  stroke-width: 1;
+}
+
+.weight-chart-line {
+  fill: none;
+  stroke: #c084fc;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.weight-chart-dot {
+  fill: #f3e8ff;
+  stroke: #c084fc;
+  stroke-width: 2;
+}
+
+.weight-chart-label {
+  fill: #9ca3af;
+  font-size: 0.62rem;
+}
+
+.weight-entry-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.weight-entry-row {
+  display: grid;
+  align-items: center;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-top: 1px solid #3a3a48;
+  padding-top: 0.75rem;
+}
+
+.weight-entry-row div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.weight-entry-row small {
+  color: #9ca3af;
+  overflow-wrap: anywhere;
+}
+
+.weight-entry-row button {
+  align-self: stretch;
+}
+
 /* Mobile-first responsive layout */
 .app {
   width: 100%;
@@ -1026,8 +1122,14 @@ button {
 @media (min-width: 480px) {
   .form-actions,
   .profile-actions,
-  .height-input-row {
+  .height-input-row,
+  .weight-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .weight-form label:last-of-type,
+  .weight-form .primary-button {
+    grid-column: 1 / -1;
   }
 
   .height-input-row select {

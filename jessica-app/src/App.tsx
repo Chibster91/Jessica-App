@@ -6,6 +6,7 @@ type Food = {
   id: number;
   name: string;
   brand: string | null;
+  category?: string | null;
   dataType?: string | null;
   servingSize: string;
   calories: number;
@@ -78,7 +79,7 @@ type PortionOption = {
 
 type AddFoodTab = "search" | "recent" | "custom" | "recipes";
 
-type AppView = "home" | "day" | "library" | "profile";
+type AppView = "home" | "day" | "library" | "profile" | "weight";
 
 type FoodLibraryTab = "recent" | "custom" | "recipes";
 
@@ -126,6 +127,20 @@ type GoalsForm = {
   protein: string;
   carbs: string;
   fat: string;
+};
+
+type WeightEntry = {
+  id: string;
+  date: string;
+  weight: number;
+  unit: WeightUnit;
+  note?: string;
+};
+
+type WeightForm = {
+  date: string;
+  weight: string;
+  note: string;
 };
 
 type CustomFoodForm = {
@@ -300,6 +315,17 @@ function getSavedRecipes() {
   if (!saved) return [];
 
   return JSON.parse(saved) as Recipe[];
+}
+
+function getSavedWeightEntries() {
+  const saved = localStorage.getItem("weightEntries");
+  if (!saved) return [];
+
+  return JSON.parse(saved) as WeightEntry[];
+}
+
+function saveWeightEntries(entries: WeightEntry[]) {
+  localStorage.setItem("weightEntries", JSON.stringify(entries));
 }
 
 function getSavedGoals(): Goals | null {
@@ -743,6 +769,57 @@ function rankSearchResults(foods: Food[], query: string) {
   return [...foods].sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query));
 }
 
+function detectMilkType(food: Food) {
+  const rawText = `${food.name} ${food.brand ?? ""} ${food.category ?? ""}`.toLowerCase();
+  const name = normalizeSearchText(food.name);
+  const brand = normalizeSearchText(food.brand ?? "");
+  const category = normalizeSearchText(food.category ?? "");
+  const text = `${name} ${brand} ${category}`.trim();
+  const appearsToBeMilk =
+    /\bmilk\b/.test(name) ||
+    /\bmilk\b/.test(category) ||
+    category.includes("milk substitutes");
+
+  if (!appearsToBeMilk) return null;
+
+  if (/\b(whole|vitamin d|full fat|homogenized)\b/.test(text)) return "Whole Milk";
+  if (/(^|\s)2\s*%|\breduced fat\b/.test(rawText) || /\breduced fat\b/.test(text)) return "2% Milk";
+  if (/(^|\s)1\s*%/.test(rawText) || /\blowfat\b|\blow fat\b/.test(text)) return "1% Milk";
+  if (/\b(skim|nonfat|non fat|fat free)\b/.test(text)) return "Skim Milk";
+
+  if (food.fat <= 0.5) return "Skim Milk";
+  if (food.fat <= 2.5) return "1% Milk";
+  if (food.fat <= 5.5) return "2% Milk";
+  if (food.fat >= 6) return "Whole Milk";
+
+  return null;
+}
+
+function formatDisplayName(name: string) {
+  const trimmedName = name.trim();
+  const hasLetters = /[a-z]/i.test(trimmedName);
+  const isAllCaps = hasLetters && trimmedName === trimmedName.toUpperCase();
+
+  if (!isAllCaps) return trimmedName;
+
+  return trimmedName
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .replace(/\bUsda\b/g, "USDA");
+}
+
+function getFoodDisplayName(food: Food) {
+  const milkType = detectMilkType(food);
+
+  if (!milkType) return formatDisplayName(food.name);
+
+  return `Milk, ${milkType.replace(" Milk", "")}`;
+}
+
+function getBrandDisplayName(brand: string | null | undefined) {
+  return brand ? formatDisplayName(brand) : "Generic";
+}
+
 async function fetchUsdaFoods(query: string) {
   const res = await fetch(
     `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(query)}`
@@ -1163,6 +1240,30 @@ function formatWeekRange(startDate: string, endDate: string) {
   return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
+function formatShortDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatWeightValue(weight: number, unit: WeightUnit) {
+  return `${Number(weight.toFixed(1))} ${unit}`;
+}
+
+function sortWeightEntriesNewestFirst(entries: WeightEntry[]) {
+  return [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+}
+
+function sortWeightEntriesOldestFirst(entries: WeightEntry[]) {
+  return [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+}
+
+function getPreferredWeightUnit(goals: Goals | null): WeightUnit {
+  return goals?.calculatorInputs?.weightUnit ?? "lb";
+}
+
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
@@ -1206,10 +1307,19 @@ function App() {
   const [calculatorInputs, setCalculatorInputs] = useState<CalculatorInputs>(() =>
     calculatorInputsToForm(getSavedGoals())
   );
+  const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(() => getSavedWeightEntries());
+  const [weightForm, setWeightForm] = useState<WeightForm>({
+    date: today,
+    weight: "",
+    note: "",
+  });
+  const [weightEntryToDelete, setWeightEntryToDelete] = useState<WeightEntry | null>(null);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(() => !getSavedGoals());
   const [isManualGoalsOpen, setIsManualGoalsOpen] = useState(false);
   const [editingCustomFoodId, setEditingCustomFoodId] = useState<number | null>(null);
   const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
+  const [isCreatingLibraryCustomFood, setIsCreatingLibraryCustomFood] = useState(false);
+  const [isCreatingLibraryRecipe, setIsCreatingLibraryRecipe] = useState(false);
   const [libraryCustomFoodForm, setLibraryCustomFoodForm] =
     useState<CustomFoodForm>(emptyCustomFoodForm);
   const [libraryRecipeForm, setLibraryRecipeForm] = useState<RecipeForm>(emptyRecipeForm);
@@ -1226,6 +1336,10 @@ function App() {
   useEffect(() => {
     saveRecipes(recipes);
   }, [recipes]);
+
+  useEffect(() => {
+    saveWeightEntries(weightEntries);
+  }, [weightEntries]);
 
   function changeSelectedDate(date: string) {
     setSelectedDate(date);
@@ -1540,6 +1654,29 @@ function App() {
     setItemToRemove(null);
   }
 
+  function saveWeightEntry() {
+    const weight = Number(weightForm.weight);
+    if (!Number.isFinite(weight) || weight <= 0) return;
+
+    const entry: WeightEntry = {
+      id: crypto.randomUUID(),
+      date: weightForm.date || today,
+      weight,
+      unit: getPreferredWeightUnit(goals),
+      note: weightForm.note.trim() || undefined,
+    };
+
+    setWeightEntries([entry, ...weightEntries]);
+    setWeightForm({ date: today, weight: "", note: "" });
+  }
+
+  function confirmDeleteWeightEntry() {
+    if (!weightEntryToDelete) return;
+
+    setWeightEntries(weightEntries.filter((entry) => entry.id !== weightEntryToDelete.id));
+    setWeightEntryToDelete(null);
+  }
+
   function openFoodLibrary() {
     setAppView("library");
     setFoodLibraryTab("recent");
@@ -1590,16 +1727,44 @@ function App() {
   function cancelLibraryEditing() {
     setEditingCustomFoodId(null);
     setEditingRecipeId(null);
+    setIsCreatingLibraryCustomFood(false);
+    setIsCreatingLibraryRecipe(false);
     setLibraryCustomFoodForm(emptyCustomFoodForm);
     setLibraryRecipeForm(emptyRecipeForm);
     setLibraryRecipeIngredients([]);
+    setRecipeIngredientQuery("");
+    setRecipeIngredientFoods([]);
+    setIsSearchingRecipeIngredients(false);
+    setPendingRecipeIngredient(null);
+    setPendingRecipeIngredientQuantity("1");
+  }
+
+  function createLibraryCustomFood() {
+    setFoodLibraryTab("custom");
+    setLibrarySelection(null);
+    setEditingCustomFoodId(null);
+    setEditingRecipeId(null);
+    setIsCreatingLibraryRecipe(false);
+    setIsCreatingLibraryCustomFood(true);
+    setLibraryCustomFoodForm(emptyCustomFoodForm);
   }
 
   function editCustomFood(food: Food) {
     setEditingCustomFoodId(food.id);
     setEditingRecipeId(null);
+    setIsCreatingLibraryCustomFood(false);
+    setIsCreatingLibraryRecipe(false);
     setLibraryCustomFoodForm(foodToCustomFoodForm(food));
     setLibrarySelection({ type: "custom", food });
+  }
+
+  function saveNewLibraryCustomFood() {
+    const customFood = parseCustomFood(libraryCustomFoodForm);
+    if (!customFood) return;
+
+    setCustomFoods([customFood, ...customFoods]);
+    setLibrarySelection({ type: "custom", food: customFood });
+    cancelLibraryEditing();
   }
 
   function saveLibraryCustomFood() {
@@ -1628,9 +1793,35 @@ function App() {
   function editRecipe(recipe: Recipe) {
     setEditingRecipeId(recipe.id);
     setEditingCustomFoodId(null);
+    setIsCreatingLibraryCustomFood(false);
+    setIsCreatingLibraryRecipe(false);
     setLibraryRecipeForm(recipeToRecipeForm(recipe));
     setLibraryRecipeIngredients(recipe.ingredients);
     setLibrarySelection({ type: "recipe", food: recipe });
+  }
+
+  function createLibraryRecipe() {
+    setFoodLibraryTab("recipes");
+    setLibrarySelection(null);
+    setEditingCustomFoodId(null);
+    setEditingRecipeId(null);
+    setIsCreatingLibraryCustomFood(false);
+    setIsCreatingLibraryRecipe(true);
+    setLibraryRecipeForm(emptyRecipeForm);
+    setLibraryRecipeIngredients([]);
+    setRecipeIngredientQuery("");
+    setRecipeIngredientFoods([]);
+    setPendingRecipeIngredient(null);
+    setPendingRecipeIngredientQuantity("1");
+  }
+
+  function saveNewLibraryRecipe() {
+    const recipe = parseRecipe(libraryRecipeForm, libraryRecipeIngredients);
+    if (!recipe) return;
+
+    setRecipes([recipe, ...recipes]);
+    setLibrarySelection({ type: "recipe", food: recipe });
+    cancelLibraryEditing();
   }
 
   function saveLibraryRecipe() {
@@ -1678,6 +1869,35 @@ function App() {
     );
   }
 
+  function confirmLibraryRecipeIngredient() {
+    if (!pendingRecipeIngredient) return;
+
+    const quantity = Number(pendingRecipeIngredientQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+
+    const existingIngredient = libraryRecipeIngredients.find(
+      (ingredient) => ingredient.food.id === pendingRecipeIngredient.id
+    );
+
+    if (existingIngredient) {
+      setLibraryRecipeIngredients(
+        libraryRecipeIngredients.map((ingredient) =>
+          ingredient.food.id === pendingRecipeIngredient.id
+            ? { ...ingredient, quantity: ingredient.quantity + quantity }
+            : ingredient
+        )
+      );
+    } else {
+      setLibraryRecipeIngredients([
+        ...libraryRecipeIngredients,
+        { food: pendingRecipeIngredient, quantity },
+      ]);
+    }
+
+    setPendingRecipeIngredient(null);
+    setPendingRecipeIngredientQuantity("1");
+  }
+
   const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood?.name);
   const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
   const localPortionAmount = Number(portionAmount);
@@ -1711,6 +1931,29 @@ function App() {
     }
   );
   const recipeTotals = getRecipeTotals(recipeIngredients);
+  const weightUnit = getPreferredWeightUnit(goals);
+  const sortedWeightEntriesNewest = sortWeightEntriesNewestFirst(weightEntries);
+  const sortedWeightEntriesOldest = sortWeightEntriesOldestFirst(weightEntries);
+  const currentWeightEntry = sortedWeightEntriesNewest[0] ?? null;
+  const startingWeightEntry = sortedWeightEntriesOldest[0] ?? null;
+  const totalWeightChange =
+    currentWeightEntry && startingWeightEntry
+      ? currentWeightEntry.weight - startingWeightEntry.weight
+      : null;
+  const weightGoal = goals?.calculatorInputs?.goal;
+  const weightChangeVerb =
+    totalWeightChange === null
+      ? "Changed"
+      : weightGoal === "lose"
+      ? totalWeightChange <= 0
+        ? "Lost"
+        : "Gained"
+      : weightGoal === "gain"
+      ? totalWeightChange >= 0
+        ? "Gained"
+        : "Lost"
+      : "Changed";
+  const isWeightFormValid = Number(weightForm.weight) > 0 && Number.isFinite(Number(weightForm.weight));
   const canAddSelectedFood =
     Boolean(selectedFood) &&
     !isLoadingDetail &&
@@ -1739,6 +1982,14 @@ function App() {
       >
         <span className="nav-icon">≡</span>
         <span>Log</span>
+      </button>
+      <button
+        type="button"
+        className={appView === "weight" ? "active" : ""}
+        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("weight"); }}
+      >
+        <span className="nav-icon">↕</span>
+        <span>Weight</span>
       </button>
       <button
         type="button"
@@ -1855,6 +2106,25 @@ function App() {
             <p className="empty-meal">No food logged this week. Head to Log to get started.</p>
           )}
         </section>
+
+        {weightEntryToDelete && (
+          <div className="modal-backdrop" role="presentation">
+            <div className="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-weight-title">
+              <h2 id="remove-weight-title">Delete weight entry?</h2>
+              <p>
+                {formatWeightValue(weightEntryToDelete.weight, weightEntryToDelete.unit)} from{" "}
+                {formatShortDate(weightEntryToDelete.date)} will be deleted.
+              </p>
+
+              <button className="danger-button" onClick={confirmDeleteWeightEntry}>
+                Delete
+              </button>
+              <button className="secondary-button" onClick={() => setWeightEntryToDelete(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {bottomNav}
       </main>
@@ -2169,6 +2439,191 @@ function App() {
     );
   }
 
+  if (appView === "weight") {
+    const chartWidth = 320;
+    const chartHeight = 180;
+    const chartPadding = 28;
+    const chartWeights = sortedWeightEntriesOldest.map((entry) => entry.weight);
+    const minWeight = chartWeights.length ? Math.min(...chartWeights) : 0;
+    const maxWeight = chartWeights.length ? Math.max(...chartWeights) : 0;
+    const chartRange = Math.max(1, maxWeight - minWeight);
+    const chartMin = minWeight - chartRange * 0.12;
+    const chartMax = maxWeight + chartRange * 0.12;
+    const chartValueRange = Math.max(1, chartMax - chartMin);
+    const chartPoints = sortedWeightEntriesOldest.map((entry, index) => {
+      const x =
+        chartPadding +
+        (index / Math.max(1, sortedWeightEntriesOldest.length - 1)) *
+          (chartWidth - chartPadding * 2);
+      const y =
+        chartHeight -
+        chartPadding -
+        ((entry.weight - chartMin) / chartValueRange) * (chartHeight - chartPadding * 2);
+
+      return { ...entry, x, y };
+    });
+    const chartLinePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(" ");
+    const weightChangeAmount = totalWeightChange === null ? null : Math.abs(totalWeightChange);
+
+    return (
+      <main className="app">
+        <div className="top-bar">
+          <h1>Weight</h1>
+        </div>
+
+        <section className="panel">
+          <div className="targets-grid weight-summary-grid">
+            <div>
+              <span>Current</span>
+              <strong>
+                {currentWeightEntry
+                  ? formatWeightValue(currentWeightEntry.weight, currentWeightEntry.unit)
+                  : "No entry"}
+              </strong>
+            </div>
+            <div>
+              <span>Starting</span>
+              <strong>
+                {startingWeightEntry
+                  ? formatWeightValue(startingWeightEntry.weight, startingWeightEntry.unit)
+                  : "No entry"}
+              </strong>
+            </div>
+            <div>
+              <span>Total change</span>
+              <strong>
+                {weightChangeAmount === null
+                  ? "No entry"
+                  : `${weightChangeVerb} ${formatWeightValue(weightChangeAmount, currentWeightEntry?.unit ?? weightUnit)}`}
+              </strong>
+            </div>
+            <div>
+              <span>Latest weigh-in</span>
+              <strong>{currentWeightEntry ? formatShortDate(currentWeightEntry.date) : "No entry"}</strong>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel weight-entry-panel">
+          <h2>Log Weight</h2>
+          <div className="weight-form">
+            <label>
+              Date
+              <input
+                type="date"
+                value={weightForm.date}
+                onChange={(e) => setWeightForm({ ...weightForm, date: e.target.value })}
+              />
+            </label>
+            <label>
+              Weight ({weightUnit})
+              <input
+                type="number"
+                min="1"
+                step="0.1"
+                inputMode="decimal"
+                value={weightForm.weight}
+                onChange={(e) => setWeightForm({ ...weightForm, weight: e.target.value })}
+              />
+            </label>
+            <label>
+              Note
+              <input
+                value={weightForm.note}
+                placeholder="Optional"
+                onChange={(e) => setWeightForm({ ...weightForm, note: e.target.value })}
+              />
+            </label>
+            <button type="button" className="primary-button" onClick={saveWeightEntry} disabled={!isWeightFormValid}>
+              Save
+            </button>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="section-heading-row">
+            <h2>Trend</h2>
+          </div>
+
+          {sortedWeightEntriesOldest.length === 0 && (
+            <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>
+          )}
+
+          {sortedWeightEntriesOldest.length === 1 && (
+            <p className="empty-meal">Add at least two weight entries to see your trend.</p>
+          )}
+
+          {sortedWeightEntriesOldest.length >= 2 && (
+            <div className="weight-chart" aria-label="Weight trend graph">
+              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img">
+                <line
+                  className="weight-chart-axis"
+                  x1={chartPadding}
+                  y1={chartHeight - chartPadding}
+                  x2={chartWidth - chartPadding}
+                  y2={chartHeight - chartPadding}
+                />
+                <line
+                  className="weight-chart-axis"
+                  x1={chartPadding}
+                  y1={chartPadding}
+                  x2={chartPadding}
+                  y2={chartHeight - chartPadding}
+                />
+                <polyline className="weight-chart-line" points={chartLinePoints} />
+                {chartPoints.map((point) => (
+                  <g key={point.id}>
+                    <circle className="weight-chart-dot" cx={point.x} cy={point.y} r="3.5" />
+                    <title>
+                      {formatShortDate(point.date)}: {formatWeightValue(point.weight, point.unit)}
+                    </title>
+                  </g>
+                ))}
+                <text className="weight-chart-label" x={chartPadding} y={chartHeight - 6}>
+                  {formatShortDate(sortedWeightEntriesOldest[0].date)}
+                </text>
+                <text className="weight-chart-label" x={chartWidth - chartPadding} y={chartHeight - 6} textAnchor="end">
+                  {formatShortDate(sortedWeightEntriesOldest[sortedWeightEntriesOldest.length - 1].date)}
+                </text>
+                <text className="weight-chart-label" x="4" y={chartPadding + 4}>
+                  {Number(maxWeight.toFixed(1))}
+                </text>
+                <text className="weight-chart-label" x="4" y={chartHeight - chartPadding}>
+                  {Number(minWeight.toFixed(1))}
+                </text>
+              </svg>
+            </div>
+          )}
+        </section>
+
+        <section className="panel">
+          <h2>Entries</h2>
+
+          {sortedWeightEntriesNewest.length === 0 && (
+            <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>
+          )}
+
+          <div className="weight-entry-list">
+            {sortedWeightEntriesNewest.map((entry) => (
+              <div className="weight-entry-row" key={entry.id}>
+                <div>
+                  <strong>{formatShortDate(entry.date)}</strong>
+                  <span>{formatWeightValue(entry.weight, entry.unit)}</span>
+                  {entry.note && <small>{entry.note}</small>}
+                </div>
+                <button type="button" onClick={() => setWeightEntryToDelete(entry)}>
+                  Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {bottomNav}
+      </main>
+    );
+  }
+
   if (appView === "library") {
     return (
       <main className="app">
@@ -2220,12 +2675,24 @@ function App() {
               </button>
             </div>
 
-            <input
-              className="library-search"
-              value={libraryQuery}
-              placeholder={`Search ${foodLibraryTab}...`}
-              onChange={(e) => setLibraryQuery(e.target.value)}
-            />
+            <div className="search-row">
+              <input
+                className="library-search"
+                value={libraryQuery}
+                placeholder={`Search ${foodLibraryTab}...`}
+                onChange={(e) => setLibraryQuery(e.target.value)}
+              />
+              {foodLibraryTab === "custom" && (
+                <button type="button" onClick={createLibraryCustomFood}>
+                  Add custom
+                </button>
+              )}
+              {foodLibraryTab === "recipes" && (
+                <button type="button" onClick={createLibraryRecipe}>
+                  Add recipe
+                </button>
+              )}
+            </div>
 
             <div className="library-list">
               {foodLibraryTab === "recent" && libraryRecentFoods.length === 0 && (
@@ -2243,7 +2710,7 @@ function App() {
                     onClick={() => setLibrarySelection({ type: "recent", food })}
                   >
                     <strong>{food.name}</strong>
-                    <span>Brand: {food.brand || "Generic"}</span>
+                    <span>Brand: {getBrandDisplayName(food.brand)}</span>
                     <span>
                       {food.calories} cal per {food.servingSize}
                     </span>
@@ -2266,7 +2733,7 @@ function App() {
                     onClick={() => setLibrarySelection({ type: "custom", food })}
                   >
                     <strong>{food.name}</strong>
-                    <span>Brand: {food.brand || "Generic"}</span>
+                    <span>Brand: {getBrandDisplayName(food.brand)}</span>
                     <span>
                       {food.calories} cal per {food.servingSize}
                     </span>
@@ -2298,12 +2765,14 @@ function App() {
           </div>
 
           <aside className="library-detail">
-            {!librarySelection && <p className="empty-meal">Select a food to view details.</p>}
+            {!librarySelection && !isCreatingLibraryCustomFood && !isCreatingLibraryRecipe && (
+              <p className="empty-meal">Select a food to view details.</p>
+            )}
 
             {librarySelection && (
               <>
                 <h2>{librarySelection.food.name}</h2>
-                <p>{librarySelection.food.brand || "Generic"}</p>
+                <p>{getBrandDisplayName(librarySelection.food.brand)}</p>
                 <div className="nutrition-grid">
                   <span>Serving</span>
                   <strong>{librarySelection.food.servingSize}</strong>
@@ -2341,8 +2810,10 @@ function App() {
               </div>
             )}
 
-            {librarySelection?.type === "custom" && editingCustomFoodId === librarySelection.food.id && (
+            {(isCreatingLibraryCustomFood ||
+              (librarySelection?.type === "custom" && editingCustomFoodId === librarySelection.food.id)) && (
               <div className="custom-food-form library-edit-form">
+                {isCreatingLibraryCustomFood && <h2>Create Custom Food</h2>}
                 <label>
                   Name
                   <input
@@ -2481,8 +2952,11 @@ function App() {
                   />
                 </label>
                 <div className="form-actions">
-                  <button type="button" onClick={saveLibraryCustomFood}>
-                    Save
+                  <button
+                    type="button"
+                    onClick={isCreatingLibraryCustomFood ? saveNewLibraryCustomFood : saveLibraryCustomFood}
+                  >
+                    {isCreatingLibraryCustomFood ? "Create" : "Save"}
                   </button>
                   <button type="button" onClick={cancelLibraryEditing}>
                     Cancel
@@ -2516,8 +2990,10 @@ function App() {
               </>
             )}
 
-            {librarySelection?.type === "recipe" && editingRecipeId === librarySelection.food.id && (
+            {(isCreatingLibraryRecipe ||
+              (librarySelection?.type === "recipe" && editingRecipeId === librarySelection.food.id)) && (
               <div className="recipe-builder library-edit-form">
+                {isCreatingLibraryRecipe && <h2>Create Recipe</h2>}
                 <div className="custom-food-form">
                   <label>
                     Recipe name
@@ -2557,6 +3033,66 @@ function App() {
                   </label>
                 </div>
 
+                <div className="search-row">
+                  <input
+                    value={recipeIngredientQuery}
+                    placeholder="Search USDA and custom foods..."
+                    onChange={(e) => setRecipeIngredientQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
+                  />
+                  <button type="button" onClick={searchRecipeIngredientFoods}>
+                    Search
+                  </button>
+                </div>
+
+                {recipeIngredientOptions.length > 0 && (
+                  <div className="ingredient-picker">
+                    {recipeIngredientOptions.map((food) => (
+                      <button
+                        className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
+                        key={food.id}
+                        type="button"
+                        onClick={() => selectRecipeIngredient(food)}
+                      >
+                        <strong>{getFoodDisplayName(food)}</strong>
+                        <span>
+                          {food.calories} cal per {food.servingSize}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {isSearchingRecipeIngredients && <p className="empty-meal">Searching foods...</p>}
+
+                {pendingRecipeIngredient && (
+                  <div className="ingredient-confirm">
+                    <div>
+                      <strong>{getFoodDisplayName(pendingRecipeIngredient)}</strong>
+                      <span>
+                        {pendingRecipeIngredient.calories} cal per{" "}
+                        {pendingRecipeIngredient.servingSize}
+                      </span>
+                    </div>
+                    <label>
+                      Quantity
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={pendingRecipeIngredientQuantity}
+                        onChange={(e) => setPendingRecipeIngredientQuantity(e.target.value)}
+                      />
+                    </label>
+                    <button type="button" onClick={confirmLibraryRecipeIngredient}>
+                      Add ingredient
+                    </button>
+                    <button type="button" onClick={() => setPendingRecipeIngredient(null)}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
                 <div className="ingredient-list">
                   {libraryRecipeIngredients.map((ingredient) => (
                     <div className="ingredient-row" key={ingredient.food.id}>
@@ -2582,8 +3118,11 @@ function App() {
                 </div>
 
                 <div className="form-actions">
-                  <button type="button" onClick={saveLibraryRecipe}>
-                    Save
+                  <button
+                    type="button"
+                    onClick={isCreatingLibraryRecipe ? saveNewLibraryRecipe : saveLibraryRecipe}
+                  >
+                    {isCreatingLibraryRecipe ? "Create" : "Save"}
                   </button>
                   <button type="button" onClick={cancelLibraryEditing}>
                     Cancel
@@ -2752,15 +3291,16 @@ function App() {
                       selectedPortion,
                       isLoadingDetail
                     );
-
                     return (
                       <button
                         className={`food-card ${selectedFood?.id === food.id ? "selected" : ""}`}
                         key={food.id}
                         onClick={() => selectFood(food)}
                       >
-                        <strong>{food.name}</strong>
-                        <span>Brand: {food.brand || "Generic"}</span>
+                        <strong>{getFoodDisplayName(food)}</strong>
+                        <span className="food-card-meta">
+                          <span>Brand: {getBrandDisplayName(food.brand)}</span>
+                        </span>
                         <span>
                           {resultDisplay.isLoading
                             ? "Loading serving details..."
@@ -2786,7 +3326,7 @@ function App() {
                     onClick={() => selectLocalFood(food)}
                   >
                     <strong>{food.name}</strong>
-                    <span>Brand: {food.brand || "Generic"}</span>
+                    <span>Brand: {getBrandDisplayName(food.brand)}</span>
                     <span>
                       {food.calories} cal per {food.servingSize}
                     </span>
@@ -2994,7 +3534,7 @@ function App() {
                         onClick={() => selectLocalFood(food)}
                       >
                         <strong>{food.name}</strong>
-                        <span>Brand: {food.brand || "Generic"}</span>
+                        <span>Brand: {getBrandDisplayName(food.brand)}</span>
                         <span>
                           {food.calories} cal per {food.servingSize}
                         </span>
@@ -3088,19 +3628,24 @@ function App() {
                           <p className="empty-meal">Search USDA, or add custom foods to use as ingredients.</p>
                         )}
 
-                        {recipeIngredientOptions.map((food) => (
-                          <button
-                            className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
-                            key={food.id}
-                            type="button"
-                            onClick={() => selectRecipeIngredient(food)}
-                          >
-                            <strong>{food.name}</strong>
-                            <span>
-                              {food.calories} cal per {food.servingSize}
-                            </span>
-                          </button>
-                        ))}
+                        {recipeIngredientOptions.map((food) => {
+                          return (
+                            <button
+                              className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
+                              key={food.id}
+                              type="button"
+                              onClick={() => selectRecipeIngredient(food)}
+                            >
+                              <strong>{getFoodDisplayName(food)}</strong>
+                              <span className="food-card-meta">
+                                <span>Brand: {getBrandDisplayName(food.brand)}</span>
+                              </span>
+                              <span>
+                                {food.calories} cal per {food.servingSize}
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       {pendingRecipeIngredient && (
