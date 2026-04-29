@@ -76,7 +76,7 @@ type PortionOption = {
 
 type AddFoodTab = "search" | "recent" | "custom" | "recipes";
 
-type AppView = "home" | "day" | "library";
+type AppView = "home" | "day" | "library" | "profile";
 
 type FoodLibraryTab = "recent" | "custom" | "recipes";
 
@@ -84,6 +84,20 @@ type LibrarySelection =
   | { type: "recent"; food: Food & { loggedCount?: number; lastLoggedDate?: string } }
   | { type: "custom"; food: Food }
   | { type: "recipe"; food: Recipe };
+
+type Goals = {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
+type GoalsForm = {
+  calories: string;
+  protein: string;
+  carbs: string;
+  fat: string;
+};
 
 type CustomFoodForm = {
   name: string;
@@ -199,6 +213,22 @@ function getSavedRecipes() {
   if (!saved) return [];
 
   return JSON.parse(saved) as Recipe[];
+}
+
+function getSavedGoals(): Goals | null {
+  const saved = localStorage.getItem("goals");
+  if (!saved) return null;
+  return JSON.parse(saved) as Goals;
+}
+
+function goalsToForm(goals: Goals | null): GoalsForm {
+  if (!goals) return { calories: "", protein: "", carbs: "", fat: "" };
+  return {
+    calories: String(goals.calories),
+    protein: String(goals.protein),
+    carbs: String(goals.carbs),
+    fat: String(goals.fat),
+  };
 }
 
 function saveRecipes(recipes: Recipe[]) {
@@ -786,6 +816,8 @@ function App() {
   const [foodLibraryTab, setFoodLibraryTab] = useState<FoodLibraryTab>("recent");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [librarySelection, setLibrarySelection] = useState<LibrarySelection | null>(null);
+  const [goals, setGoals] = useState<Goals | null>(() => getSavedGoals());
+  const [goalsForm, setGoalsForm] = useState<GoalsForm>(() => goalsToForm(getSavedGoals()));
   const [editingCustomFoodId, setEditingCustomFoodId] = useState<number | null>(null);
   const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
   const [libraryCustomFoodForm, setLibraryCustomFoodForm] =
@@ -1086,6 +1118,20 @@ function App() {
     cancelLibraryEditing();
   }
 
+  function submitGoals() {
+    const calories = Number(goalsForm.calories);
+    const protein = Number(goalsForm.protein);
+    const carbs = Number(goalsForm.carbs);
+    const fat = Number(goalsForm.fat);
+
+    if (!Number.isFinite(calories) || calories <= 0) return;
+    if (![protein, carbs, fat].every((v) => Number.isFinite(v) && v >= 0)) return;
+
+    const newGoals = { calories: Math.round(calories), protein, carbs, fat };
+    setGoals(newGoals);
+    localStorage.setItem("goals", JSON.stringify(newGoals));
+  }
+
 
   function cancelLibraryEditing() {
     setEditingCustomFoodId(null);
@@ -1243,6 +1289,14 @@ function App() {
         <span className="nav-icon">⊞</span>
         <span>Library</span>
       </button>
+      <button
+        type="button"
+        className={appView === "profile" ? "active" : ""}
+        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("profile"); }}
+      >
+        <span className="nav-icon">◉</span>
+        <span>Profile</span>
+      </button>
     </nav>
   );
 
@@ -1288,22 +1342,28 @@ function App() {
           <p className="week-range">{formatWeekRange(weekDates[0], weekDates[6])}</p>
 
           <div className="week-summary">
-            <div className="summary-card">
-              <span>Avg Cal / day</span>
-              <strong>{weekAvg.calories}</strong>
-            </div>
-            <div className="summary-card">
-              <span>Avg Protein</span>
-              <strong>{formatMacro(weekAvg.protein)}g</strong>
-            </div>
-            <div className="summary-card">
-              <span>Avg Carbs</span>
-              <strong>{formatMacro(weekAvg.carbs)}g</strong>
-            </div>
-            <div className="summary-card">
-              <span>Avg Fat</span>
-              <strong>{formatMacro(weekAvg.fat)}g</strong>
-            </div>
+            {[
+              { label: "Avg Cal / day", value: weekAvg.calories, goal: goals?.calories ?? null, unit: "", isInt: true },
+              { label: "Avg Protein", value: weekAvg.protein, goal: goals?.protein ?? null, unit: "g", isInt: false },
+              { label: "Avg Carbs", value: weekAvg.carbs, goal: goals?.carbs ?? null, unit: "g", isInt: false },
+              { label: "Avg Fat", value: weekAvg.fat, goal: goals?.fat ?? null, unit: "g", isInt: false },
+            ].map(({ label, value, goal, unit, isInt }) => (
+              <div className="summary-card" key={label}>
+                <span>{label}</span>
+                <strong>
+                  {isInt ? value : formatMacro(value)}{unit}
+                  {goal ? ` / ${goal}${unit}` : ""}
+                </strong>
+                {goal && goal > 0 && (
+                  <div className="macro-bar-track">
+                    <div
+                      className={`macro-bar-fill${value > goal ? " over" : ""}`}
+                      style={{ width: `${Math.min(100, Math.round((value / goal) * 100))}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
 
           <div className="week-bars" aria-label="Calories per day this week">
@@ -1335,6 +1395,56 @@ function App() {
           {loggedDayCount === 0 && (
             <p className="empty-meal">No food logged this week. Head to Log to get started.</p>
           )}
+        </section>
+
+        {bottomNav}
+      </main>
+    );
+  }
+
+  if (appView === "profile") {
+    return (
+      <main className="app">
+        <div className="top-bar">
+          <h1>Profile</h1>
+        </div>
+
+        <section className="panel">
+          <h2>Daily Goals</h2>
+          <p className="week-range">Set your targets and track progress in the Log and Home views.</p>
+
+          <div className="goals-form">
+            {[
+              { key: "calories" as const, label: "Calories", unit: "cal / day" },
+              { key: "protein" as const, label: "Protein", unit: "g / day" },
+              { key: "carbs" as const, label: "Carbs", unit: "g / day" },
+              { key: "fat" as const, label: "Fat", unit: "g / day" },
+            ].map(({ key, label, unit }) => (
+              <label key={key}>
+                {label}
+                <div className="goals-input-row">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={goalsForm[key]}
+                    onChange={(e) => setGoalsForm({ ...goalsForm, [key]: e.target.value })}
+                  />
+                  <span>{unit}</span>
+                </div>
+              </label>
+            ))}
+
+            <button type="button" className="primary-button" onClick={submitGoals}>
+              Save goals
+            </button>
+
+            {goals && (
+              <p className="empty-meal">
+                Current: {goals.calories} cal / {goals.protein}g P / {goals.carbs}g C / {goals.fat}g F
+              </p>
+            )}
+          </div>
         </section>
 
         {bottomNav}
@@ -1783,22 +1893,28 @@ function App() {
 
         <div className="daily-nutrition-summary">
           <h3>Daily Nutrition</h3>
-          <div>
-            <span>Calories</span>
-            <strong>{totalCalories}</strong>
-          </div>
-          <div>
-            <span>Protein</span>
-            <strong>{formatMacro(dailyTotals.protein)}g</strong>
-          </div>
-          <div>
-            <span>Carbs</span>
-            <strong>{formatMacro(dailyTotals.carbs)}g</strong>
-          </div>
-          <div>
-            <span>Fat</span>
-            <strong>{formatMacro(dailyTotals.fat)}g</strong>
-          </div>
+          {[
+            { label: "Calories", value: totalCalories, goal: goals?.calories ?? null, unit: "" },
+            { label: "Protein", value: dailyTotals.protein, goal: goals?.protein ?? null, unit: "g" },
+            { label: "Carbs", value: dailyTotals.carbs, goal: goals?.carbs ?? null, unit: "g" },
+            { label: "Fat", value: dailyTotals.fat, goal: goals?.fat ?? null, unit: "g" },
+          ].map(({ label, value, goal, unit }) => (
+            <div key={label}>
+              <span>{label}</span>
+              <strong>
+                {label === "Calories" ? value : formatMacro(value)}{unit}
+                {goal ? ` / ${goal}${unit}` : ""}
+              </strong>
+              {goal && goal > 0 && (
+                <div className="macro-bar-track">
+                  <div
+                    className={`macro-bar-fill${value > goal ? " over" : ""}`}
+                    style={{ width: `${Math.min(100, Math.round((value / goal) * 100))}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
 
         <div className="meal-groups">

@@ -564,3 +564,55 @@ input, button, textarea {
     display: none;
   }
 }
+
+/* Macro progress bars (day view + home screen cards) */
+.macro-bar-track {
+  height: 5px;
+  background: #3a3a48;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.3rem;
+}
+
+.macro-bar-fill {
+  height: 100%;
+  background: #c084fc;
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.macro-bar-fill.over {
+  background: #f87171;
+}
+
+/* Profile / goals form */
+.goals-form {
+  display: grid;
+  gap: 1.1rem;
+  max-width: 360px;
+  margin-top: 1rem;
+}
+
+.goals-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.goals-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.goals-input-row input {
+  width: 110px;
+  box-sizing: border-box;
+}
+
+.goals-input-row span {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
