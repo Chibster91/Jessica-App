@@ -1422,6 +1422,7 @@ function App() {
   const [completedDays, setCompletedDays] = useState<string[]>(() => getSavedCompletedDays());
   const [showStreakPopup, setShowStreakPopup] = useState(false);
   const [topFoods, setTopFoods] = useState<TopFoodEntry[]>(() => getSavedTopFoods());
+  const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     localStorage.setItem(`log-${selectedDate}`, JSON.stringify(log));
@@ -1445,6 +1446,16 @@ function App() {
   function changeSelectedDate(date: string) {
     setSelectedDate(date);
     setLog(getSavedLog(date));
+  }
+
+  function toggleHomeDate(date: string) {
+    if (homeSelectedDate === date) {
+      setHomeSelectedDate(null);
+      return;
+    }
+
+    setHomeSelectedDate(date);
+    changeSelectedDate(date);
   }
 
   function moveSelectedDate(dayOffset: number) {
@@ -2175,39 +2186,89 @@ function startEditWeightEntry(entry: WeightEntry) {
       };
     });
 
-    const selIdx = weekDates.indexOf(selectedDate);
-    const selStats = weekStats[selIdx] ?? { calories: 0, protein: 0, carbs: 0, fat: 0, date: selectedDate };
-    const todayCalories = selStats.calories;
-    const todayProtein = selStats.protein;
-    const todayCarbs = selStats.carbs;
-    const todayFat = selStats.fat;
     const goalCal = goals?.calories ?? 0;
-    const remaining = goalCal - todayCalories;
-
     const maxDayCalories = Math.max(...weekStats.map((d) => d.calories), 1);
-    const maxWeekMacros = Math.max(...weekStats.map((d) => d.fat + d.carbs + d.protein), 1);
-
-    const totalMacroGrams = todayFat + todayCarbs + todayProtein;
-    const DONUT_R = 36;
-    const DONUT_CIRC = 2 * Math.PI * DONUT_R;
-    const fatArc = totalMacroGrams > 0 ? (todayFat / totalMacroGrams) * DONUT_CIRC : 0;
-    const carbsArc = totalMacroGrams > 0 ? (todayCarbs / totalMacroGrams) * DONUT_CIRC : 0;
-    const proteinArc = totalMacroGrams > 0 ? (todayProtein / totalMacroGrams) * DONUT_CIRC : 0;
-
-    const completedStreak = getCompletedStreak();
-    const weekLabel = formatWeekOf(weekDates[0], weekDates[6]);
-    const calPct = goalCal > 0 ? Math.min(100, Math.round((todayCalories / goalCal) * 100)) : 0;
+    const weekCalorieGoal = goalCal * 7;
+    const weekTotalCalories = weekStats.reduce((s, d) => s + d.calories, 0);
     const weekTotalProtein = weekStats.reduce((s, d) => s + d.protein, 0);
     const weekTotalCarbs = weekStats.reduce((s, d) => s + d.carbs, 0);
     const weekTotalFat = weekStats.reduce((s, d) => s + d.fat, 0);
+    const selectedHomeStats = homeSelectedDate
+      ? weekStats.find((day) => day.date === homeSelectedDate) ?? null
+      : null;
+    const displayStats = selectedHomeStats ?? {
+      date: weekDates[0],
+      calories: weekTotalCalories,
+      protein: weekTotalProtein,
+      carbs: weekTotalCarbs,
+      fat: weekTotalFat,
+    };
+    const displayGoalCal = selectedHomeStats ? goalCal : weekCalorieGoal;
+    const remaining = displayGoalCal - displayStats.calories;
+
+    const totalMacroGrams = displayStats.fat + displayStats.carbs + displayStats.protein;
+    const macroPieSlices = [
+      { label: "Protein", value: displayStats.protein, color: "#a32c2c" },
+      { label: "Carbs", value: displayStats.carbs, color: "#2e44b3" },
+      { label: "Fat", value: displayStats.fat, color: "#ffbb00" },
+    ].reduce(
+      (slices, macro) => {
+        if (totalMacroGrams <= 0 || macro.value <= 0) return slices;
+
+        const startAngle = slices.at(-1)?.endAngle ?? -90;
+        const angle = (macro.value / totalMacroGrams) * 360;
+        const endAngle = startAngle + angle;
+        const midAngle = startAngle + angle / 2;
+        const startRad = (Math.PI / 180) * startAngle;
+        const endRad = (Math.PI / 180) * endAngle;
+        const midRad = (Math.PI / 180) * midAngle;
+        const largeArc = angle > 180 ? 1 : 0;
+        const startX = 50 + 48 * Math.cos(startRad);
+        const startY = 50 + 48 * Math.sin(startRad);
+        const endX = 50 + 48 * Math.cos(endRad);
+        const endY = 50 + 48 * Math.sin(endRad);
+        const labelX = 50 + 27 * Math.cos(midRad);
+        const labelY = 50 + 27 * Math.sin(midRad);
+
+        return [
+          ...slices,
+          {
+            ...macro,
+            endAngle,
+            percentage: Math.round((macro.value / totalMacroGrams) * 100),
+            path: `M 50 50 L ${startX} ${startY} A 48 48 0 ${largeArc} 1 ${endX} ${endY} Z`,
+            labelX,
+            labelY,
+          },
+        ];
+      },
+      [] as {
+        label: string;
+        value: number;
+        color: string;
+        endAngle: number;
+        percentage: number;
+        path: string;
+        labelX: number;
+        labelY: number;
+      }[]
+    );
+
+    const completedStreak = getCompletedStreak();
+    const weekLabel = formatWeekOf(weekDates[0], weekDates[6]);
+    const calPct = displayGoalCal > 0
+      ? Math.min(100, Math.round((displayStats.calories / displayGoalCal) * 100))
+      : 0;
+    const calorieBudgetMarkerPct = 75;
+    const calorieOverflowCapacity = goalCal * 0.35;
 
     return (
       <main className="app">
         {/* Week navigation */}
         <div className="dash-week-nav">
-          <button type="button" className="dash-week-arrow" onClick={() => changeSelectedDate(shiftDate(selectedDate, -7))} aria-label="Previous week">‹</button>
+          <button type="button" className="dash-week-arrow" onClick={() => { setHomeSelectedDate(null); changeSelectedDate(shiftDate(selectedDate, -7)); }} aria-label="Previous week">‹</button>
           <span className="dash-week-label">Week of: {weekLabel}</span>
-          <button type="button" className="dash-week-arrow" onClick={() => changeSelectedDate(shiftDate(selectedDate, 7))} aria-label="Next week">›</button>
+          <button type="button" className="dash-week-arrow" onClick={() => { setHomeSelectedDate(null); changeSelectedDate(shiftDate(selectedDate, 7)); }} aria-label="Next week">›</button>
         </div>
 
         {/* CALORIES CARD */}
@@ -2218,28 +2279,36 @@ function startEditWeightEntry(entry: WeightEntry) {
               <div className="dash-cal-bar-fill" style={{ width: `${calPct}%` }} />
             </div>
             <span className="dash-cal-number" style={{ color: remaining < 0 ? "#f87171" : "#f3f4f6" }}>
-              {todayCalories.toLocaleString()}
+              {displayStats.calories.toLocaleString()}
             </span>
             <span className="dash-cal-sub">
-              {goalCal > 0
+              {displayGoalCal > 0
                 ? (remaining >= 0 ? `${remaining.toLocaleString()} remaining` : `${Math.abs(remaining).toLocaleString()} over`)
                 : "calories eaten"}
             </span>
           </div>
           <div className="dash-day-bars" aria-label="Weekly calorie bars">
             {weekStats.map(({ date, calories }) => {
-              const isSel = date === selectedDate;
+              const isSel = date === homeSelectedDate;
               const isToday = date === today;
-              const barH = calories > 0 ? Math.max(4, Math.round((calories / maxDayCalories) * 52)) : 0;
+              const greenPct = goalCal > 0
+                ? Math.min(calorieBudgetMarkerPct, (calories / goalCal) * calorieBudgetMarkerPct)
+                : Math.min(100, (calories / maxDayCalories) * 100);
+              const redPct = goalCal > 0 && calories > goalCal
+                ? Math.min(100 - calorieBudgetMarkerPct, ((calories - goalCal) / calorieOverflowCapacity) * (100 - calorieBudgetMarkerPct))
+                : 0;
               const dayLetter = getDayLetter(date);
               return (
                 <button key={date} type="button"
                   className={`dash-day-col${isSel ? " selected" : ""}`}
-                  onClick={() => changeSelectedDate(date)}>
-                  <div className="dash-bar-wrap">
-                    {barH > 0
-                      ? <div className={`dash-cal-bar${isToday ? " today" : ""}${isSel ? " sel" : ""}`} style={{ height: barH }} />
-                      : <div className="dash-bar-nub" />}
+                  aria-pressed={isSel}
+                  onClick={() => toggleHomeDate(date)}>
+                  <div className={`dash-bar-wrap dash-budget-wrap${isSel ? " sel" : ""}`}>
+                    <div className="dash-budget-marker" style={{ bottom: `${calorieBudgetMarkerPct}%` }} />
+                    <div className={`dash-cal-budget-fill${isToday ? " today" : ""}`} style={{ height: `${greenPct}%` }} />
+                    {redPct > 0 && (
+                      <div className="dash-cal-over-fill" style={{ bottom: `${calorieBudgetMarkerPct}%`, height: `${redPct}%` }} />
+                    )}
                   </div>
                   <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{dayLetter}</span>
                 </button>
@@ -2249,91 +2318,112 @@ function startEditWeightEntry(entry: WeightEntry) {
         </section>
 
         {/* MACROS CARD */}
-        <section className="panel dash-card">
+        <section className="panel dash-card dash-macro-card">
           <div className="dash-macro-layout">
             <div className="dash-pie-wrap">
-              <svg viewBox="0 0 100 100" className="dash-pie-svg" aria-label="Macro split">
-                {totalMacroGrams === 0 ? (
-                  <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#3E505B" strokeWidth="10" />
+              <svg viewBox="0 0 100 100" className="dash-pie-chart" role="img" aria-label="Macro split">
+                {macroPieSlices.length > 0 ? (
+                  macroPieSlices.map((slice) => (
+                    <g key={slice.label}>
+                      <path d={slice.path} fill={slice.color} />
+                      <text x={slice.labelX} y={slice.labelY - 2} textAnchor="middle" className="dash-pie-label-name">
+                        {slice.label}
+                      </text>
+                      <text x={slice.labelX} y={slice.labelY + 8} textAnchor="middle" className="dash-pie-label-pct">
+                        {slice.percentage}%
+                      </text>
+                    </g>
+                  ))
                 ) : (
-                  <>
-                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#ffbb00" strokeWidth="10"
-                      strokeDasharray={`${fatArc} ${DONUT_CIRC}`} strokeDashoffset={0} transform="rotate(-90 50 50)" />
-                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#2e44b3" strokeWidth="10"
-                      strokeDasharray={`${carbsArc} ${DONUT_CIRC}`} strokeDashoffset={-fatArc} transform="rotate(-90 50 50)" />
-                    <circle cx="50" cy="50" r={DONUT_R} fill="none" stroke="#a32c2c" strokeWidth="10"
-                      strokeDasharray={`${proteinArc} ${DONUT_CIRC}`} strokeDashoffset={-(fatArc + carbsArc)} transform="rotate(-90 50 50)" />
-                  </>
-                )}
-                {todayCalories > 0 ? (
-                  <>
-                    <text x="50" y="47" textAnchor="middle" className="home-donut-val">{todayCalories}</text>
-                    <text x="50" y="60" textAnchor="middle" className="home-donut-unit">kcal</text>
-                  </>
-                ) : (
-                  <text x="50" y="54" textAnchor="middle" className="home-donut-unit">no data</text>
+                  <circle cx="50" cy="50" r="48" fill="#3E505B" />
                 )}
               </svg>
             </div>
-            <div className="dash-macro-bars-col" aria-label="Weekly macro bars">
-              {weekStats.map(({ date, fat, carbs, protein }) => {
-                const total = fat + carbs + protein;
-                const isSel = date === selectedDate;
-                const barH = total > 0 ? Math.max(4, Math.round((total / maxWeekMacros) * 60)) : 0;
-                const dayLetter = getDayLetter(date);
-                return (
-                  <button key={date} type="button"
-                    className={`dash-day-col${isSel ? " selected" : ""}`}
-                    onClick={() => changeSelectedDate(date)}>
-                    <div className="dash-bar-wrap">
-                      {barH > 0 ? (
-                        <div className="dash-stacked-bar" style={{ height: barH }}>
-                          <div style={{ flex: protein, background: "#a32c2c", minHeight: protein > 0 ? 1 : 0 }} />
-                          <div style={{ flex: carbs, background: "#2e44b3", minHeight: carbs > 0 ? 1 : 0 }} />
-                          <div style={{ flex: fat, background: "#ffbb00", minHeight: fat > 0 ? 1 : 0 }} />
-                        </div>
-                      ) : <div className="dash-bar-nub" />}
-                    </div>
-                    <span className={`dash-bar-day${isSel ? " sel" : ""}`}>{dayLetter}</span>
-                  </button>
-                );
-              })}
+            <div className="dash-macro-side">
+              <div className="dash-macro-meter-col" aria-label="Weekly macro composition bars">
+                {weekStats.map(({ date, protein, carbs, fat }) => {
+                  const isSel = date === homeSelectedDate;
+                  const isToday = date === today;
+                  const total = protein + carbs + fat;
+
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      className={`dash-day-col${isSel ? " selected" : ""}`}
+                      aria-pressed={isSel}
+                      onClick={() => toggleHomeDate(date)}
+                    >
+                      <div className={`dash-macro-meter${isSel ? " sel" : ""}${isToday ? " today" : ""}${total > 0 ? " logged" : ""}`}>
+                        {total > 0 ? (
+                          <div className="dash-macro-meter-fill">
+                            {protein > 0 && <div style={{ flex: protein, background: "#a32c2c" }} />}
+                            {carbs > 0 && <div style={{ flex: carbs, background: "#2e44b3" }} />}
+                            {fat > 0 && <div style={{ flex: fat, background: "#ffbb00" }} />}
+                          </div>
+                        ) : (
+                          <div className="dash-macro-meter-empty" />
+                        )}
+                      </div>
+                      <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{getDayLetter(date)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="dash-macro-summary-line" aria-label="Macro breakdown">
+                <span><b style={{ color: "#c75c56" }}>P</b> {Math.round(displayStats.protein)}g</span>
+                <span><b style={{ color: "#7088d1" }}>C</b> {Math.round(displayStats.carbs)}g</span>
+                <span><b style={{ color: "#ffe066" }}>F</b> {Math.round(displayStats.fat)}g</span>
+              </p>
             </div>
-          </div>
-          <div className="dash-macro-legend">
-            <span className="dash-legend-item protein">● Protein</span>
-            <span className="dash-legend-item fat">● Fat</span>
-            <span className="dash-legend-item carbs">● Carbs</span>
           </div>
         </section>
 
-        {/* QUAD CARD */}
-        <section className="panel dash-card dash-quad-grid">
+        {/* BOTTOM CARDS */}
+        <section className="dash-bottom-grid">
           {/* Top Left: Streak */}
-          <div className="dash-quad-cell">
+          <div className="panel dash-card dash-mini-card">
             <p className="dash-quad-label">Streak</p>
             <strong className="dash-streak-num">{completedStreak > 0 ? completedStreak : "—"}</strong>
             <span className="dash-quad-sub">days completed</span>
           </div>
 
           {/* Top Right: Weekly Macro Goals */}
-          <div className="dash-quad-cell">
+          <div className="panel dash-card dash-mini-card">
             <p className="dash-quad-label">Weekly Goals</p>
             {goals ? (
               <div className="dash-macro-progress-list">
                 {[
-                  { label: "P", total: weekTotalProtein, goal: goals.protein * 7, color: "#a32c2c" },
-                  { label: "F", total: weekTotalFat, goal: goals.fat * 7, color: "#ffbb00" },
-                  { label: "C", total: weekTotalCarbs, goal: goals.carbs * 7, color: "#2e44b3" },
-                ].map(({ label, total, goal, color }) => (
-                  <div key={label} className="dash-macro-prog-row">
-                    <span className="dash-macro-prog-label">{label}</span>
-                    <div className="dash-macro-prog-track">
-                      <div className="dash-macro-prog-fill" style={{ width: `${Math.min(100, goal > 0 ? Math.round((total / goal) * 100) : 0)}%`, background: color }} />
+                  { label: "Protein", total: weekTotalProtein, goal: goals.protein * 7, color: "#a32c2c", overflowColor: "#ef4444" },
+                  { label: "Carbs", total: weekTotalCarbs, goal: goals.carbs * 7, color: "#2e44b3", overflowColor: "#60a5fa" },
+                  { label: "Fat", total: weekTotalFat, goal: goals.fat * 7, color: "#ffbb00", overflowColor: "#f97316" },
+                ].map(({ label, total, goal, color, overflowColor }) => {
+                  const markerPct = 80;
+                  const goalFillPct = goal > 0 ? Math.min(markerPct, (total / goal) * markerPct) : 0;
+                  const overflowPct = goal > 0 && total > goal
+                    ? Math.min(100 - markerPct, ((total - goal) / (goal * 0.25 || 1)) * (100 - markerPct))
+                    : 0;
+                  return (
+                    <div key={label} className="dash-macro-prog-row">
+                      <div className="dash-macro-prog-head">
+                        <span className="dash-macro-prog-label">{label}</span>
+                        <span className="dash-macro-prog-pct">
+                          {goal > 0 ? `${Math.round((total / goal) * 100)}% / ${Math.round(total)}g` : `${Math.round(total)}g`}
+                        </span>
+                      </div>
+                      <div className="dash-macro-prog-track">
+                        <div className="dash-goal-marker" style={{ left: `${markerPct}%` }} />
+                        <div className="dash-macro-prog-fill" style={{ width: `${goalFillPct}%`, background: color }} />
+                        {overflowPct > 0 && (
+                          <div
+                            className="dash-macro-prog-over"
+                            style={{ left: `${markerPct}%`, width: `${overflowPct}%`, background: overflowColor }}
+                          />
+                        )}
+                      </div>
                     </div>
-                    <span className="dash-macro-prog-pct">{goal > 0 ? `${Math.round((total / goal) * 100)}%` : "—"}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="dash-quad-sub">Set goals in Profile</p>
@@ -2341,7 +2431,7 @@ function startEditWeightEntry(entry: WeightEntry) {
           </div>
 
           {/* Bottom Left: Weight */}
-          <div className="dash-quad-cell">
+          <div className="panel dash-card dash-mini-card">
             <p className="dash-quad-label">Weight</p>
             {currentWeightEntry ? (
               <>
@@ -2390,13 +2480,13 @@ function startEditWeightEntry(entry: WeightEntry) {
           </div>
 
           {/* Bottom Right: Top 3 Foods */}
-          <div className="dash-quad-cell">
+          <div className="panel dash-card dash-mini-card">
             <p className="dash-quad-label">Top Foods</p>
             {topFoods.length > 0 ? (
               <ol className="dash-top-foods">
-                {topFoods.slice(0, 3).map((f) => (
+                {topFoods.slice(0, 3).map((f, index) => (
                   <li key={f.name} className="dash-top-food-item">
-                    <span className="dash-food-name">{f.name}</span>
+                    <span className="dash-food-name">{index + 1}. {f.name}</span>
                     <span className="dash-food-count">×{f.count}</span>
                   </li>
                 ))}

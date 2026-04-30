@@ -1701,6 +1701,47 @@ button {
 }
 .dash-cal-bar.today { background: #8AB0AB; }
 .dash-cal-bar.sel { outline: 2px solid #9ec5c0; outline-offset: 1px; }
+.dash-budget-wrap {
+  position: relative;
+  height: 66px;
+  max-width: 24px;
+  margin-inline: auto;
+  justify-content: flex-end;
+  background: rgba(62, 80, 91, 0.34);
+  border: 1px solid #3E505B;
+  border-radius: 4px 4px 2px 2px;
+  overflow: hidden;
+}
+.dash-budget-wrap.sel {
+  outline: 2px solid #9ec5c0;
+  outline-offset: 1px;
+}
+.dash-budget-marker {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: rgba(243, 244, 246, 0.9);
+  z-index: 3;
+}
+.dash-cal-budget-fill,
+.dash-cal-over-fill {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  bottom: 0;
+  transition: height 0.25s ease;
+}
+.dash-cal-budget-fill {
+  background: #4a7c77;
+}
+.dash-cal-budget-fill.today {
+  background: #8AB0AB;
+}
+.dash-cal-over-fill {
+  background: #ef4444;
+  z-index: 2;
+}
 .dash-bar-nub {
   width: 100%; max-width: 22px; height: 2px;
   background: #3E505B; border-radius: 1px;
@@ -1712,14 +1753,48 @@ button {
 .dash-bar-day.today { color: #8AB0AB; }
 
 /* Macros card */
-.dash-macro-layout {
-  display: flex; gap: 0.75rem; align-items: flex-end;
+.dash-macro-card {
+  padding: 0.25rem 0.35rem 0.45rem;
 }
-.dash-pie-wrap { flex-shrink: 0; }
-.dash-pie-svg {
-  width: clamp(76px, 20vw, 96px);
-  height: clamp(76px, 20vw, 96px);
+.dash-macro-layout {
+  display: grid;
+  grid-template-columns: minmax(128px, 0.88fr) minmax(0, 1.12fr);
+  gap: 0.6rem;
+  align-items: stretch;
+  min-height: 174px;
+}
+.dash-pie-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.dash-pie-chart {
+  aspect-ratio: 1 / 1;
+  height: calc(100% - 0.2rem);
+  max-width: 100%;
+  min-height: 164px;
+  border-radius: 50%;
+  border: 1px solid #3E505B;
   display: block;
+  overflow: hidden;
+}
+.dash-pie-label-name,
+.dash-pie-label-pct {
+  fill: #f9fafb;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.dash-pie-label-name {
+  font-size: 7px;
+  font-weight: 700;
+}
+.dash-pie-label-pct {
+  font-size: 8px;
+  font-weight: 800;
 }
 .dash-macro-bars-col { flex: 1; min-width: 0; }
 .dash-stacked-bar {
@@ -1737,24 +1812,178 @@ button {
 .dash-legend-item.protein { color: #c75c56; }
 .dash-legend-item.fat { color: #ffe066; }
 .dash-legend-item.carbs { color: #7088d1; }
-
-/* Quad card */
-.dash-quad-grid {
+.dash-macro-side {
+  min-width: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  gap: 0;
-  padding: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.3rem;
+}
+.dash-macro-meter-col {
+  display: flex;
+  gap: 0.22rem;
+  align-items: stretch;
+  min-width: 0;
+}
+.dash-macro-meter-col .dash-day-col {
+  padding-inline: 0;
+  justify-content: flex-end;
+}
+.dash-macro-meter {
+  position: relative;
+  width: 100%;
+  max-width: 28px;
+  height: 138px;
+  margin-inline: auto;
+  background: rgba(62, 80, 91, 0.34);
+  border: 1px solid #3E505B;
+  border-radius: 4px 4px 2px 2px;
   overflow: hidden;
 }
-.dash-quad-cell {
-  padding: 0.85rem 0.9rem;
-  display: grid; gap: 0.15rem;
-  border: 1px solid transparent;
+.dash-macro-meter.logged {
+  background: transparent;
 }
-.dash-quad-cell:nth-child(1) { border-right: 1px solid #3E505B; border-bottom: 1px solid #3E505B; }
-.dash-quad-cell:nth-child(2) { border-bottom: 1px solid #3E505B; }
-.dash-quad-cell:nth-child(3) { border-right: 1px solid #3E505B; }
+.dash-macro-meter.sel {
+  outline: 2px solid #9ec5c0;
+  outline-offset: 1px;
+}
+.dash-macro-meter.today {
+  border-color: #58716c;
+}
+.dash-macro-meter-fill {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+}
+.dash-macro-meter-empty {
+  position: absolute;
+  left: 50%;
+  bottom: 0.25rem;
+  width: 40%;
+  height: 2px;
+  transform: translateX(-50%);
+  background: #3E505B;
+  border-radius: 2px;
+}
+.dash-macro-summary-line {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 0;
+  color: #d1d5db;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.dash-macro-summary-line span {
+  min-width: 0;
+}
+.dash-macro-breakdown {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 0.5rem;
+  padding-right: 0.2rem;
+}
+.dash-macro-breakdown-title {
+  margin: 0 0 0.1rem;
+  color: #9ca3af;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: left;
+}
+.dash-macro-breakdown-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  color: #d1d5db;
+  font-size: 0.82rem;
+}
+.dash-macro-breakdown-row strong {
+  color: #f3f4f6;
+}
+.dash-macro-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+}
+.dash-macro-day-toggle {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.2rem;
+  margin-top: 0.2rem;
+}
+.dash-macro-day-toggle button {
+  min-width: 0;
+  padding: 0.34rem 0;
+  border: 1px solid #3E505B;
+  border-radius: 6px;
+  background: #152820;
+  color: #9ca3af;
+  font-size: 0.62rem;
+  line-height: 1;
+}
+.dash-macro-day-toggle button.selected {
+  border-color: #8AB0AB;
+  background: #1e3530;
+  color: #f3f4f6;
+}
+
+@media (max-width: 520px) {
+  .dash-macro-layout {
+    grid-template-columns: minmax(102px, 0.85fr) minmax(0, 1.15fr);
+    gap: 0.3rem;
+    min-height: 154px;
+  }
+
+  .dash-pie-chart {
+    min-height: 146px;
+  }
+
+  .dash-macro-meter {
+    height: 118px;
+    max-width: 22px;
+  }
+
+  .dash-macro-breakdown {
+    gap: 0.35rem;
+    padding-right: 0;
+  }
+
+  .dash-macro-breakdown-title {
+    font-size: 0.58rem;
+  }
+
+  .dash-macro-breakdown-row {
+    gap: 0.3rem;
+    font-size: 0.7rem;
+  }
+
+  .dash-macro-summary-line {
+    gap: 0.35rem;
+    font-size: 0.62rem;
+  }
+}
+
+/* Quad card */
+.dash-bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.dash-mini-card {
+  aspect-ratio: 1 / 1;
+  margin: 0;
+  padding: 0.85rem 0.9rem;
+  display: grid;
+  align-content: start;
+  gap: 0.18rem;
+  overflow: hidden;
+}
 .dash-quad-label {
   font-size: 0.62rem; font-weight: 700; letter-spacing: 0.07em;
   text-transform: uppercase; color: #6b7280; margin: 0 0 0.2rem;
@@ -1769,18 +1998,53 @@ button {
   font-size: 1.3rem; font-weight: 700; color: #f3f4f6; line-height: 1.1;
 }
 .dash-macro-progress-list { display: grid; gap: 0.35rem; margin-top: 0.1rem; }
-.dash-macro-prog-row { display: flex; align-items: center; gap: 0.35rem; }
-.dash-macro-prog-label { font-size: 0.65rem; font-weight: 700; color: #9ca3af; width: 0.8rem; flex-shrink: 0; }
+.dash-macro-prog-row { display: grid; gap: 0.15rem; }
+.dash-macro-prog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.dash-macro-prog-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #d1d5db;
+  min-width: 0;
+}
 .dash-macro-prog-track {
-  flex: 1; height: 7px;
+  position: relative;
+  height: 8px;
   background: #3E505B; border-radius: 4px;
   overflow: hidden; border: 1px solid #3E505B;
 }
 .dash-macro-prog-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%; border-radius: 4px;
   transition: width 0.3s ease;
 }
-.dash-macro-prog-pct { font-size: 0.62rem; color: #6b7280; min-width: 2rem; text-align: right; }
+.dash-macro-prog-over {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+  transition: width 0.3s ease;
+}
+.dash-goal-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: rgba(243, 244, 246, 0.9);
+  z-index: 3;
+}
+.dash-macro-prog-pct {
+  font-size: 0.58rem;
+  color: #9ca3af;
+  text-align: right;
+  white-space: nowrap;
+}
 .dash-top-foods { list-style: none; padding: 0; margin: 0.1rem 0 0; display: grid; gap: 0.25rem; }
 .dash-top-food-item { display: flex; justify-content: space-between; align-items: center; gap: 0.35rem; }
 .dash-food-name { font-size: 0.73rem; color: #d1d5db; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
