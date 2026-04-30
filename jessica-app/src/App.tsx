@@ -216,6 +216,12 @@ declare global {
   }
 }
 
+type GoogleDriveUploadResponse = {
+  id?: string;
+  name?: string;
+  webViewLink?: string;
+};
+
 const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
 const poundsPerKilogram = 2.2046226218;
 const debugLogKey = "jessicaDebugLog";
@@ -1590,6 +1596,8 @@ function App() {
   const [amountUnit, setAmountUnit] = useState<AmountUnit>("serving");
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [exportDriveLink, setExportDriveLink] = useState("");
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   const [googleDriveClientId, setGoogleDriveClientId] = useState(() => getConfiguredGoogleClientId());
 
   useEffect(() => {
@@ -2284,6 +2292,7 @@ function App() {
   }
 
   function downloadDayExport() {
+    setExportDriveLink("");
     const file = getDayExportFile();
     const url = URL.createObjectURL(file);
     const link = document.createElement("a");
@@ -2297,6 +2306,7 @@ function App() {
   }
 
   async function shareDayExport() {
+    setExportDriveLink("");
     const file = getDayExportFile();
     const shareData = {
       title: `Food Log ${selectedDate}`,
@@ -2365,8 +2375,30 @@ function App() {
     });
   }
 
+  async function getGoogleDriveUploadError(response: Response) {
+    const fallback = `Google Drive upload failed (${response.status}).`;
+    const errorText = await response.text();
+
+    if (!errorText) return fallback;
+
+    try {
+      const parsed = JSON.parse(errorText) as {
+        error?: {
+          message?: string;
+          status?: string;
+        };
+      };
+      return parsed.error?.message || parsed.error?.status || fallback;
+    } catch {
+      return errorText;
+    }
+  }
+
   async function uploadDayExportToDrive() {
+    if (isUploadingToDrive) return;
+
     const clientId = googleDriveClientId.trim();
+    setExportDriveLink("");
 
     if (!clientId) {
       setExportStatus("Add your Google OAuth Client ID first.");
@@ -2375,6 +2407,7 @@ function App() {
 
     localStorage.setItem(googleDriveClientIdKey, clientId);
     setExportStatus("Opening Google authorization...");
+    setIsUploadingToDrive(true);
 
     try {
       const accessToken = await getGoogleDriveAccessToken(clientId);
@@ -2411,18 +2444,16 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || `Google Drive upload failed (${response.status}).`);
+        throw new Error(await getGoogleDriveUploadError(response));
       }
 
-      const uploaded = (await response.json()) as { name?: string; webViewLink?: string };
-      setExportStatus(
-        uploaded.webViewLink
-          ? `Uploaded ${uploaded.name ?? file.name}: ${uploaded.webViewLink}`
-          : `Uploaded ${uploaded.name ?? file.name} to Google Drive.`
-      );
+      const uploaded = (await response.json()) as GoogleDriveUploadResponse;
+      setExportDriveLink(uploaded.webViewLink ?? "");
+      setExportStatus(`Uploaded ${uploaded.name ?? file.name} to Google Drive.`);
     } catch (error) {
       setExportStatus(error instanceof Error ? error.message : "Google Drive upload failed.");
+    } finally {
+      setIsUploadingToDrive(false);
     }
   }
 
@@ -5445,23 +5476,29 @@ function startEditWeightEntry(entry: WeightEntry) {
                 <input
                   value={googleDriveClientId}
                   placeholder="123...apps.googleusercontent.com"
+                  disabled={isUploadingToDrive}
                   onChange={(e) => setGoogleDriveClientId(e.target.value)}
                 />
               </label>
             )}
             {exportStatus && <p className="scan-status">{exportStatus}</p>}
+            {exportDriveLink && (
+              <a className="drive-export-link" href={exportDriveLink} target="_blank" rel="noreferrer">
+                Open in Google Drive
+              </a>
+            )}
             <div className="floating-actions">
-              <button type="button" className="primary-button" onClick={downloadDayExport}>
+              <button type="button" className="primary-button" onClick={downloadDayExport} disabled={isUploadingToDrive}>
                 Download JSON
               </button>
-              <button type="button" onClick={uploadDayExportToDrive}>
-                Upload Drive
+              <button type="button" onClick={uploadDayExportToDrive} disabled={isUploadingToDrive}>
+                {isUploadingToDrive ? "Uploading..." : "Upload Drive"}
               </button>
             </div>
-            <button type="button" onClick={shareDayExport}>
+            <button type="button" onClick={shareDayExport} disabled={isUploadingToDrive}>
               Share Sheet
             </button>
-            <button type="button" className="secondary-button" onClick={() => setIsExportPanelOpen(false)}>
+            <button type="button" className="secondary-button" onClick={() => setIsExportPanelOpen(false)} disabled={isUploadingToDrive}>
               Close
             </button>
           </div>

@@ -459,6 +459,12 @@ input, button, textarea {
   width: 100%;
 }
 
+button:disabled,
+input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .danger-button {
   background: #7f1d1d;
   color: #fee2e2;
@@ -1634,6 +1640,13 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
+}
+
+.drive-export-link {
+  color: #8AB0AB;
+  font-size: 0.9rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
 }
 
 .serving-overlay {
