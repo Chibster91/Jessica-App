@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from "react";
 import { recognize } from "tesseract.js";
 import "./App.css";
 
@@ -179,8 +179,49 @@ type RecipeForm = {
   notes: string;
 };
 
+type AmountUnit = "serving" | "g" | "ml" | "oz";
+type MeasuredAmountUnit = Exclude<AmountUnit, "serving">;
+
+type DebugLogEntry = {
+  time: string;
+  event: string;
+  detail?: unknown;
+};
+
+type GoogleTokenResponse = {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+};
+
+type GoogleTokenClient = {
+  requestAccessToken: (options?: { prompt?: string }) => void;
+};
+
+type GoogleAccounts = {
+  accounts?: {
+    oauth2?: {
+      initTokenClient: (config: {
+        client_id: string;
+        scope: string;
+        callback: (response: GoogleTokenResponse) => void;
+      }) => GoogleTokenClient;
+    };
+  };
+};
+
+declare global {
+  interface Window {
+    google?: GoogleAccounts;
+  }
+}
+
 const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
 const poundsPerKilogram = 2.2046226218;
+const debugLogKey = "jessicaDebugLog";
+const googleDriveClientIdKey = "googleDriveClientId";
+const googleDriveScope = "https://www.googleapis.com/auth/drive.file";
+const googleIdentityScriptUrl = "https://accounts.google.com/gsi/client";
 
 const emptyCustomFoodForm: CustomFoodForm = {
   name: "",
@@ -296,11 +337,69 @@ type LogItem = Food & { logId: string; category: MealCategory; quantity: number 
 
 type SavedLogItem = Food & { logId: string; category?: MealCategory; quantity?: number };
 
-function getSavedLog(date: string) {
-  const saved = localStorage.getItem(`log-${date}`);
-  if (!saved) return [];
+function appendDebugLog(event: string, detail?: unknown) {
+  const entry: DebugLogEntry = {
+    time: new Date().toISOString(),
+    event,
+    detail,
+  };
 
-  return (JSON.parse(saved) as SavedLogItem[]).map((item) => ({
+  console.info(`[Jessica debug] ${event}`, detail ?? "");
+
+  try {
+    const saved = localStorage.getItem(debugLogKey);
+    const entries = saved ? (JSON.parse(saved) as DebugLogEntry[]) : [];
+    localStorage.setItem(debugLogKey, JSON.stringify([...entries.slice(-29), entry]));
+  } catch (error) {
+    console.warn("[Jessica debug] Could not persist debug log", error);
+  }
+}
+
+function getStorageArray<T>(key: string, fallback: T[] = []) {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? (JSON.parse(saved) as T[]) : fallback;
+  } catch (error) {
+    appendDebugLog("storage-read-failed", {
+      key,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return fallback;
+  }
+}
+
+function setStorageJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    appendDebugLog("storage-write-failed", {
+      key,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+function verifyStorageCount(key: string, expectedCount: number) {
+  try {
+    const saved = localStorage.getItem(key);
+    const parsed = saved ? (JSON.parse(saved) as unknown[]) : [];
+    const persisted = Array.isArray(parsed) && parsed.length === expectedCount;
+    appendDebugLog("storage-verify", { key, expectedCount, actualCount: parsed.length, persisted });
+    return persisted;
+  } catch (error) {
+    appendDebugLog("storage-verify-failed", {
+      key,
+      expectedCount,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+function getSavedLog(date: string) {
+  return getStorageArray<SavedLogItem>(`log-${date}`).map((item) => ({
     ...item,
     category: item.category ?? "Snacks",
     quantity: item.quantity ?? 1,
@@ -308,55 +407,49 @@ function getSavedLog(date: string) {
 }
 
 function getSavedCustomFoods() {
-  const saved = localStorage.getItem("customFoods");
-  if (!saved) return [];
-
-  return JSON.parse(saved) as Food[];
+  return getStorageArray<Food>("customFoods");
 }
 
 function saveCustomFoods(foods: Food[]) {
-  localStorage.setItem("customFoods", JSON.stringify(foods));
+  setStorageJson("customFoods", foods);
 }
 
 function getSavedRecipes() {
-  const saved = localStorage.getItem("recipes");
-  if (!saved) return [];
-
-  return JSON.parse(saved) as Recipe[];
+  return getStorageArray<Recipe>("recipes");
 }
 
 function getSavedWeightEntries() {
-  const saved = localStorage.getItem("weightEntries");
-  if (!saved) return [];
-
-  return JSON.parse(saved) as WeightEntry[];
+  return getStorageArray<WeightEntry>("weightEntries");
 }
 
 function saveWeightEntries(entries: WeightEntry[]) {
-  localStorage.setItem("weightEntries", JSON.stringify(entries));
+  setStorageJson("weightEntries", entries);
 }
 
 function getSavedCompletedDays(): string[] {
-  const saved = localStorage.getItem("completedDays");
-  if (!saved) return [];
-  return JSON.parse(saved) as string[];
+  return getStorageArray<string>("completedDays");
 }
 function saveCompletedDays(days: string[]): void {
-  localStorage.setItem("completedDays", JSON.stringify(days));
+  setStorageJson("completedDays", days);
 }
 function getSavedTopFoods(): TopFoodEntry[] {
-  const saved = localStorage.getItem("topFoods");
-  if (!saved) return [];
-  return JSON.parse(saved) as TopFoodEntry[];
+  return getStorageArray<TopFoodEntry>("topFoods");
 }
 function saveTopFoods(foods: TopFoodEntry[]): void {
-  localStorage.setItem("topFoods", JSON.stringify(foods));
+  setStorageJson("topFoods", foods);
 }
 
 function getSavedGoals(): Goals | null {
-  const saved = localStorage.getItem("goals");
-  if (!saved) return null;
-  return JSON.parse(saved) as Goals;
+  try {
+    const saved = localStorage.getItem("goals");
+    return saved ? (JSON.parse(saved) as Goals) : null;
+  } catch (error) {
+    appendDebugLog("storage-read-failed", {
+      key: "goals",
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 function goalsToForm(goals: Goals | null): GoalsForm {
@@ -396,7 +489,7 @@ function calculatorInputsToForm(goals: Goals | null): CalculatorInputs {
 }
 
 function saveRecipes(recipes: Recipe[]) {
-  localStorage.setItem("recipes", JSON.stringify(recipes));
+  setStorageJson("recipes", recipes);
 }
 
 function shiftDate(date: string, dayOffset: number) {
@@ -514,7 +607,19 @@ function parseServingSize(value: string | number | null | undefined, fallbackUni
 
   if (typeof value !== "string") return null;
 
-  const match = value.trim().match(/^([\d.]+)\s*([a-zA-Z]*)/);
+  const trimmedValue = value.trim();
+  const embeddedMeasure = trimmedValue.match(/([\d.]+)\s*(ml|milliliter|milliliters|g|gram|grams|oz|ounce|ounces)\b/i);
+
+  if (embeddedMeasure) {
+    const amount = Number(embeddedMeasure[1]);
+    const unit = normalizeAmountUnit(embeddedMeasure[2]);
+
+    if (Number.isFinite(amount) && amount > 0 && unit) {
+      return { amount, unit };
+    }
+  }
+
+  const match = trimmedValue.match(/^([\d.]+)\s*([a-zA-Z]*)/);
   if (!match) return null;
 
   const amount = Number(match[1]);
@@ -522,17 +627,38 @@ function parseServingSize(value: string | number | null | undefined, fallbackUni
 
   return {
     amount,
-    unit: (fallbackUnit || match[2]).trim().toLowerCase(),
+    unit: normalizeAmountUnit(fallbackUnit || match[2]) ?? (fallbackUnit || match[2]).trim().toLowerCase(),
   };
 }
 
 function isGramUnit(unit: string) {
-  return unit === "g" || unit === "gram" || unit === "grams" || unit === "ml";
+  return unit === "g" || unit === "ml" || unit === "oz";
+}
+
+function normalizeAmountUnit(unit: string): MeasuredAmountUnit | null {
+  const normalized = unit.trim().toLowerCase();
+  if (normalized === "ml" || normalized === "milliliter" || normalized === "milliliters") return "ml";
+  if (normalized === "g" || normalized === "gram" || normalized === "grams") return "g";
+  if (normalized === "oz" || normalized === "ounce" || normalized === "ounces") return "oz";
+  return null;
+}
+
+function getMeasuredServingBasis(food: Food) {
+  const basis = parseServingSize(food.servingSize);
+  const unit = basis ? normalizeAmountUnit(basis.unit) : null;
+  return basis && unit ? { amount: basis.amount, unit } : null;
+}
+
+function convertAmountToBasisUnit(amount: number, amountUnit: MeasuredAmountUnit, basisUnit: MeasuredAmountUnit) {
+  if (amountUnit === basisUnit) return amount;
+  if (amountUnit === "oz" && basisUnit === "g") return amount * 28.349523125;
+  if (amountUnit === "g" && basisUnit === "oz") return amount / 28.349523125;
+  return null;
 }
 
 function getScaleFromServingBasis(food: Food, amount: number) {
-  const basis = parseServingSize(food.servingSize);
-  if (!basis || !isGramUnit(basis.unit)) return null;
+  const basis = getMeasuredServingBasis(food);
+  if (!basis) return null;
 
   return amount / basis.amount;
 }
@@ -544,13 +670,9 @@ function getServingSizeBasis(detail: FoodDetail | null, food: Food) {
   );
 }
 
-function isBrandedFood(food: Food) {
-  return food.dataType?.toLowerCase() === "branded" || Boolean(food.brand);
-}
-
 function hasUsableSearchNutrition(food: Food) {
-  const basis = parseServingSize(food.servingSize);
-  return !isBrandedFood(food) && Boolean(basis && isGramUnit(basis.unit) && food.calories > 0);
+  const basis = getMeasuredServingBasis(food);
+  return Boolean(basis && isGramUnit(basis.unit) && food.calories > 0);
 }
 
 function getServingSizeLabel(detail: FoodDetail | null, food: Food) {
@@ -962,13 +1084,13 @@ function parseCustomFood(form: CustomFoodForm): Food | null {
   const name = form.name.trim();
   const servingSize = form.servingSize.trim();
   const servingUnit = form.servingUnit.trim();
-  const calories = Number(form.calories);
-  const protein = Number(form.protein || 0);
-  const carbs = Number(form.carbs || 0);
-  const fat = Number(form.fat || 0);
-  const fiber = Number(form.fiber || 0);
-  const sugar = Number(form.sugar || 0);
-  const sodium = Number(form.sodium || 0);
+  const calories = parseDecimalInput(form.calories);
+  const protein = parseDecimalInput(form.protein || "0");
+  const carbs = parseDecimalInput(form.carbs || "0");
+  const fat = parseDecimalInput(form.fat || "0");
+  const fiber = parseDecimalInput(form.fiber || "0");
+  const sugar = parseDecimalInput(form.sugar || "0");
+  const sodium = parseDecimalInput(form.sodium || "0");
 
   if (!name || !servingSize || !servingUnit || !Number.isFinite(calories) || calories < 0) {
     return null;
@@ -1356,9 +1478,31 @@ function getWeightRangeLabel(range: WeightRange) {
   return range;
 }
 
+function parseDecimalInput(value: string) {
+  return Number(value.trim().replace(",", "."));
+}
+
+function createClientId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  const randomPart =
+    typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
+      ? Array.from(crypto.getRandomValues(new Uint32Array(2)), (value) => value.toString(36)).join("")
+      : Math.random().toString(36).slice(2);
+
+  return `${Date.now().toString(36)}-${randomPart}`;
+}
+
+function getConfiguredGoogleClientId() {
+  return import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem(googleDriveClientIdKey) || "";
+}
+
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
+  const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
   const [appView, setAppView] = useState<AppView>("home");
   const [selectedDate, setSelectedDate] = useState(today);
   const [log, setLog] = useState<LogItem[]>(() => getSavedLog(today));
@@ -1372,6 +1516,7 @@ function App() {
   const [customFoodForm, setCustomFoodForm] = useState<CustomFoodForm>(emptyCustomFoodForm);
   const [customFoodOcrText, setCustomFoodOcrText] = useState("");
   const [customFoodOcrError, setCustomFoodOcrError] = useState("");
+  const [customFoodSaveError, setCustomFoodSaveError] = useState("");
   const [isScanningCustomFood, setIsScanningCustomFood] = useState(false);
   const [recipes, setRecipes] = useState<Recipe[]>(() => getSavedRecipes());
   const [recipeQuery, setRecipeQuery] = useState("");
@@ -1405,6 +1550,7 @@ function App() {
     weight: "",
     note: "",
   });
+  const [weightSaveError, setWeightSaveError] = useState("");
   const [weightRange, setWeightRange] = useState<WeightRange>("All");
   const [weightChartPointId, setWeightChartPointId] = useState<string | null>(null);
   const [weightEntryToDelete, setWeightEntryToDelete] = useState<WeightEntry | null>(null);
@@ -1421,12 +1567,124 @@ function App() {
   const [libraryRecipeIngredients, setLibraryRecipeIngredients] = useState<RecipeIngredient[]>([]);
   const [completedDays, setCompletedDays] = useState<string[]>(() => getSavedCompletedDays());
   const [showStreakPopup, setShowStreakPopup] = useState(false);
+  const [streakPopupDate, setStreakPopupDate] = useState(today);
   const [topFoods, setTopFoods] = useState<TopFoodEntry[]>(() => getSavedTopFoods());
   const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
+  const [goalsView, setGoalsView] = useState<"daily" | "weekly">("weekly");
+  const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
+  const [debugLogText, setDebugLogText] = useState("");
+  const [debugCopyStatus, setDebugCopyStatus] = useState("");
+  const [expandedMeals, setExpandedMeals] = useState<Record<MealCategory, boolean>>({
+    Breakfast: true,
+    Lunch: true,
+    Dinner: true,
+    Snacks: true,
+  });
+  const [mealMenuCategory, setMealMenuCategory] = useState<MealCategory | null>(null);
+  const [mealToSaveAsRecipe, setMealToSaveAsRecipe] = useState<MealCategory | null>(null);
+  const [mealRecipeName, setMealRecipeName] = useState("");
+  const [mealToDelete, setMealToDelete] = useState<MealCategory | null>(null);
+  const [itemToEdit, setItemToEdit] = useState<LogItem | null>(null);
+  const [editItemQuantity, setEditItemQuantity] = useState("1");
+  const [editItemServingSize, setEditItemServingSize] = useState("");
+  const [amountUnit, setAmountUnit] = useState<AmountUnit>("serving");
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
+  const [googleDriveClientId, setGoogleDriveClientId] = useState(() => getConfiguredGoogleClientId());
 
   useEffect(() => {
-    localStorage.setItem(`log-${selectedDate}`, JSON.stringify(log));
+    setStorageJson(`log-${selectedDate}`, log);
   }, [log, selectedDate]);
+
+  useEffect(() => {
+    appendDebugLog("app-mounted", {
+      userAgent: navigator.userAgent,
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      serviceWorkerSupported: "serviceWorker" in navigator,
+      cacheStorageSupported: "caches" in window,
+      localStorageSupported: (() => {
+        try {
+          const key = "jessicaStorageProbe";
+          localStorage.setItem(key, "1");
+          localStorage.removeItem(key);
+          return true;
+        } catch {
+          return false;
+        }
+      })(),
+    });
+
+    const handleError = (event: ErrorEvent) => {
+      appendDebugLog("window-error", {
+        message: event.message,
+        source: event.filename,
+        line: event.lineno,
+        column: event.colno,
+      });
+    };
+    const handleRejection = (event: PromiseRejectionEvent) => {
+      appendDebugLog("unhandled-rejection", {
+        reason: event.reason instanceof Error ? event.reason.message : String(event.reason),
+      });
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleRejection);
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => {
+          appendDebugLog("service-worker-check", { registrations: registrations.length });
+          for (const registration of registrations) {
+            registration
+              .unregister()
+              .then((unregistered) => {
+                appendDebugLog("service-worker-unregister", {
+                  scope: registration.scope,
+                  unregistered,
+                });
+              })
+              .catch((error) => {
+                appendDebugLog("service-worker-unregister-failed", {
+                  scope: registration.scope,
+                  message: error instanceof Error ? error.message : String(error),
+                });
+              });
+          }
+        })
+        .catch((error) => {
+          appendDebugLog("service-worker-check-failed", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
+
+    if ("caches" in window) {
+      caches
+        .keys()
+        .then((keys) => {
+          appendDebugLog("cache-storage-check", { keys });
+          return Promise.all(
+            keys.map((key) =>
+              caches
+                .delete(key)
+                .then((deleted) => appendDebugLog("cache-storage-delete", { key, deleted }))
+            )
+          );
+        })
+        .catch((error) => {
+          appendDebugLog("cache-storage-check-failed", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
+
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleRejection);
+    };
+  }, []);
 
   useEffect(() => {
     saveCustomFoods(customFoods);
@@ -1463,16 +1721,22 @@ function App() {
   }
 
   function markDayComplete() {
-    if (!completedDays.includes(selectedDate)) {
-      setCompletedDays((prev) => [...prev, selectedDate]);
-    }
+    setCompletedDays((prev) => (
+      prev.includes(selectedDate) ? prev : [...prev, selectedDate]
+    ));
+    setStreakPopupDate(selectedDate);
     setShowStreakPopup(true);
   }
 
-  function getCompletedStreak(): number {
-    const set = new Set(completedDays);
+  function reopenDayLogging() {
+    setCompletedDays((prev) => prev.filter((date) => date !== selectedDate));
+    setShowStreakPopup(false);
+  }
+
+  function getCompletedStreak(referenceDate = today, days = completedDays): number {
+    const set = new Set(days);
     let streak = 0;
-    let d = today;
+    let d = referenceDate;
     for (let i = 0; i < 365; i++) {
       if (!set.has(d)) break;
       streak++;
@@ -1501,10 +1765,29 @@ function App() {
   );
   const totalCalories = dailyTotals.calories;
 
-  function getCategoryCalories(category: MealCategory) {
+  function getCategoryTotals(category: MealCategory) {
     return log
       .filter((item) => item.category === category)
-      .reduce((sum, item) => sum + getItemCalories(item), 0);
+      .reduce(
+        (totals, item) => ({
+          calories: totals.calories + getItemCalories(item),
+          protein: totals.protein + item.protein * item.quantity,
+          carbs: totals.carbs + item.carbs * item.quantity,
+          fat: totals.fat + item.fat * item.quantity,
+        }),
+        { calories: 0, protein: 0, carbs: 0, fat: 0 }
+      );
+  }
+
+  function toggleMeal(category: MealCategory) {
+    setExpandedMeals((current) => ({ ...current, [category]: !current[category] }));
+  }
+
+  function scrollToMeal(category: MealCategory) {
+    setExpandedMeals((current) => ({ ...current, [category]: true }));
+    window.requestAnimationFrame(() => {
+      mealCardRefs.current[category]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
 
   function openAddFood(category: MealCategory) {
@@ -1517,6 +1800,7 @@ function App() {
     setCustomFoodForm(emptyCustomFoodForm);
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
+    setCustomFoodSaveError("");
     setIsScanningCustomFood(false);
     setRecipeQuery("");
     setIsRecipeFormOpen(false);
@@ -1547,6 +1831,7 @@ function App() {
     setIsCustomFormOpen(false);
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
+    setCustomFoodSaveError("");
     setIsScanningCustomFood(false);
     setIsRecipeFormOpen(false);
   }
@@ -1558,10 +1843,12 @@ function App() {
   }
 
   async function selectFood(food: Food) {
+    const measuredBasis = getMeasuredServingBasis(food);
     setSelectedFood(food);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
-    setPortionAmount(String(parseServingSize(food.servingSize)?.amount ?? 100));
+    setPortionAmount(String(measuredBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
+    setAmountUnit(measuredBasis?.unit ?? "serving");
     setDetailError("");
 
     if (hasUsableSearchNutrition(food)) {
@@ -1587,10 +1874,12 @@ function App() {
   }
 
   function selectLocalFood(food: Food) {
+    const measuredBasis = getMeasuredServingBasis(food);
     setSelectedFood(food);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
-    setPortionAmount(String(parseServingSize(food.servingSize)?.amount ?? 100));
+    setPortionAmount(String(measuredBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
+    setAmountUnit(measuredBasis?.unit ?? "serving");
     setDetailError("");
     setIsLoadingDetail(false);
   }
@@ -1600,10 +1889,12 @@ function App() {
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
     setPortionAmount("100");
+    setAmountUnit("serving");
     setDetailError("");
     setQuantity("1");
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
+    setCustomFoodSaveError("");
     setIsCustomFormOpen(true);
   }
 
@@ -1624,23 +1915,68 @@ function App() {
   }
 
   function createCustomFood() {
-    const customFood = parseCustomFood(customFoodForm);
-    if (!customFood) return;
+    setCustomFoodSaveError("");
+    appendDebugLog("custom-food-save-click", {
+      name: customFoodForm.name.trim(),
+      servingSize: customFoodForm.servingSize,
+      servingUnit: customFoodForm.servingUnit,
+      calories: customFoodForm.calories,
+      protein: customFoodForm.protein,
+      carbs: customFoodForm.carbs,
+      fat: customFoodForm.fat,
+    });
 
-    setCustomFoods([customFood, ...customFoods]);
+    const customFood = parseCustomFood(customFoodForm);
+    if (!customFood) {
+      const message = "Could not save food. Check name, serving size, serving unit, calories, and macro numbers.";
+      setCustomFoodSaveError(message);
+      appendDebugLog("custom-food-save-invalid", { form: customFoodForm });
+      return;
+    }
+
+    const nextCustomFoods = [customFood, ...customFoods];
+    const storageOk = setStorageJson("customFoods", nextCustomFoods);
+    const verified = verifyStorageCount("customFoods", nextCustomFoods.length);
+
+    if (!storageOk || !verified) {
+      const message = "Food was created in memory, but this browser did not confirm it was saved.";
+      setCustomFoodSaveError(message);
+      appendDebugLog("custom-food-save-not-persisted", { storageOk, verified });
+      setCustomFoods(nextCustomFoods);
+      return;
+    }
+
+    setCustomFoods(nextCustomFoods);
     setCustomFoodForm(emptyCustomFoodForm);
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
+    setCustomFoodSaveError("");
     setIsCustomFormOpen(false);
     setActiveAddFoodTab("custom");
     selectLocalFood(customFood);
+    appendDebugLog("custom-food-save-success", {
+      id: customFood.id,
+      name: customFood.name,
+      count: nextCustomFoods.length,
+      persisted: storageOk && verified,
+    });
   }
 
   async function scanCustomFoodLabel(file: File | undefined) {
-    if (!file) return;
+    if (!file) {
+      setCustomFoodOcrError("No image was selected.");
+      appendDebugLog("scan-no-file");
+      return;
+    }
 
     setCustomFoodOcrError("");
     setIsScanningCustomFood(true);
+    appendDebugLog("scan-start", {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified,
+    });
 
     try {
       const result = await recognize(file, "eng");
@@ -1658,8 +1994,15 @@ function App() {
       if (!Object.values(scannedFields).some(Boolean)) {
         setCustomFoodOcrError("OCR finished, but no nutrition fields were recognized. You can still enter them manually.");
       }
-    } catch {
+      appendDebugLog("scan-finished", {
+        recognizedFields: Object.entries(scannedFields).filter(([, value]) => Boolean(value)).map(([key]) => key),
+        textLength: text.length,
+      });
+    } catch (error) {
       setCustomFoodOcrError("Could not scan that image. Try a clearer photo or enter the values manually.");
+      appendDebugLog("scan-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setIsScanningCustomFood(false);
       if (customFoodScanInputRef.current) customFoodScanInputRef.current.value = "";
@@ -1751,7 +2094,19 @@ function App() {
     if (!selectedFood || !pendingCategory) return;
 
     const servings = hasUsableSearchNutrition(selectedFood) ? 1 : Number(quantity);
-    if (!Number.isFinite(servings) || servings <= 0) return;
+    const amount = Number(portionAmount);
+    const measuredBasis = getMeasuredServingBasis(selectedFood);
+    const basisAmount =
+      measuredBasis && amountUnit !== "serving" && Number.isFinite(amount) && amount > 0
+        ? convertAmountToBasisUnit(amount, amountUnit, measuredBasis.unit)
+        : null;
+    const amountScale =
+      selectedFood && amountUnit !== "serving" && basisAmount !== null
+        ? getScaleFromServingBasis(selectedFood, basisAmount)
+        : null;
+    const selectedServings = amountUnit === "serving" ? servings : 1;
+    if (!Number.isFinite(selectedServings) || selectedServings <= 0) return;
+    if (amountUnit !== "serving" && amountScale === null) return;
 
     const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood.name);
     const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
@@ -1759,20 +2114,27 @@ function App() {
       selectedFood,
       selectedFoodDetail,
       selectedPortion,
-      Number(portionAmount)
+      amountUnit !== "serving" && amountScale !== null
+        ? basisAmount ?? amount
+        : Number(portionAmount)
     );
+    const displayFoodServing = {
+      ...selectedFoodServing,
+      name: getFoodDisplayName(selectedFoodServing),
+      brand: selectedFoodServing.brand ? getBrandDisplayName(selectedFoodServing.brand) : selectedFoodServing.brand,
+    };
 
     setLog([
       ...log,
       {
-        ...selectedFoodServing,
+        ...displayFoodServing,
         category: pendingCategory,
-        quantity: servings,
-        logId: crypto.randomUUID(),
+        quantity: selectedServings,
+        logId: createClientId(),
       },
     ]);
 
-    const foodName = selectedFoodServing.name;
+    const foodName = displayFoodServing.name;
     setTopFoods((prev) => {
       const existing = prev.find((f) => f.name === foodName);
       const updated = existing
@@ -1795,35 +2157,328 @@ function App() {
     setItemToRemove(null);
   }
 
-  function saveWeightEntry() {
-  const weight = Number(weightForm.weight);
-  if (!Number.isFinite(weight) || weight <= 0) return;
-
-  const entry: WeightEntry = {
-    id: editingWeightEntryId ?? crypto.randomUUID(),
-    date: weightForm.date || today,
-    weight,
-    unit: getPreferredWeightUnit(goals),
-    note: weightForm.note.trim() || undefined,
-  };
-
-  if (editingWeightEntryId) {
-    setWeightEntries(
-      weightEntries.map((item) =>
-        item.id === editingWeightEntryId ? entry : item
-      )
-    );
-  } else {
-    setWeightEntries([entry, ...weightEntries]);
+  function openEditFoodItem(item: LogItem) {
+    setItemToEdit(item);
+    setEditItemQuantity(String(item.quantity));
+    setEditItemServingSize(item.servingSize);
   }
 
-  setEditingWeightEntryId(null);
-  setWeightForm({
-    date: today,
-    weight: "",
-    note: "",
-  });
-}
+  function saveEditedFoodItem() {
+    if (!itemToEdit) return;
+
+    const quantity = parseDecimalInput(editItemQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+
+    setLog(
+      log.map((item) =>
+        item.logId === itemToEdit.logId
+          ? {
+              ...item,
+              quantity,
+              servingSize: editItemServingSize.trim() || item.servingSize,
+            }
+          : item
+      )
+    );
+    setItemToEdit(null);
+  }
+
+  function getMealItems(category: MealCategory) {
+    return log.filter((item) => item.category === category);
+  }
+
+  function openSaveMealAsRecipe(category: MealCategory) {
+    setMealMenuCategory(null);
+    setMealToSaveAsRecipe(category);
+    setMealRecipeName(`${category} ${formatShortDate(selectedDate)}`);
+  }
+
+  function saveMealAsRecipe() {
+    if (!mealToSaveAsRecipe) return;
+
+    const mealItems = getMealItems(mealToSaveAsRecipe);
+    const recipe = parseRecipe(
+      {
+        name: mealRecipeName,
+        servingSize: "1",
+        servingUnit: "meal",
+        notes: `Saved from ${mealToSaveAsRecipe} on ${selectedDate}`,
+      },
+      mealItems.map((item) => ({ food: item, quantity: item.quantity }))
+    );
+
+    if (!recipe) return;
+
+    setRecipes([recipe, ...recipes]);
+    setMealToSaveAsRecipe(null);
+    setMealRecipeName("");
+  }
+
+  function confirmDeleteMeal() {
+    if (!mealToDelete) return;
+
+    setLog(log.filter((item) => item.category !== mealToDelete));
+    setMealToDelete(null);
+    setMealMenuCategory(null);
+  }
+
+  function getDayExportData() {
+    const meals = mealCategories.map((category) => {
+      const mealItems = getMealItems(category);
+      const totals = getCategoryTotals(category);
+
+      return {
+        name: category,
+        calories: totals.calories,
+        macros: {
+          protein: Number(totals.protein.toFixed(1)),
+          carbs: Number(totals.carbs.toFixed(1)),
+          fat: Number(totals.fat.toFixed(1)),
+        },
+        foods: mealItems.map((item) => ({
+          name: getFoodDisplayName(item),
+          brand: item.brand ? getBrandDisplayName(item.brand) : null,
+          servingSize: item.servingSize,
+          servings: item.quantity,
+          calories: getItemCalories(item),
+          macros: {
+            protein: Number((item.protein * item.quantity).toFixed(1)),
+            carbs: Number((item.carbs * item.quantity).toFixed(1)),
+            fat: Number((item.fat * item.quantity).toFixed(1)),
+            ...(item.fiber !== undefined ? { fiber: Number((item.fiber * item.quantity).toFixed(1)) } : {}),
+            ...(item.sugar !== undefined ? { sugar: Number((item.sugar * item.quantity).toFixed(1)) } : {}),
+            ...(item.sodium !== undefined ? { sodium: Number((item.sodium * item.quantity).toFixed(1)) } : {}),
+          },
+          ...(item.notes ? { notes: item.notes } : {}),
+        })),
+      };
+    });
+    const dayWeightEntry = weightEntries.find((entry) => entry.date === selectedDate) ?? null;
+
+    return {
+      date: selectedDate,
+      calorieBudget: goals?.calories ?? null,
+      totals: {
+        calories: totalCalories,
+        macros: {
+          protein: Number(dailyTotals.protein.toFixed(1)),
+          carbs: Number(dailyTotals.carbs.toFixed(1)),
+          fat: Number(dailyTotals.fat.toFixed(1)),
+        },
+      },
+      meals,
+      weightEntry: dayWeightEntry
+        ? {
+            weight: dayWeightEntry.weight,
+            unit: dayWeightEntry.unit,
+            ...(dayWeightEntry.note ? { notes: dayWeightEntry.note } : {}),
+          }
+        : null,
+      completed: completedDays.includes(selectedDate),
+    };
+  }
+
+  function getDayExportFile() {
+    const json = JSON.stringify(getDayExportData(), null, 2);
+    return new File([json], `food-log-${selectedDate}.json`, { type: "application/json" });
+  }
+
+  function downloadDayExport() {
+    const file = getDayExportFile();
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setExportStatus("Downloaded JSON file.");
+  }
+
+  async function shareDayExport() {
+    const file = getDayExportFile();
+    const shareData = {
+      title: `Food Log ${selectedDate}`,
+      text: `Food log for ${selectedDate}`,
+      files: [file],
+    };
+
+    try {
+      if (navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+        setExportStatus("Shared. Choose Google Drive from the share sheet to save it there.");
+        return;
+      }
+
+      setExportStatus("File sharing is not available in this browser. Use Download JSON instead.");
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : "Share canceled or failed.");
+    }
+  }
+
+  function loadGoogleIdentityScript() {
+    if (window.google?.accounts?.oauth2) return Promise.resolve();
+
+    return new Promise<void>((resolve, reject) => {
+      const existingScript = document.querySelector<HTMLScriptElement>(
+        `script[src="${googleIdentityScriptUrl}"]`
+      );
+
+      if (existingScript) {
+        existingScript.addEventListener("load", () => resolve(), { once: true });
+        existingScript.addEventListener("error", () => reject(new Error("Google Identity script failed to load.")), { once: true });
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = googleIdentityScriptUrl;
+      script.async = true;
+      script.defer = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Google Identity script failed to load."));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function getGoogleDriveAccessToken(clientId: string) {
+    await loadGoogleIdentityScript();
+
+    const oauth2 = window.google?.accounts?.oauth2;
+    if (!oauth2) throw new Error("Google Identity Services is unavailable.");
+
+    return new Promise<string>((resolve, reject) => {
+      const tokenClient = oauth2.initTokenClient({
+        client_id: clientId,
+        scope: googleDriveScope,
+        callback: (response) => {
+          if (response.error || !response.access_token) {
+            reject(new Error(response.error_description || response.error || "Google sign-in failed."));
+            return;
+          }
+
+          resolve(response.access_token);
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: "consent" });
+    });
+  }
+
+  async function uploadDayExportToDrive() {
+    const clientId = googleDriveClientId.trim();
+
+    if (!clientId) {
+      setExportStatus("Add your Google OAuth Client ID first.");
+      return;
+    }
+
+    localStorage.setItem(googleDriveClientIdKey, clientId);
+    setExportStatus("Opening Google authorization...");
+
+    try {
+      const accessToken = await getGoogleDriveAccessToken(clientId);
+      const file = getDayExportFile();
+      const metadata = {
+        name: file.name,
+        mimeType: "application/json",
+      };
+      const boundary = `jessica_${createClientId().replace(/[^a-zA-Z0-9]/g, "")}`;
+      const body = new Blob(
+        [
+          `--${boundary}\r\n`,
+          "Content-Type: application/json; charset=UTF-8\r\n\r\n",
+          JSON.stringify(metadata),
+          "\r\n",
+          `--${boundary}\r\n`,
+          "Content-Type: application/json\r\n\r\n",
+          await file.text(),
+          "\r\n",
+          `--${boundary}--`,
+        ],
+        { type: `multipart/related; boundary=${boundary}` }
+      );
+
+      setExportStatus("Uploading to Google Drive...");
+
+      const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": `multipart/related; boundary=${boundary}`,
+        },
+        body,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Google Drive upload failed (${response.status}).`);
+      }
+
+      const uploaded = (await response.json()) as { name?: string; webViewLink?: string };
+      setExportStatus(
+        uploaded.webViewLink
+          ? `Uploaded ${uploaded.name ?? file.name}: ${uploaded.webViewLink}`
+          : `Uploaded ${uploaded.name ?? file.name} to Google Drive.`
+      );
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : "Google Drive upload failed.");
+    }
+  }
+
+  function saveWeightEntry() {
+    setWeightSaveError("");
+    const weight = parseDecimalInput(weightForm.weight);
+    appendDebugLog("weight-save-click", {
+      rawWeight: weightForm.weight,
+      parsedWeight: weight,
+      date: weightForm.date,
+      editingWeightEntryId,
+      disabledState: !isWeightFormValid,
+    });
+
+    if (!Number.isFinite(weight) || weight <= 0) {
+      const message = "Enter a valid weight before saving.";
+      setWeightSaveError(message);
+      appendDebugLog("weight-save-invalid", { rawWeight: weightForm.weight, parsedWeight: weight });
+      return;
+    }
+
+    const entry: WeightEntry = {
+      id: editingWeightEntryId ?? createClientId(),
+      date: weightForm.date || today,
+      weight,
+      unit: getPreferredWeightUnit(goals),
+      note: weightForm.note.trim() || undefined,
+    };
+
+    const nextWeightEntries = editingWeightEntryId
+      ? weightEntries.map((item) => (item.id === editingWeightEntryId ? entry : item))
+      : [entry, ...weightEntries];
+    const storageOk = setStorageJson("weightEntries", nextWeightEntries);
+    const verified = verifyStorageCount("weightEntries", nextWeightEntries.length);
+
+    setWeightEntries(nextWeightEntries);
+
+    if (!storageOk || !verified) {
+      const message = "Weight was created in memory, but this browser did not confirm it was saved.";
+      setWeightSaveError(message);
+      appendDebugLog("weight-save-not-persisted", { storageOk, verified });
+      return;
+    }
+
+    setEditingWeightEntryId(null);
+    setWeightForm({
+      date: today,
+      weight: "",
+      note: "",
+    });
+    appendDebugLog("weight-save-success", {
+      id: entry.id,
+      count: nextWeightEntries.length,
+      persisted: true,
+    });
+  }
 
 function startEditWeightEntry(entry: WeightEntry) {
   setEditingWeightEntryId(entry.id);
@@ -1841,6 +2496,94 @@ function startEditWeightEntry(entry: WeightEntry) {
 
     setWeightEntries(weightEntries.filter((entry) => entry.id !== weightEntryToDelete.id));
     setWeightEntryToDelete(null);
+  }
+
+  function logTapProbe(name: string, phase: string, event: SyntheticEvent<HTMLElement>) {
+    const nativeEvent = event.nativeEvent as Event & {
+      pointerType?: string;
+      clientX?: number;
+      clientY?: number;
+      touches?: TouchList;
+      changedTouches?: TouchList;
+    };
+    const firstTouch = nativeEvent.touches?.[0] ?? nativeEvent.changedTouches?.[0] ?? null;
+    const clientX = typeof nativeEvent.clientX === "number" ? nativeEvent.clientX : firstTouch?.clientX;
+    const clientY = typeof nativeEvent.clientY === "number" ? nativeEvent.clientY : firstTouch?.clientY;
+    const currentTarget = event.currentTarget;
+    const rect = currentTarget.getBoundingClientRect();
+    const elementAtPoint =
+      typeof clientX === "number" && typeof clientY === "number"
+        ? document.elementFromPoint(clientX, clientY)
+        : null;
+
+    appendDebugLog("tap-probe", {
+      name,
+      phase,
+      eventType: event.type,
+      nativeType: nativeEvent.type,
+      pointerType: nativeEvent.pointerType ?? "unknown",
+      defaultPrevented: event.defaultPrevented || nativeEvent.defaultPrevented,
+      target: event.target instanceof Element
+        ? `${event.target.tagName.toLowerCase()}${event.target.id ? `#${event.target.id}` : ""}${event.target.className ? `.${String(event.target.className).replace(/\s+/g, ".")}` : ""}`
+        : String(event.target),
+      currentTarget: `${currentTarget.tagName.toLowerCase()}${currentTarget.className ? `.${String(currentTarget.className).replace(/\s+/g, ".")}` : ""}`,
+      elementAtPoint: elementAtPoint
+        ? `${elementAtPoint.tagName.toLowerCase()}${elementAtPoint.id ? `#${elementAtPoint.id}` : ""}${elementAtPoint.className ? `.${String(elementAtPoint.className).replace(/\s+/g, ".")}` : ""}`
+        : null,
+      clientX,
+      clientY,
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+      },
+      scrollY: Math.round(window.scrollY),
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+    });
+  }
+
+  function tapProbeProps(name: string) {
+    return {
+      onPointerDownCapture: (event: SyntheticEvent<HTMLElement>) => logTapProbe(name, "pointerdown-capture", event),
+      onTouchStartCapture: (event: SyntheticEvent<HTMLElement>) => logTapProbe(name, "touchstart-capture", event),
+      onClickCapture: (event: SyntheticEvent<HTMLElement>) => logTapProbe(name, "click-capture", event),
+    };
+  }
+
+  function getDebugLogText() {
+    try {
+      const saved = localStorage.getItem(debugLogKey);
+      return saved ? JSON.stringify(JSON.parse(saved), null, 2) : "[]";
+    } catch (error) {
+      return `Could not read debug log: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  function openDebugPanel() {
+    setDebugLogText(getDebugLogText());
+    setDebugCopyStatus("");
+    setIsDebugPanelOpen(true);
+  }
+
+  async function copyDebugLog() {
+    const text = getDebugLogText();
+    setDebugLogText(text);
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setDebugCopyStatus("Copied");
+    } catch {
+      setDebugCopyStatus("Copy failed. Select and copy the text.");
+    }
+  }
+
+  function clearDebugLog() {
+    localStorage.removeItem(debugLogKey);
+    setDebugLogText("[]");
+    setDebugCopyStatus("Cleared");
   }
 
   function openFoodLibrary() {
@@ -1871,7 +2614,7 @@ function startEditWeightEntry(entry: WeightEntry) {
       calculatorInputs: goals?.calculatorInputs,
     };
     setGoals(newGoals);
-    localStorage.setItem("goals", JSON.stringify(newGoals));
+    setStorageJson("goals", newGoals);
     setIsManualGoalsOpen(false);
   }
 
@@ -1894,7 +2637,7 @@ function startEditWeightEntry(entry: WeightEntry) {
 
     setGoals(newGoals);
     setGoalsForm(goalsToForm(newGoals));
-    localStorage.setItem("goals", JSON.stringify(newGoals));
+    setStorageJson("goals", newGoals);
     setIsCalculatorOpen(false);
     setIsManualGoalsOpen(false);
   }
@@ -2076,12 +2819,21 @@ function startEditWeightEntry(entry: WeightEntry) {
   const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood?.name);
   const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
   const localPortionAmount = Number(portionAmount);
+  const measuredServingBasis = selectedFood ? getMeasuredServingBasis(selectedFood) : null;
+  const allowedAmountUnits = selectedFood && measuredServingBasis
+    ? [measuredServingBasis.unit]
+    : (["serving"] as AmountUnit[]);
+  const portionAmountInBasisUnits =
+    measuredServingBasis && amountUnit !== "serving"
+      ? convertAmountToBasisUnit(localPortionAmount, amountUnit, measuredServingBasis.unit)
+      : localPortionAmount;
   const localPortionScale =
     selectedFood &&
     hasUsableSearchNutrition(selectedFood) &&
     Number.isFinite(localPortionAmount) &&
-    localPortionAmount > 0
-      ? getScaleFromServingBasis(selectedFood, localPortionAmount)
+    localPortionAmount > 0 &&
+    portionAmountInBasisUnits !== null
+      ? getScaleFromServingBasis(selectedFood, portionAmountInBasisUnits)
       : null;
   const usesLocalPortion = Boolean(selectedFood && hasUsableSearchNutrition(selectedFood));
   const selectedPortionCalories = selectedFood
@@ -2116,11 +2868,12 @@ function startEditWeightEntry(entry: WeightEntry) {
       : sortedWeightEntriesOldest.filter((entry) => entry.date >= weightRangeStartDate);
   const currentWeightEntry = sortedWeightEntriesNewest[0] ?? null;
   const startingWeightEntry = sortedWeightEntriesOldest[0] ?? null;
-  const isWeightFormValid = Number(weightForm.weight) > 0 && Number.isFinite(Number(weightForm.weight));
+  const parsedWeightFormValue = parseDecimalInput(weightForm.weight);
+  const isWeightFormValid = parsedWeightFormValue > 0 && Number.isFinite(parsedWeightFormValue);
   const canAddSelectedFood =
     Boolean(selectedFood) &&
     !isLoadingDetail &&
-    (!usesLocalPortion || localPortionScale !== null) &&
+    (amountUnit === "serving" || (allowedAmountUnits.includes(amountUnit) && localPortionScale !== null)) &&
     (portionOptions.length === 0 || Boolean(selectedPortion));
   const calculatedGoals = calculateGoalsFromInputs(calculatorInputs);
   const calculatorRates = getValidRates(calculatorInputs.goal);
@@ -2129,48 +2882,106 @@ function startEditWeightEntry(entry: WeightEntry) {
   const weightValidationMessage = getWeightValidationMessage(calculatorInputs);
 
   const bottomNav = (
-    <nav className="bottom-nav" aria-label="Main navigation">
-      <button
-        type="button"
-        className={appView === "home" ? "active" : ""}
-        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("home"); }}
-      >
-        <span className="nav-icon">⌂</span>
-        <span>Home</span>
+    <>
+      <button type="button" className="debug-fab" onClick={openDebugPanel}>
+        Debug
       </button>
-      <button
-        type="button"
-        className={appView === "day" ? "active" : ""}
-        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("day"); }}
-      >
-        <span className="nav-icon">≡</span>
-        <span>Log</span>
-      </button>
-      <button
-        type="button"
-        className={appView === "weight" ? "active" : ""}
-        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("weight"); }}
-      >
-        <span className="nav-icon">↕</span>
-        <span>Weight</span>
-      </button>
-      <button
-        type="button"
-        className={appView === "library" ? "active" : ""}
-        onClick={openFoodLibrary}
-      >
-        <span className="nav-icon">⊞</span>
-        <span>Library</span>
-      </button>
-      <button
-        type="button"
-        className={appView === "profile" ? "active" : ""}
-        onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("profile"); }}
-      >
-        <span className="nav-icon">◉</span>
-        <span>Profile</span>
-      </button>
-    </nav>
+      <nav className="bottom-nav" aria-label="Main navigation">
+        <button
+          type="button"
+          className={appView === "home" ? "active" : ""}
+          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("home"); }}
+        >
+          <span className="nav-icon">⌂</span>
+          <span>Home</span>
+        </button>
+        <button
+          type="button"
+          className={appView === "day" ? "active" : ""}
+          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("day"); }}
+        >
+          <span className="nav-icon">≡</span>
+          <span>Log</span>
+        </button>
+        <button
+          type="button"
+          className={appView === "weight" ? "active" : ""}
+          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("weight"); }}
+        >
+          <span className="nav-icon">↕</span>
+          <span>Weight</span>
+        </button>
+        <button
+          type="button"
+          className={appView === "library" ? "active" : ""}
+          onClick={openFoodLibrary}
+        >
+          <span className="nav-icon">⊞</span>
+          <span>Library</span>
+        </button>
+        <button
+          type="button"
+          className={appView === "profile" ? "active" : ""}
+          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("profile"); }}
+        >
+          <span className="nav-icon">◉</span>
+          <span>Profile</span>
+        </button>
+      </nav>
+      {isDebugPanelOpen && (
+        <div className="modal-backdrop debug-backdrop" role="presentation">
+          <div className="modal debug-panel" role="dialog" aria-modal="true" aria-labelledby="debug-panel-title">
+            <div className="debug-panel-header">
+              <h2 id="debug-panel-title">Debug Log</h2>
+              <button type="button" className="secondary-button" onClick={() => setIsDebugPanelOpen(false)}>
+                Close
+              </button>
+            </div>
+            <textarea readOnly value={debugLogText} />
+            {debugCopyStatus && <p className="scan-status">{debugCopyStatus}</p>}
+            <div className="form-actions">
+              <button type="button" onClick={copyDebugLog}>
+                Copy Log
+              </button>
+              <button type="button" className="danger-button" onClick={clearDebugLog}>
+                Clear Log
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showStreakPopup && (() => {
+        const popupWeekDates = getWeekDates(streakPopupDate);
+        const popupCompletedDays = completedDays.includes(streakPopupDate)
+          ? completedDays
+          : [...completedDays, streakPopupDate];
+        const completedSet = new Set(popupCompletedDays);
+        return (
+          <div className="floating-overlay" role="presentation" onClick={() => setShowStreakPopup(false)}>
+            <div className="floating-popover streak-popup" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <h2 className="streak-popup-title">Day Logged!</h2>
+              <div className="streak-popup-num">{getCompletedStreak(streakPopupDate, popupCompletedDays)}</div>
+              <p className="streak-popup-label">day streak</p>
+              <div className="streak-week-grid">
+                {popupWeekDates.map((d) => {
+                  const done = completedSet.has(d);
+                  const letter = getDayLetter(d);
+                  return (
+                    <div key={d} className={`streak-day-cell${done ? " done" : ""}`}>
+                      <span className="streak-day-check">{done ? "✓" : ""}</span>
+                      <span className="streak-day-letter">{letter}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <button type="button" className="primary-button" onClick={() => setShowStreakPopup(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+    </>
   );
 
   if (appView === "home") {
@@ -2390,13 +3201,31 @@ function startEditWeightEntry(entry: WeightEntry) {
 
           {/* Top Right: Weekly Macro Goals */}
           <div className="panel dash-card dash-mini-card">
-            <p className="dash-quad-label">Weekly Goals</p>
+            <div className="dash-card-title-row">
+              <p className="dash-quad-label">Goals</p>
+              <div className="dash-goals-toggle" aria-label="Goal range">
+                <button
+                  type="button"
+                  className={goalsView === "daily" ? "active" : ""}
+                  onClick={() => setGoalsView("daily")}
+                >
+                  Daily
+                </button>
+                <button
+                  type="button"
+                  className={goalsView === "weekly" ? "active" : ""}
+                  onClick={() => setGoalsView("weekly")}
+                >
+                  Weekly
+                </button>
+              </div>
+            </div>
             {goals ? (
               <div className="dash-macro-progress-list">
                 {[
-                  { label: "Protein", total: weekTotalProtein, goal: goals.protein * 7, color: "#a32c2c", overflowColor: "#ef4444" },
-                  { label: "Carbs", total: weekTotalCarbs, goal: goals.carbs * 7, color: "#2e44b3", overflowColor: "#60a5fa" },
-                  { label: "Fat", total: weekTotalFat, goal: goals.fat * 7, color: "#ffbb00", overflowColor: "#f97316" },
+                  { label: "Protein", total: goalsView === "weekly" ? weekTotalProtein : displayStats.protein, goal: goals.protein * (goalsView === "weekly" ? 7 : 1), color: "#a32c2c", overflowColor: "#ef4444" },
+                  { label: "Carbs", total: goalsView === "weekly" ? weekTotalCarbs : displayStats.carbs, goal: goals.carbs * (goalsView === "weekly" ? 7 : 1), color: "#2e44b3", overflowColor: "#60a5fa" },
+                  { label: "Fat", total: goalsView === "weekly" ? weekTotalFat : displayStats.fat, goal: goals.fat * (goalsView === "weekly" ? 7 : 1), color: "#ffbb00", overflowColor: "#f97316" },
                 ].map(({ label, total, goal, color, overflowColor }) => {
                   const markerPct = 80;
                   const goalFillPct = goal > 0 ? Math.min(markerPct, (total / goal) * markerPct) : 0;
@@ -2496,36 +3325,6 @@ function startEditWeightEntry(entry: WeightEntry) {
             )}
           </div>
         </section>
-
-        {/* Streak popup */}
-        {showStreakPopup && (() => {
-          const popupWeekDates = getWeekDates(today);
-          const completedSet = new Set(completedDays);
-          return (
-            <div className="modal-backdrop" role="presentation" onClick={() => setShowStreakPopup(false)}>
-              <div className="modal streak-popup" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-                <h2 className="streak-popup-title">Day Logged! 🎉</h2>
-                <div className="streak-popup-num">{completedStreak}</div>
-                <p className="streak-popup-label">day streak</p>
-                <div className="streak-week-grid">
-                  {popupWeekDates.map((d) => {
-                    const done = completedSet.has(d);
-                    const letter = getDayLetter(d);
-                    return (
-                      <div key={d} className={`streak-day-cell${done ? " done" : ""}`}>
-                        <span className="streak-day-check">{done ? "✓" : ""}</span>
-                        <span className="streak-day-letter">{letter}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <button type="button" className="primary-button" onClick={() => setShowStreakPopup(false)}>
-                  Close
-                </button>
-              </div>
-            </div>
-          );
-        })()}
 
         {bottomNav}
       </main>
@@ -2984,26 +3783,31 @@ function startEditWeightEntry(entry: WeightEntry) {
           </div>
         </section>
 
-        <section className="panel weight-entry-panel">
+        <section className="panel weight-entry-panel" {...tapProbeProps("weight-entry-panel")}>
           <h2>Log Weight</h2>
-          <div className="weight-form">
+          <div className="weight-form" {...tapProbeProps("weight-form")}>
             <label>
               Date
               <input
                 type="date"
                 value={weightForm.date}
-                onChange={(e) => setWeightForm({ ...weightForm, date: e.target.value })}
+                onChange={(e) => {
+                  setWeightSaveError("");
+                  setWeightForm({ ...weightForm, date: e.target.value });
+                }}
               />
             </label>
             <label>
               Weight ({weightUnit})
               <input
-                type="number"
-                min="1"
-                step="0.1"
+                type="text"
                 inputMode="decimal"
+                pattern="[0-9]*[.]?[0-9]*"
                 value={weightForm.weight}
-                onChange={(e) => setWeightForm({ ...weightForm, weight: e.target.value })}
+                onChange={(e) => {
+                  setWeightSaveError("");
+                  setWeightForm({ ...weightForm, weight: e.target.value });
+                }}
               />
             </label>
             <label>
@@ -3011,13 +3815,22 @@ function startEditWeightEntry(entry: WeightEntry) {
               <input
                 value={weightForm.note}
                 placeholder="Optional"
-                onChange={(e) => setWeightForm({ ...weightForm, note: e.target.value })}
+                onChange={(e) => {
+                  setWeightSaveError("");
+                  setWeightForm({ ...weightForm, note: e.target.value });
+                }}
               />
             </label>
+            {weightSaveError && <p className="form-error">{weightSaveError}</p>}
             <button
   type="button"
   className="primary-button"
-  onClick={saveWeightEntry}
+  onPointerDown={(event) => logTapProbe("weight-save-button", "pointerdown", event)}
+  onTouchStart={(event) => logTapProbe("weight-save-button", "touchstart", event)}
+  onClick={(event) => {
+    logTapProbe("weight-save-button", "click", event);
+    saveWeightEntry();
+  }}
   disabled={!isWeightFormValid}
 >
   {editingWeightEntryId ? "Update" : "Save"}
@@ -3253,9 +4066,9 @@ function startEditWeightEntry(entry: WeightEntry) {
         </section>
 
         {weightEntryToDelete && (
-          <div className="modal-backdrop" role="presentation">
+          <div className="floating-overlay" role="presentation">
             <div
-              className="modal confirm-modal"
+              className="floating-popover confirm-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="remove-weight-title"
@@ -3797,105 +4610,223 @@ function startEditWeightEntry(entry: WeightEntry) {
 
   return (
     <main className="app">
-      <div className="top-bar">
-        <h1>Jessica App</h1>
-      </div>
+      {(() => {
+        const calorieBudget = goals?.calories ?? 0;
+        const exerciseCalories = 0;
+        const foodCalories = totalCalories;
+        const netCalories = Math.max(0, foodCalories - exerciseCalories);
+        const calorieDelta = calorieBudget - netCalories;
+        const calorieGaugePct = calorieBudget > 0
+          ? Math.min(100, Math.round((netCalories / calorieBudget) * 100))
+          : 0;
+        const totalMacroGrams = dailyTotals.protein + dailyTotals.carbs + dailyTotals.fat;
+        const proteinPct = totalMacroGrams > 0 ? (dailyTotals.protein / totalMacroGrams) * 100 : 0;
+        const carbsPct = totalMacroGrams > 0 ? (dailyTotals.carbs / totalMacroGrams) * 100 : 0;
+        const fatPct = totalMacroGrams > 0 ? (dailyTotals.fat / totalMacroGrams) * 100 : 0;
+        const isDayLogged = completedDays.includes(selectedDate);
 
-      <section className="panel day-summary">
-        <div className="date-row">
-          <button type="button" onClick={() => moveSelectedDate(-1)} aria-label="Previous day">
-            &lt;
-          </button>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => changeSelectedDate(e.target.value)}
-          />
-          <button type="button" onClick={() => moveSelectedDate(1)} aria-label="Next day">
-            &gt;
-          </button>
-        </div>
-
-        <h2>{selectedDate}</h2>
-
-        <div className="daily-nutrition-summary">
-          <h3>Daily Nutrition</h3>
-          {[
-            { label: "Calories", value: totalCalories, goal: goals?.calories ?? null, unit: "" },
-            { label: "Protein", value: dailyTotals.protein, goal: goals?.protein ?? null, unit: "g" },
-            { label: "Carbs", value: dailyTotals.carbs, goal: goals?.carbs ?? null, unit: "g" },
-            { label: "Fat", value: dailyTotals.fat, goal: goals?.fat ?? null, unit: "g" },
-          ].map(({ label, value, goal, unit }) => (
-            <div key={label}>
-              <span>{label}</span>
-              <strong>
-                {label === "Calories" ? value : formatMacro(value)}{unit}
-                {goal ? ` / ${goal}${unit}` : ""}
-              </strong>
-              {goal && goal > 0 && (
-                <div className="macro-bar-track">
-                  <div
-                    className={`macro-bar-fill${value > goal ? " over" : ""}`}
-                    style={{ width: `${Math.min(100, Math.round((value / goal) * 100))}%` }}
-                  />
-                </div>
-              )}
+        return (
+          <section className="log-screen">
+            <div className="log-date-nav">
+              <button type="button" onClick={() => moveSelectedDate(-1)} aria-label="Previous day">
+                ‹
+              </button>
+              <label className="log-calendar-button" aria-label="Pick date">
+                <span>📅</span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => changeSelectedDate(e.target.value)}
+                />
+              </label>
+              <strong>{formatEntryDate(selectedDate)}</strong>
+              <button type="button" onClick={() => moveSelectedDate(1)} aria-label="Next day">
+                ›
+              </button>
+              <button
+                type="button"
+                className="log-export-button"
+                onClick={() => {
+                  setExportStatus("");
+                  setIsExportPanelOpen(true);
+                }}
+              >
+                Export Day
+              </button>
             </div>
-          ))}
-        </div>
 
-        <div className="meal-groups">
-          {mealCategories.map((category) => (
-            <section className="meal-group" key={category}>
-              <div className="meal-header">
-                <h4>
-                  {category}
-                  <span>{getCategoryCalories(category)} cal</span>
-                </h4>
-                <button
-                  className="add-food-button"
-                  type="button"
-                  onClick={() => openAddFood(category)}
-                  aria-label={`Add food to ${category}`}
-                >
-                  +
-                </button>
+            <section className="panel log-summary-card">
+              <div className="log-summary-budget">
+                <span>Budget</span>
+                <strong>{calorieBudget > 0 ? `${calorieBudget.toLocaleString()} cal` : "Set goal"}</strong>
               </div>
 
-              <div className="log">
-                {log.filter((item) => item.category === category).length === 0 && (
-                  <p className="empty-meal">No foods logged.</p>
-                )}
+              <div className="log-calorie-gauge" style={{ "--gauge-pct": `${calorieGaugePct}%` } as CSSProperties}>
+                <div className="log-gauge-ring">
+                  <div>
+                    <span>{calorieDelta >= 0 ? "Remaining" : "Over"}</span>
+                    <strong>{Math.abs(calorieDelta).toLocaleString()}</strong>
+                    <small>cal</small>
+                  </div>
+                </div>
+              </div>
 
-                {log
-                  .filter((item) => item.category === category)
-                  .map((item) => (
-                    <div className="log-item" key={item.logId}>
-                      <span>
-                        {item.name} x {item.quantity} - {getItemCalories(item)} cal
-                      </span>
-                      <button onClick={() => setItemToRemove(item)}>Remove</button>
-                    </div>
-                  ))}
+              <div className="log-meal-breakdown">
+                {mealCategories.map((category) => {
+                  const mealTotals = getCategoryTotals(category);
+                  return (
+                    <button key={category} type="button" onClick={() => scrollToMeal(category)}>
+                      <span>{category}</span>
+                      <strong>{mealTotals.calories.toLocaleString()}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="log-macro-row">
+                <span><i className="macro-dot protein-dot" /> Protein <strong>{formatMacro(dailyTotals.protein)}g</strong></span>
+                <span><i className="macro-dot carbs-dot" /> Carbs <strong>{formatMacro(dailyTotals.carbs)}g</strong></span>
+                <span><i className="macro-dot fat-dot" /> Fat <strong>{formatMacro(dailyTotals.fat)}g</strong></span>
+              </div>
+
+              <div className="log-macro-segmented" aria-label="Macro progress">
+                {totalMacroGrams > 0 ? (
+                  <>
+                    <span className="protein-segment" style={{ width: `${proteinPct}%` }} />
+                    <span className="carbs-segment" style={{ width: `${carbsPct}%` }} />
+                    <span className="fat-segment" style={{ width: `${fatPct}%` }} />
+                  </>
+                ) : (
+                  <span className="empty-segment" />
+                )}
               </div>
             </section>
-          ))}
-        </div>
 
-        <div className="finished-logging-row">
-          <button
-            type="button"
-            className={`finished-logging-btn${completedDays.includes(selectedDate) ? " done" : ""}`}
-            onClick={markDayComplete}
-          >
-            {completedDays.includes(selectedDate) ? "✓ Day Logged!" : "Finished Logging for the Day"}
-          </button>
-        </div>
-      </section>
+            <div className="log-meal-list">
+              {mealCategories.map((category) => {
+                const mealItems = log.filter((item) => item.category === category);
+                const mealTotals = getCategoryTotals(category);
+                const isExpanded = expandedMeals[category];
+
+                return (
+                  <section
+                    className="panel log-meal-card"
+                    key={category}
+                    ref={(element) => {
+                      mealCardRefs.current[category] = element;
+                    }}
+                  >
+                    <div className="log-meal-header">
+                      <button
+                        type="button"
+                        className="meal-expand-button"
+                        onClick={() => toggleMeal(category)}
+                        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${category}`}
+                      >
+                        {isExpanded ? "▾" : "▸"}
+                      </button>
+                      <div>
+                        <h3>{category}</h3>
+                        <span>{mealTotals.calories.toLocaleString()} cal</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="meal-menu-button"
+                        aria-label={`${category} menu`}
+                        onClick={() => setMealMenuCategory(mealMenuCategory === category ? null : category)}
+                      >
+                        ⋯
+                      </button>
+                      {mealMenuCategory === category && (
+                        <div className="meal-settings-menu">
+                          <button type="button" onClick={() => openSaveMealAsRecipe(category)} disabled={mealItems.length === 0}>
+                            Save Meal as Recipe
+                          </button>
+                          <button
+                            type="button"
+                            className="danger-menu-item"
+                            onClick={() => {
+                              setMealMenuCategory(null);
+                              setMealToDelete(category);
+                            }}
+                            disabled={mealItems.length === 0}
+                          >
+                            Delete Entire Meal
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="log-meal-macros">
+                      <span>Fat {formatMacro(mealTotals.fat)}g</span>
+                      <span>Carbs {formatMacro(mealTotals.carbs)}g</span>
+                      <span>Protein {formatMacro(mealTotals.protein)}g</span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="log-food-list">
+                        {mealItems.length === 0 && (
+                          <p className="empty-meal">No foods logged.</p>
+                        )}
+
+                        {mealItems.map((item) => (
+                          <div className="log-food-row" key={item.logId}>
+                            <div className="log-food-icon" aria-hidden="true">
+                              {item.name.trim().charAt(0).toUpperCase() || "•"}
+                            </div>
+                            <div className="log-food-main">
+                              <strong>{getFoodDisplayName(item)}</strong>
+                              <span>{item.servingSize} × {item.quantity}</span>
+                            </div>
+                            <div className="log-food-calories">
+                              <strong>{getItemCalories(item)}</strong>
+                              <span>cal</span>
+                            </div>
+                            <button type="button" className="log-food-edit" onClick={() => openEditFoodItem(item)} aria-label={`Edit ${getFoodDisplayName(item)}`}>
+                              ✎
+                            </button>
+                            <button type="button" className="log-food-remove" onClick={() => setItemToRemove(item)}>
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="log-meal-actions">
+                      <button
+                        className="log-add-food-button"
+                        type="button"
+                        onPointerDown={(event) => logTapProbe(`open-add-food-${category}`, "pointerdown", event)}
+                        onTouchStart={(event) => logTapProbe(`open-add-food-${category}`, "touchstart", event)}
+                        onClick={(event) => {
+                          logTapProbe(`open-add-food-${category}`, "click", event);
+                          openAddFood(category);
+                        }}
+                      >
+                        Add Food
+                      </button>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+
+            <div className="finished-logging-row">
+              <span className="finish-toggle-label">Finish Logging</span>
+              <div className={`finish-toggle${isDayLogged ? " logged" : ""}`} role="switch" aria-checked={isDayLogged} aria-label="Finish logging">
+                <span className="finish-toggle-indicator" />
+                <button type="button" aria-label="Mark day unfinished" onClick={reopenDayLogging} />
+                <button type="button" aria-label="Finish logging" onClick={markDayComplete} />
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {pendingCategory && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="meal-category-title">
+        <div className="modal-backdrop" role="presentation" {...tapProbeProps("add-food-modal-backdrop")}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="meal-category-title" {...tapProbeProps("add-food-modal")}>
             <h2 id="meal-category-title">Add to {pendingCategory}</h2>
 
             <div className="tab-row" role="tablist" aria-label="Add food source">
@@ -4011,30 +4942,37 @@ function startEditWeightEntry(entry: WeightEntry) {
                     placeholder="Search custom foods..."
                     onChange={(e) => setCustomQuery(e.target.value)}
                   />
-                  <button type="button" onClick={openCustomFoodForm}>
+                  <button
+                    type="button"
+                    onPointerDown={(event) => logTapProbe("open-custom-food-form", "pointerdown", event)}
+                    onTouchStart={(event) => logTapProbe("open-custom-food-form", "touchstart", event)}
+                    onClick={(event) => {
+                      logTapProbe("open-custom-food-form", "click", event);
+                      openCustomFoodForm();
+                    }}
+                  >
                     Add custom
                   </button>
                 </div>
 
                 {isCustomFormOpen && (
-                  <div className="custom-food-form">
+                  <div className="custom-food-form" {...tapProbeProps("custom-food-form")}>
                     <div className="scan-food-panel">
-                      <input
-                        ref={customFoodScanInputRef}
-                        className="visually-hidden"
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={(e) => scanCustomFoodLabel(e.target.files?.[0])}
-                      />
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => customFoodScanInputRef.current?.click()}
-                        disabled={isScanningCustomFood}
-                      >
+                      <label className={`scan-file-label${isScanningCustomFood ? " disabled" : ""}`}>
+                        <input
+                          ref={customFoodScanInputRef}
+                          className="scan-file-input"
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          disabled={isScanningCustomFood}
+                          onClick={(e) => {
+                            e.currentTarget.value = "";
+                          }}
+                          onChange={(e) => scanCustomFoodLabel(e.target.files?.[0])}
+                        />
                         {isScanningCustomFood ? "Scanning label..." : "Scan Nutrition Label"}
-                      </button>
+                      </label>
                       {isScanningCustomFood && (
                         <p className="scan-status">Reading the nutrition label. This can take a moment.</p>
                       )}
@@ -4087,8 +5025,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Calories
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.calories}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, calories: e.target.value })
@@ -4098,9 +5037,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Protein
                       <input
-                        type="number"
-                        min="0"
-                        step="0.1"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.protein}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, protein: e.target.value })
@@ -4110,9 +5049,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Carbs
                       <input
-                        type="number"
-                        min="0"
-                        step="0.1"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.carbs}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, carbs: e.target.value })
@@ -4122,9 +5061,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Fat
                       <input
-                        type="number"
-                        min="0"
-                        step="0.1"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.fat}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, fat: e.target.value })
@@ -4134,9 +5073,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Fiber
                       <input
-                        type="number"
-                        min="0"
-                        step="0.1"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.fiber}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, fiber: e.target.value })
@@ -4146,9 +5085,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Sugar
                       <input
-                        type="number"
-                        min="0"
-                        step="0.1"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.sugar}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, sugar: e.target.value })
@@ -4158,9 +5097,9 @@ function startEditWeightEntry(entry: WeightEntry) {
                     <label>
                       Sodium
                       <input
-                        type="number"
-                        min="0"
-                        step="1"
+                        type="text"
+                        inputMode="decimal"
+                        pattern="[0-9]*[.]?[0-9]*"
                         value={customFoodForm.sodium}
                         onChange={(e) =>
                           setCustomFoodForm({ ...customFoodForm, sodium: e.target.value })
@@ -4177,8 +5116,17 @@ function startEditWeightEntry(entry: WeightEntry) {
                       />
                     </label>
 
-                    <div className="form-actions">
-                      <button type="button" onClick={createCustomFood}>
+                    <div className="form-actions" {...tapProbeProps("custom-food-form-actions")}>
+                      {customFoodSaveError && <p className="form-error">{customFoodSaveError}</p>}
+                      <button
+                        type="button"
+                        onPointerDown={(event) => logTapProbe("custom-food-save-button", "pointerdown", event)}
+                        onTouchStart={(event) => logTapProbe("custom-food-save-button", "touchstart", event)}
+                        onClick={(event) => {
+                          logTapProbe("custom-food-save-button", "click", event);
+                          createCustomFood();
+                        }}
+                      >
                         Save food
                       </button>
                       <button type="button" onClick={() => setIsCustomFormOpen(false)}>
@@ -4406,74 +5354,6 @@ function startEditWeightEntry(entry: WeightEntry) {
 
             {!isCustomFormOpen && !isRecipeFormOpen && (
               <>
-                {selectedFood && (
-                  <div className="selected-food-summary">
-                    <strong>{selectedFood.name}</strong>
-                    {isLoadingDetail && <span>Loading portions...</span>}
-                    {detailError && <span className="modal-error">{detailError}</span>}
-                  </div>
-                )}
-
-                {selectedFood && (
-                  <>
-                    {usesLocalPortion && (
-                      <label className="portion-row">
-                        Amount ({getLocalPortionUnit(selectedFood)})
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={portionAmount}
-                          onChange={(e) => setPortionAmount(e.target.value)}
-                        />
-                        <span className="modal-hint">
-                          calculated from {selectedFood.servingSize}
-                        </span>
-                      </label>
-                    )}
-
-                    {portionOptions.length > 0 && (
-                      <label className="portion-row">
-                        Portion
-                        <select
-                          value={selectedPortionValue}
-                          onChange={(e) => setSelectedPortionValue(e.target.value)}
-                        >
-                          {portionOptions.map((portion) => (
-                            <option key={portion.value} value={portion.value}>
-                              {portion.label} ({portion.gramWeight}g)
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    )}
-
-                    {!usesLocalPortion && (
-                      <label className="quantity-row">
-                        Quantity
-                        <input
-                          type="number"
-                          min="0.1"
-                          step="0.1"
-                          value={quantity}
-                          onChange={(e) => setQuantity(e.target.value)}
-                        />
-                      </label>
-                    )}
-                  </>
-                )}
-
-                {selectedFood && selectedPortionCalories !== null && (
-                  <p className="modal-hint">
-                    {selectedPortionCalories} cal per selected serving
-                  </p>
-                )}
-
-                {selectedFood && (
-                  <button className="primary-button" onClick={addSelectedFood} disabled={!canAddSelectedFood}>
-                    Add
-                  </button>
-                )}
                 <button className="secondary-button" onClick={closeAddFood}>
                   Cancel
                 </button>
@@ -4483,21 +5363,202 @@ function startEditWeightEntry(entry: WeightEntry) {
         </div>
       )}
 
+      {pendingCategory && selectedFood && !isCustomFormOpen && !isRecipeFormOpen && (
+        <div className="floating-overlay serving-overlay" role="presentation">
+          <div className="floating-popover serving-popover" role="dialog" aria-modal="true" aria-labelledby="serving-popup-title">
+            <h2 id="serving-popup-title">{getFoodDisplayName(selectedFood)}</h2>
+            {isLoadingDetail && <p className="scan-status">Loading portions...</p>}
+            {detailError && <p className="modal-error">{detailError}</p>}
+
+            <p className="serving-basis-text">
+              Based on {measuredServingBasis ? `${measuredServingBasis.amount}${measuredServingBasis.unit}` : selectedFood.servingSize}
+            </p>
+
+            {allowedAmountUnits.length > 1 && (
+              <div className="serving-unit-tabs" role="group" aria-label="Serving unit">
+                {allowedAmountUnits.map((unit) => (
+                  <button
+                    key={unit}
+                    type="button"
+                    className={amountUnit === unit ? "active" : ""}
+                    onClick={() => setAmountUnit(unit)}
+                  >
+                    {unit === "serving" ? "Serving" : unit}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {amountUnit === "serving" && portionOptions.length > 0 && (
+              <label className="floating-field">
+                Portion
+                <select value={selectedPortionValue} onChange={(e) => setSelectedPortionValue(e.target.value)}>
+                  {portionOptions.map((portion) => (
+                    <option key={portion.value} value={portion.value}>
+                      {portion.label} ({portion.gramWeight}g)
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <label className="floating-field">
+              {amountUnit === "serving" ? "Servings" : `Amount (${allowedAmountUnits[0]})`}
+              <input
+                type="text"
+                inputMode="decimal"
+                value={amountUnit === "serving" ? quantity : portionAmount}
+                onChange={(e) =>
+                  amountUnit === "serving"
+                    ? setQuantity(e.target.value)
+                    : setPortionAmount(e.target.value)
+                }
+              />
+            </label>
+
+            {selectedPortionCalories !== null && (
+              <p className="modal-hint">
+                {selectedPortionCalories.toLocaleString()} cal for this amount
+              </p>
+            )}
+
+            <div className="floating-actions">
+              <button className="primary-button" type="button" onClick={addSelectedFood} disabled={!canAddSelectedFood}>
+                Add Food
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setSelectedFood(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isExportPanelOpen && (
+        <div className="floating-overlay" role="presentation">
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="export-day-title">
+            <h2 id="export-day-title">Export Day</h2>
+            <p>Creates food-log-{selectedDate}.json for the selected day only.</p>
+            {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+              <label className="floating-field">
+                Google OAuth Client ID
+                <input
+                  value={googleDriveClientId}
+                  placeholder="123...apps.googleusercontent.com"
+                  onChange={(e) => setGoogleDriveClientId(e.target.value)}
+                />
+              </label>
+            )}
+            {exportStatus && <p className="scan-status">{exportStatus}</p>}
+            <div className="floating-actions">
+              <button type="button" className="primary-button" onClick={downloadDayExport}>
+                Download JSON
+              </button>
+              <button type="button" onClick={uploadDayExportToDrive}>
+                Upload Drive
+              </button>
+            </div>
+            <button type="button" onClick={shareDayExport}>
+              Share Sheet
+            </button>
+            <button type="button" className="secondary-button" onClick={() => setIsExportPanelOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mealToSaveAsRecipe && (
+        <div className="floating-overlay" role="presentation">
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="save-meal-title">
+            <h2 id="save-meal-title">Save meal as recipe</h2>
+            <label className="floating-field">
+              Recipe name
+              <input value={mealRecipeName} onChange={(e) => setMealRecipeName(e.target.value)} />
+            </label>
+            <div className="floating-actions">
+              <button type="button" onClick={saveMealAsRecipe} disabled={!mealRecipeName.trim()}>
+                Save
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setMealToSaveAsRecipe(null);
+                  setMealRecipeName("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mealToDelete && (
+        <div className="floating-overlay" role="presentation">
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="delete-meal-title">
+            <h2 id="delete-meal-title">Delete entire meal?</h2>
+            <p>All foods in {mealToDelete} will be removed.</p>
+            <div className="floating-actions">
+              <button type="button" className="danger-button" onClick={confirmDeleteMeal}>
+                Delete Meal
+              </button>
+              <button type="button" className="secondary-button" onClick={() => setMealToDelete(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {itemToEdit && (
+        <div className="floating-overlay" role="presentation">
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="edit-food-title">
+            <h2 id="edit-food-title">Edit food</h2>
+            <p>{getFoodDisplayName(itemToEdit)}</p>
+            <label className="floating-field">
+              Quantity
+              <input
+                type="text"
+                inputMode="decimal"
+                value={editItemQuantity}
+                onChange={(e) => setEditItemQuantity(e.target.value)}
+              />
+            </label>
+            <label className="floating-field">
+              Serving
+              <input value={editItemServingSize} onChange={(e) => setEditItemServingSize(e.target.value)} />
+            </label>
+            <div className="floating-actions">
+              <button type="button" className="primary-button" onClick={saveEditedFoodItem}>
+                Save
+              </button>
+              <button type="button" className="secondary-button" onClick={() => setItemToEdit(null)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {itemToRemove && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-food-title">
+        <div className="floating-overlay" role="presentation">
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-food-title">
             <h2 id="remove-food-title">Remove food?</h2>
             <p>
-              {itemToRemove.name} x {itemToRemove.quantity} will be removed from{" "}
+              {getFoodDisplayName(itemToRemove)} x {itemToRemove.quantity} will be removed from{" "}
               {itemToRemove.category}.
             </p>
 
-            <button className="danger-button" onClick={confirmRemoveFood}>
-              Remove
-            </button>
-            <button className="secondary-button" onClick={() => setItemToRemove(null)}>
-              Cancel
-            </button>
+            <div className="floating-actions">
+              <button className="danger-button" onClick={confirmRemoveFood}>
+                Remove
+              </button>
+              <button className="secondary-button" onClick={() => setItemToRemove(null)}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
