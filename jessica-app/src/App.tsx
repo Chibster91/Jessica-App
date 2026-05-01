@@ -8,6 +8,7 @@ type Food = {
   brand: string | null;
   category?: string | null;
   dataType?: string | null;
+  source?: string;
   servingSize: string;
   calories: number;
   protein: number;
@@ -165,6 +166,24 @@ type CustomFoodForm = {
   notes: string;
 };
 
+type FoodLogImportDraft = {
+  id: string;
+  date: string;
+  meal: string;
+  name: string;
+  serving: string;
+  calories: string;
+  protein: string;
+  carbs: string;
+  fat: string;
+  notes: string;
+  source: string;
+};
+
+type FoodLogImportResult =
+  | { ok: true; items: FoodLogImportDraft[] }
+  | { ok: false; errors: string[] };
+
 type ScannedNutritionFields = Partial<
   Pick<
     CustomFoodForm,
@@ -222,12 +241,24 @@ type GoogleDriveUploadResponse = {
   webViewLink?: string;
 };
 
-const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"] as const;
+type GoogleDriveFile = {
+  id: string;
+  name: string;
+  modifiedTime?: string;
+  size?: string;
+};
+
+type GoogleDriveFileListResponse = {
+  files?: GoogleDriveFile[];
+};
+
+const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const poundsPerKilogram = 2.2046226218;
 const debugLogKey = "jessicaDebugLog";
 const googleDriveClientIdKey = "googleDriveClientId";
-const googleDriveScope = "https://www.googleapis.com/auth/drive.file";
+const googleDriveScope = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly";
 const googleIdentityScriptUrl = "https://accounts.google.com/gsi/client";
+const defaultFoodIconUrl = `${import.meta.env.BASE_URL}Apple.png`;
 
 const emptyCustomFoodForm: CustomFoodForm = {
   name: "",
@@ -337,7 +368,7 @@ const brandSynonyms: Record<string, string[]> = {
   lunchable: ["lunchable", "cracker stacker meal", "packaged lunch kit"],
 };
 
-type MealCategory = (typeof mealCategories)[number];
+type MealCategory = string;
 
 type LogItem = Food & { logId: string; category: MealCategory; quantity: number };
 
@@ -443,6 +474,144 @@ function getSavedTopFoods(): TopFoodEntry[] {
 }
 function saveTopFoods(foods: TopFoodEntry[]): void {
   setStorageJson("topFoods", foods);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readStringField(source: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string") return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+
+  return "";
+}
+
+function readOptionalNumberField(source: Record<string, unknown>, keys: string[]) {
+  const value = readStringField(source, keys);
+  return value ? value : "0";
+}
+
+function isValidLogDate(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+
+  const [year, month, day] = date.split("-").map(Number);
+  const parsed = new Date(year, month - 1, day);
+  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
+}
+
+function validateImportDraft(item: FoodLogImportDraft, index: number) {
+  const errors: string[] = [];
+  const row = `Item ${index + 1}`;
+  const calories = parseDecimalInput(item.calories);
+  const protein = parseDecimalInput(item.protein || "0");
+  const carbs = parseDecimalInput(item.carbs || "0");
+  const fat = parseDecimalInput(item.fat || "0");
+
+  if (!isValidLogDate(item.date)) errors.push(`${row}: date must be YYYY-MM-DD.`);
+  if (!item.meal.trim()) errors.push(`${row}: meal is required.`);
+  if (!item.name.trim()) errors.push(`${row}: name is required.`);
+  if (!item.serving.trim()) errors.push(`${row}: serving is required.`);
+  if (!Number.isFinite(calories) || calories < 0) errors.push(`${row}: calories must be a non-negative number.`);
+  if (![protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)) {
+    errors.push(`${row}: protein, carbs, and fat must be non-negative numbers when provided.`);
+  }
+
+  return errors;
+}
+
+function buildImportDraft(date: string, meal: string, item: unknown): FoodLogImportDraft | null {
+  if (!isRecord(item)) return null;
+
+  const macros = isRecord(item.macros) ? item.macros : {};
+  const serving = readStringField(item, ["serving", "servingSize", "portion"]);
+
+  return {
+    id: createClientId(),
+    date,
+    meal,
+    name: readStringField(item, ["name", "food", "foodName"]),
+    serving,
+    calories: readStringField(item, ["calories", "kcal"]),
+    protein: readOptionalNumberField({ ...macros, ...item }, ["protein"]),
+    carbs: readOptionalNumberField({ ...macros, ...item }, ["carbs", "carbohydrates"]),
+    fat: readOptionalNumberField({ ...macros, ...item }, ["fat"]),
+    notes: readStringField(item, ["notes", "note"]),
+    source: readStringField(item, ["source"]),
+  };
+}
+
+function parseFoodLogImportJson(json: unknown): FoodLogImportResult {
+  if (!isRecord(json)) {
+    return { ok: false, errors: ["Import file must be a JSON object."] };
+  }
+
+  const date = readStringField(json, ["date"]);
+  const items: FoodLogImportDraft[] = [];
+  const errors: string[] = [];
+
+  if (!date) {
+    errors.push("Top-level date is required.");
+  } else if (!isValidLogDate(date)) {
+    errors.push("Top-level date must be YYYY-MM-DD.");
+  }
+
+  if (Array.isArray(json.meals)) {
+    json.meals.forEach((mealValue, mealIndex) => {
+      if (!isRecord(mealValue)) {
+        errors.push(`Meal ${mealIndex + 1}: meal must be an object.`);
+        return;
+      }
+
+      const mealName = readStringField(mealValue, ["name", "meal", "mealName"]);
+      const mealItems = Array.isArray(mealValue.items)
+        ? mealValue.items
+        : Array.isArray(mealValue.foods)
+          ? mealValue.foods
+          : null;
+
+      if (!mealName) errors.push(`Meal ${mealIndex + 1}: meal name is required.`);
+      if (!mealItems) {
+        errors.push(`Meal ${mealIndex + 1}: items must be an array.`);
+        return;
+      }
+
+      mealItems.forEach((food, foodIndex) => {
+        const draft = buildImportDraft(date, mealName, food);
+        if (draft) items.push(draft);
+        else errors.push(`Meal ${mealIndex + 1}, item ${foodIndex + 1}: item must be an object.`);
+      });
+    });
+  } else {
+    const mealName = readStringField(json, ["meal", "mealName"]);
+    if (!mealName) errors.push("Meal name is required.");
+    if (!Array.isArray(json.items)) {
+      errors.push("Items must be an array.");
+    } else {
+      json.items.forEach((food, index) => {
+        const draft = buildImportDraft(date, mealName, food);
+        if (draft) items.push(draft);
+        else errors.push(`Item ${index + 1}: item must be an object.`);
+      });
+    }
+  }
+
+  if (items.length === 0) errors.push("Import file must include at least one item.");
+  items.forEach((item, index) => errors.push(...validateImportDraft(item, index)));
+
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, items };
+}
+
+function normalizeMealName(meal: string) {
+  return meal.trim().replace(/\s+/g, " ");
+}
+
+function getMealCategoriesForLog(items: LogItem[]) {
+  const importedMeals = items.map((item) => item.category).filter((category) => !mealCategories.includes(category));
+  return [...mealCategories, ...Array.from(new Set(importedMeals))];
 }
 
 function getSavedGoals(): Goals | null {
@@ -1412,6 +1581,12 @@ function getDayLetter(date: string): string {
   return ["S", "M", "T", "W", "R", "F", "S"][dow];
 }
 
+function getShortDayName(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
+}
+
 function formatDateRange(startDate: string, endDate: string) {
   const [sy, sm, sd] = startDate.split("-").map(Number);
   const [ey, em, ed] = endDate.split("-").map(Number);
@@ -1508,6 +1683,7 @@ function getConfiguredGoogleClientId() {
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
+  const foodLogImportInputRef = useRef<HTMLInputElement | null>(null);
   const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
   const [appView, setAppView] = useState<AppView>("home");
   const [selectedDate, setSelectedDate] = useState(today);
@@ -1599,6 +1775,14 @@ function App() {
   const [exportDriveLink, setExportDriveLink] = useState("");
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   const [googleDriveClientId, setGoogleDriveClientId] = useState(() => getConfiguredGoogleClientId());
+  const [importDrafts, setImportDrafts] = useState<FoodLogImportDraft[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importStatus, setImportStatus] = useState("");
+  const [importFileName, setImportFileName] = useState("");
+  const [driveImportFiles, setDriveImportFiles] = useState<GoogleDriveFile[]>([]);
+  const [driveImportStatus, setDriveImportStatus] = useState("");
+  const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
+  const [isLoadingDriveImport, setIsLoadingDriveImport] = useState(false);
 
   useEffect(() => {
     setStorageJson(`log-${selectedDate}`, log);
@@ -2230,8 +2414,133 @@ function App() {
     setMealMenuCategory(null);
   }
 
+  async function readFoodLogImport(file: File | undefined) {
+    setImportStatus("");
+    setImportErrors([]);
+    setImportFileName(file?.name ?? "");
+
+    if (!file) return;
+
+    try {
+      loadFoodLogImportText(await file.text(), file.name);
+    } catch (error) {
+      setImportDrafts([]);
+      setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
+    } finally {
+      if (foodLogImportInputRef.current) foodLogImportInputRef.current.value = "";
+    }
+  }
+
+  function loadFoodLogImportText(text: string, fileName: string) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      const result = parseFoodLogImportJson(parsed);
+
+      setImportFileName(fileName);
+      setImportStatus("");
+
+      if (result.ok === false) {
+        setImportDrafts([]);
+        setImportErrors(result.errors);
+        return;
+      }
+
+      setImportErrors([]);
+      setImportDrafts(result.items);
+    } catch (error) {
+      setImportDrafts([]);
+      setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
+    }
+  }
+
+  function updateImportDraft(id: string, updates: Partial<FoodLogImportDraft>) {
+    setImportDrafts((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...updates } : item))
+    );
+    setImportErrors([]);
+  }
+
+  function removeImportDraft(id: string) {
+    setImportDrafts((current) => current.filter((item) => item.id !== id));
+    setImportErrors([]);
+  }
+
+  function closeImportPreview() {
+    setImportDrafts([]);
+    setImportErrors([]);
+    setImportFileName("");
+  }
+
+  function confirmFoodLogImport() {
+    const validationErrors = importDrafts.flatMap((item, index) => validateImportDraft(item, index));
+    if (validationErrors.length > 0) {
+      setImportErrors(validationErrors);
+      return;
+    }
+
+    const importedFoods = importDrafts.map((item, index) => {
+      const food: Food = {
+        id: -(Date.now() + index + 1),
+        name: item.name.trim(),
+        brand: null,
+        source: item.source.trim() || undefined,
+        servingSize: item.serving.trim(),
+        calories: Math.round(parseDecimalInput(item.calories)),
+        protein: parseDecimalInput(item.protein || "0"),
+        carbs: parseDecimalInput(item.carbs || "0"),
+        fat: parseDecimalInput(item.fat || "0"),
+        notes: item.notes.trim() || undefined,
+      };
+
+      return {
+        date: item.date,
+        meal: normalizeMealName(item.meal),
+        food,
+      };
+    });
+
+    const nextLogsByDate = new Map<string, LogItem[]>();
+    for (const entry of importedFoods) {
+      const existingLog = nextLogsByDate.get(entry.date) ?? (entry.date === selectedDate ? log : getSavedLog(entry.date));
+      nextLogsByDate.set(entry.date, [
+        ...existingLog,
+        {
+          ...entry.food,
+          logId: createClientId(),
+          category: entry.meal,
+          quantity: 1,
+        },
+      ]);
+    }
+
+    for (const [date, nextLog] of nextLogsByDate) {
+      setStorageJson(`log-${date}`, nextLog);
+    }
+
+    setCustomFoods((current) => [...importedFoods.map((entry) => entry.food), ...current]);
+    setTopFoods((current) => {
+      const counts = new Map(current.map((food) => [food.name, food.count]));
+      importedFoods.forEach((entry) => {
+        counts.set(entry.food.name, (counts.get(entry.food.name) ?? 0) + 1);
+      });
+
+      return Array.from(counts, ([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+    });
+
+    const firstDate = importedFoods[0]?.date ?? selectedDate;
+    if (nextLogsByDate.has(firstDate)) {
+      setSelectedDate(firstDate);
+      setLog(nextLogsByDate.get(firstDate) ?? getSavedLog(firstDate));
+    }
+
+    setImportStatus(`Imported ${importedFoods.length} food${importedFoods.length === 1 ? "" : "s"}.`);
+    closeImportPreview();
+  }
+
   function getDayExportData() {
-    const meals = mealCategories.map((category) => {
+    const meals = getMealCategoriesForLog(log).map((category) => {
       const mealItems = getMealItems(category);
       const totals = getCategoryTotals(category);
 
@@ -2247,6 +2556,7 @@ function App() {
           name: getFoodDisplayName(item),
           brand: item.brand ? getBrandDisplayName(item.brand) : null,
           servingSize: item.servingSize,
+          serving: item.servingSize,
           servings: item.quantity,
           calories: getItemCalories(item),
           macros: {
@@ -2258,6 +2568,7 @@ function App() {
             ...(item.sodium !== undefined ? { sodium: Number((item.sodium * item.quantity).toFixed(1)) } : {}),
           },
           ...(item.notes ? { notes: item.notes } : {}),
+          ...(item.source ? { source: item.source } : {}),
         })),
       };
     });
@@ -2391,6 +2702,109 @@ function App() {
       return parsed.error?.message || parsed.error?.status || fallback;
     } catch {
       return errorText;
+    }
+  }
+
+  async function getGoogleDriveRequestError(response: Response, action: string) {
+    const fallback = `Google Drive ${action} failed (${response.status}).`;
+    const errorText = await response.text();
+
+    if (!errorText) return fallback;
+
+    try {
+      const parsed = JSON.parse(errorText) as {
+        error?: {
+          message?: string;
+          status?: string;
+        };
+      };
+      return parsed.error?.message || parsed.error?.status || fallback;
+    } catch {
+      return errorText;
+    }
+  }
+
+  async function openDriveImport() {
+    if (isLoadingDriveImport) return;
+
+    const clientId = googleDriveClientId.trim();
+    setExportDriveLink("");
+    setDriveImportFiles([]);
+
+    if (!clientId) {
+      setExportStatus("Add your Google OAuth Client ID first.");
+      return;
+    }
+
+    localStorage.setItem(googleDriveClientIdKey, clientId);
+    setDriveImportStatus("Opening Google authorization...");
+    setIsLoadingDriveImport(true);
+
+    try {
+      const accessToken = await getGoogleDriveAccessToken(clientId);
+      setDriveImportStatus("Loading JSON files from Google Drive...");
+
+      const params = new URLSearchParams({
+        pageSize: "20",
+        orderBy: "modifiedTime desc",
+        spaces: "drive",
+        fields: "files(id,name,modifiedTime,size)",
+        q: "(mimeType='application/json' or name contains '.json') and trashed=false",
+      });
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await getGoogleDriveRequestError(response, "file list"));
+      }
+
+      const result = (await response.json()) as GoogleDriveFileListResponse;
+      const files = result.files ?? [];
+      setDriveImportFiles(files);
+      setIsDriveImportOpen(true);
+      setDriveImportStatus(files.length > 0 ? "" : "No JSON files were available to this app in Google Drive.");
+    } catch (error) {
+      setDriveImportStatus(error instanceof Error ? error.message : "Google Drive import failed.");
+    } finally {
+      setIsLoadingDriveImport(false);
+    }
+  }
+
+  async function importGoogleDriveFile(file: GoogleDriveFile) {
+    if (isLoadingDriveImport) return;
+
+    const clientId = googleDriveClientId.trim();
+    if (!clientId) {
+      setDriveImportStatus("Add your Google OAuth Client ID first.");
+      return;
+    }
+
+    setIsLoadingDriveImport(true);
+    setDriveImportStatus(`Loading ${file.name}...`);
+
+    try {
+      const accessToken = await getGoogleDriveAccessToken(clientId);
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(await getGoogleDriveRequestError(response, "file download"));
+      }
+
+      loadFoodLogImportText(await response.text(), file.name);
+      setDriveImportStatus("");
+      setIsDriveImportOpen(false);
+      setIsExportPanelOpen(false);
+    } catch (error) {
+      setDriveImportStatus(error instanceof Error ? error.message : "Could not import that Google Drive file.");
+    } finally {
+      setIsLoadingDriveImport(false);
     }
   }
 
@@ -2874,6 +3288,7 @@ function startEditWeightEntry(entry: WeightEntry) {
       ? Math.round(selectedFood.calories * localPortionScale)
       : getCaloriesPerServing(selectedFood, selectedFoodDetail, selectedPortion)
     : null;
+  const visibleMealCategories = getMealCategoriesForLog(log);
   const recentFoods = getRecentFoods(selectedDate);
   const filteredCustomFoods = customFoods.filter((food) => matchesFoodQuery(food, customQuery));
   const filteredRecipes = recipes.filter((recipe) => matchesFoodQuery(recipe, recipeQuery));
@@ -3050,9 +3465,9 @@ function startEditWeightEntry(entry: WeightEntry) {
 
     const totalMacroGrams = displayStats.fat + displayStats.carbs + displayStats.protein;
     const macroPieSlices = [
-      { label: "Protein", value: displayStats.protein, color: "#a32c2c" },
-      { label: "Carbs", value: displayStats.carbs, color: "#2e44b3" },
-      { label: "Fat", value: displayStats.fat, color: "#ffbb00" },
+      { label: "Protein", value: displayStats.protein, color: "var(--macro-protein)" },
+      { label: "Carbs", value: displayStats.carbs, color: "var(--macro-carbs)" },
+      { label: "Fat", value: displayStats.fat, color: "var(--macro-fat)" },
     ].reduce(
       (slices, macro) => {
         if (totalMacroGrams <= 0 || macro.value <= 0) return slices;
@@ -3139,7 +3554,7 @@ function startEditWeightEntry(entry: WeightEntry) {
               const redPct = goalCal > 0 && calories > goalCal
                 ? Math.min(100 - calorieBudgetMarkerPct, ((calories - goalCal) / calorieOverflowCapacity) * (100 - calorieBudgetMarkerPct))
                 : 0;
-              const dayLetter = getDayLetter(date);
+              const dayLabel = getShortDayName(date);
               return (
                 <button key={date} type="button"
                   className={`dash-day-col${isSel ? " selected" : ""}`}
@@ -3148,11 +3563,11 @@ function startEditWeightEntry(entry: WeightEntry) {
                   <div className={`dash-bar-wrap dash-budget-wrap${isSel ? " sel" : ""}`}>
                     <div className="dash-budget-marker" style={{ bottom: `${calorieBudgetMarkerPct}%` }} />
                     <div className={`dash-cal-budget-fill${isToday ? " today" : ""}`} style={{ height: `${greenPct}%` }} />
-                    {redPct > 0 && (
+                  {redPct > 0 && (
                       <div className="dash-cal-over-fill" style={{ bottom: `${calorieBudgetMarkerPct}%`, height: `${redPct}%` }} />
                     )}
                   </div>
-                  <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{dayLetter}</span>
+                  <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{dayLabel}</span>
                 </button>
               );
             })}
@@ -3161,6 +3576,7 @@ function startEditWeightEntry(entry: WeightEntry) {
 
         {/* MACROS CARD */}
         <section className="panel dash-card dash-macro-card">
+          <p className="dash-card-label">MACROS</p>
           <div className="dash-macro-layout">
             <div className="dash-pie-wrap">
               <svg viewBox="0 0 100 100" className="dash-pie-chart" role="img" aria-label="Macro split">
@@ -3168,12 +3584,6 @@ function startEditWeightEntry(entry: WeightEntry) {
                   macroPieSlices.map((slice) => (
                     <g key={slice.label}>
                       <path d={slice.path} fill={slice.color} />
-                      <text x={slice.labelX} y={slice.labelY - 2} textAnchor="middle" className="dash-pie-label-name">
-                        {slice.label}
-                      </text>
-                      <text x={slice.labelX} y={slice.labelY + 8} textAnchor="middle" className="dash-pie-label-pct">
-                        {slice.percentage}%
-                      </text>
                     </g>
                   ))
                 ) : (
@@ -3199,23 +3609,23 @@ function startEditWeightEntry(entry: WeightEntry) {
                       <div className={`dash-macro-meter${isSel ? " sel" : ""}${isToday ? " today" : ""}${total > 0 ? " logged" : ""}`}>
                         {total > 0 ? (
                           <div className="dash-macro-meter-fill">
-                            {protein > 0 && <div style={{ flex: protein, background: "#a32c2c" }} />}
-                            {carbs > 0 && <div style={{ flex: carbs, background: "#2e44b3" }} />}
-                            {fat > 0 && <div style={{ flex: fat, background: "#ffbb00" }} />}
+                            {protein > 0 && <div style={{ flex: protein, background: "var(--macro-protein)" }} />}
+                            {carbs > 0 && <div style={{ flex: carbs, background: "var(--macro-carbs)" }} />}
+                            {fat > 0 && <div style={{ flex: fat, background: "var(--macro-fat)" }} />}
                           </div>
                         ) : (
                           <div className="dash-macro-meter-empty" />
                         )}
                       </div>
-                      <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{getDayLetter(date)}</span>
+                      <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{getShortDayName(date)}</span>
                     </button>
                   );
                 })}
               </div>
               <p className="dash-macro-summary-line" aria-label="Macro breakdown">
-                <span><b style={{ color: "#c75c56" }}>P</b> {Math.round(displayStats.protein)}g</span>
-                <span><b style={{ color: "#7088d1" }}>C</b> {Math.round(displayStats.carbs)}g</span>
-                <span><b style={{ color: "#ffe066" }}>F</b> {Math.round(displayStats.fat)}g</span>
+                <span><b style={{ color: "var(--macro-protein)" }}>Protein</b> {Math.round(displayStats.protein)}g</span>
+                <span><b style={{ color: "var(--macro-carbs)" }}>Carbs</b> {Math.round(displayStats.carbs)}g</span>
+                <span><b style={{ color: "var(--macro-fat)" }}>Fat</b> {Math.round(displayStats.fat)}g</span>
               </p>
             </div>
           </div>
@@ -3224,7 +3634,7 @@ function startEditWeightEntry(entry: WeightEntry) {
         {/* BOTTOM CARDS */}
         <section className="dash-bottom-grid">
           {/* Top Left: Streak */}
-          <div className="panel dash-card dash-mini-card">
+          <div className="panel dash-card dash-mini-card dash-streak-card">
             <p className="dash-quad-label">Streak</p>
             <strong className="dash-streak-num">{completedStreak > 0 ? completedStreak : "—"}</strong>
             <span className="dash-quad-sub">days completed</span>
@@ -3254,9 +3664,9 @@ function startEditWeightEntry(entry: WeightEntry) {
             {goals ? (
               <div className="dash-macro-progress-list">
                 {[
-                  { label: "Protein", total: goalsView === "weekly" ? weekTotalProtein : displayStats.protein, goal: goals.protein * (goalsView === "weekly" ? 7 : 1), color: "#a32c2c", overflowColor: "#ef4444" },
-                  { label: "Carbs", total: goalsView === "weekly" ? weekTotalCarbs : displayStats.carbs, goal: goals.carbs * (goalsView === "weekly" ? 7 : 1), color: "#2e44b3", overflowColor: "#60a5fa" },
-                  { label: "Fat", total: goalsView === "weekly" ? weekTotalFat : displayStats.fat, goal: goals.fat * (goalsView === "weekly" ? 7 : 1), color: "#ffbb00", overflowColor: "#f97316" },
+                  { label: "Protein", total: goalsView === "weekly" ? weekTotalProtein : displayStats.protein, goal: goals.protein * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-protein)", overflowColor: "#22c55e" },
+                  { label: "Carbs", total: goalsView === "weekly" ? weekTotalCarbs : displayStats.carbs, goal: goals.carbs * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-carbs)", overflowColor: "#38bdf8" },
+                  { label: "Fat", total: goalsView === "weekly" ? weekTotalFat : displayStats.fat, goal: goals.fat * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-fat)", overflowColor: "#fb923c" },
                 ].map(({ label, total, goal, color, overflowColor }) => {
                   const markerPct = 80;
                   const goalFillPct = goal > 0 ? Math.min(markerPct, (total / goal) * markerPct) : 0;
@@ -3291,7 +3701,7 @@ function startEditWeightEntry(entry: WeightEntry) {
           </div>
 
           {/* Bottom Left: Weight */}
-          <div className="panel dash-card dash-mini-card">
+          <div className="panel dash-card dash-mini-card dash-weight-card">
             <p className="dash-quad-label">Weight</p>
             {currentWeightEntry ? (
               <>
@@ -3303,7 +3713,7 @@ function startEditWeightEntry(entry: WeightEntry) {
                   const start = convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit);
                   const diff = cur - start;
                   return (
-                    <span className="dash-quad-sub" style={{ color: diff <= 0 ? "#c75c56" : "#f87171" }}>
+                    <span className={`dash-quad-sub ${diff <= 0 ? "weight-lost" : "weight-gained"}`}>
                       {diff < 0 ? `↓ ${formatWeightValue(Math.abs(diff), weightUnit)} lost` : `↑ ${formatWeightValue(diff, weightUnit)} gained`}
                     </span>
                   );
@@ -3339,14 +3749,19 @@ function startEditWeightEntry(entry: WeightEntry) {
             )}
           </div>
 
-          {/* Bottom Right: Top 3 Foods */}
+          {/* Bottom Right: Top Foods */}
           <div className="panel dash-card dash-mini-card">
             <p className="dash-quad-label">Top Foods</p>
             {topFoods.length > 0 ? (
               <ol className="dash-top-foods">
-                {topFoods.slice(0, 3).map((f, index) => (
+                {topFoods.slice(0, 5).map((f, index) => (
                   <li key={f.name} className="dash-top-food-item">
-                    <span className="dash-food-name">{index + 1}. {f.name}</span>
+                    <span className="dash-food-name">
+                      <span className="dash-food-medal" aria-hidden="true">
+                        {index === 0 ? "🏆" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
+                      </span>
+                      <span className="dash-food-name-text">{f.name}</span>
+                    </span>
                     <span className="dash-food-count">×{f.count}</span>
                   </li>
                 ))}
@@ -4210,7 +4625,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                     type="button"
                     onClick={() => setLibrarySelection({ type: "recent", food })}
                   >
-                    <strong>{food.name}</strong>
+                    <span className="food-card-title">
+                      <img src={defaultFoodIconUrl} alt="" />
+                      <strong>{food.name}</strong>
+                    </span>
                     <span>Brand: {getBrandDisplayName(food.brand)}</span>
                     <span>
                       {food.calories} cal per {food.servingSize}
@@ -4233,7 +4651,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                     type="button"
                     onClick={() => setLibrarySelection({ type: "custom", food })}
                   >
-                    <strong>{food.name}</strong>
+                    <span className="food-card-title">
+                      <img src={defaultFoodIconUrl} alt="" />
+                      <strong>{food.name}</strong>
+                    </span>
                     <span>Brand: {getBrandDisplayName(food.brand)}</span>
                     <span>
                       {food.calories} cal per {food.servingSize}
@@ -4255,7 +4676,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                     type="button"
                     onClick={() => setLibrarySelection({ type: "recipe", food: recipe })}
                   >
-                    <strong>{recipe.name}</strong>
+                    <span className="food-card-title">
+                      <img src={defaultFoodIconUrl} alt="" />
+                      <strong>{recipe.name}</strong>
+                    </span>
                     <span>{recipe.ingredients.length} ingredients</span>
                     <span>
                       {recipe.calories} cal per {recipe.servingSize}
@@ -4272,7 +4696,10 @@ function startEditWeightEntry(entry: WeightEntry) {
 
             {librarySelection && (
               <>
-                <h2>{librarySelection.food.name}</h2>
+                <div className="library-detail-heading">
+                  <img src={defaultFoodIconUrl} alt="" />
+                  <h2>{librarySelection.food.name}</h2>
+                </div>
                 <p>{getBrandDisplayName(librarySelection.food.brand)}</p>
                 <div className="nutrition-grid">
                   <span>Serving</span>
@@ -4674,24 +5101,50 @@ function startEditWeightEntry(entry: WeightEntry) {
               <button type="button" onClick={() => moveSelectedDate(1)} aria-label="Next day">
                 ›
               </button>
-              <button
-                type="button"
-                className="log-export-button"
-                onClick={() => {
-                  setExportStatus("");
-                  setIsExportPanelOpen(true);
-                }}
-              >
-                Export Day
-              </button>
+              <div className="log-file-actions">
+                <button
+                  type="button"
+                  className="log-import-button"
+                  onClick={openDriveImport}
+                  disabled={isUploadingToDrive || isLoadingDriveImport}
+                >
+                  {isLoadingDriveImport ? "Loading Drive..." : "Import JSON"}
+                </button>
+                <label className="log-local-import-button">
+                  Import File
+                  <input
+                    ref={foodLogImportInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={(event) => readFoodLogImport(event.target.files?.[0])}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="log-export-button"
+                  onClick={() => {
+                    setExportStatus("");
+                    setIsExportPanelOpen(true);
+                  }}
+                >
+                  Export Day
+                </button>
+              </div>
+              {importStatus && <p className="import-inline-status">{importStatus}</p>}
+              {importErrors.length > 0 && importDrafts.length === 0 && (
+                <div className="import-inline-errors" role="alert">
+                  {importErrors.slice(0, 3).map((error) => (
+                    <p key={error}>{error}</p>
+                  ))}
+                </div>
+              )}
             </div>
 
             <section className="panel log-summary-card">
-              <div className="log-summary-budget">
-                <span>Budget</span>
-                <strong>{calorieBudget > 0 ? `${calorieBudget.toLocaleString()} cal` : "Set goal"}</strong>
+              <div className="log-calorie-stat">
+                <span>Logged</span>
+                <strong>{netCalories.toLocaleString()}</strong>
               </div>
-
               <div className="log-calorie-gauge" style={{ "--gauge-pct": `${calorieGaugePct}%` } as CSSProperties}>
                 <div className="log-gauge-ring">
                   <div>
@@ -4701,9 +5154,13 @@ function startEditWeightEntry(entry: WeightEntry) {
                   </div>
                 </div>
               </div>
+              <div className="log-calorie-stat">
+                <span>Total</span>
+                <strong>{calorieBudget > 0 ? calorieBudget.toLocaleString() : "Set goal"}</strong>
+              </div>
 
               <div className="log-meal-breakdown">
-                {mealCategories.map((category) => {
+                {visibleMealCategories.map((category) => {
                   const mealTotals = getCategoryTotals(category);
                   return (
                     <button key={category} type="button" onClick={() => scrollToMeal(category)}>
@@ -4734,7 +5191,7 @@ function startEditWeightEntry(entry: WeightEntry) {
             </section>
 
             <div className="log-meal-list">
-              {mealCategories.map((category) => {
+              {visibleMealCategories.map((category) => {
                 const mealItems = log.filter((item) => item.category === category);
                 const mealTotals = getCategoryTotals(category);
                 const isExpanded = expandedMeals[category];
@@ -4756,9 +5213,13 @@ function startEditWeightEntry(entry: WeightEntry) {
                       >
                         {isExpanded ? "▾" : "▸"}
                       </button>
-                      <div>
-                        <h3>{category}</h3>
-                        <span>{mealTotals.calories.toLocaleString()} cal</span>
+                      <div className="log-meal-title-block">
+                        <h3>{category}: {mealTotals.calories.toLocaleString()}</h3>
+                        <div className="log-meal-macros">
+                          <span>Fat {formatMacro(mealTotals.fat)}g</span>
+                          <span>Carbs {formatMacro(mealTotals.carbs)}g</span>
+                          <span>Protein {formatMacro(mealTotals.protein)}g</span>
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -4788,12 +5249,6 @@ function startEditWeightEntry(entry: WeightEntry) {
                       )}
                     </div>
 
-                    <div className="log-meal-macros">
-                      <span>Fat {formatMacro(mealTotals.fat)}g</span>
-                      <span>Carbs {formatMacro(mealTotals.carbs)}g</span>
-                      <span>Protein {formatMacro(mealTotals.protein)}g</span>
-                    </div>
-
                     {isExpanded && (
                       <div className="log-food-list">
                         {mealItems.length === 0 && (
@@ -4803,11 +5258,11 @@ function startEditWeightEntry(entry: WeightEntry) {
                         {mealItems.map((item) => (
                           <div className="log-food-row" key={item.logId}>
                             <div className="log-food-icon" aria-hidden="true">
-                              {item.name.trim().charAt(0).toUpperCase() || "•"}
+                              <img src={defaultFoodIconUrl} alt="" />
                             </div>
                             <div className="log-food-main">
                               <strong>{getFoodDisplayName(item)}</strong>
-                              <span>{item.servingSize} × {item.quantity}</span>
+                              <span>{item.quantity === 1 ? item.servingSize : `${item.servingSize} × ${item.quantity}`}</span>
                             </div>
                             <div className="log-food-calories">
                               <strong>{getItemCalories(item)}</strong>
@@ -5465,6 +5920,132 @@ function startEditWeightEntry(entry: WeightEntry) {
         </div>
       )}
 
+      {importDrafts.length > 0 && (
+        <div className="floating-overlay import-preview-overlay" role="presentation">
+          <div className="floating-popover import-preview-popover" role="dialog" aria-modal="true" aria-labelledby="import-preview-title">
+            <div className="import-preview-header">
+              <div>
+                <h2 id="import-preview-title">Import Food Log</h2>
+                <p>{importFileName || "JSON import"} · {importDrafts.length} item{importDrafts.length === 1 ? "" : "s"}</p>
+              </div>
+              <button type="button" onClick={closeImportPreview} aria-label="Close import preview">
+                ×
+              </button>
+            </div>
+
+            {importErrors.length > 0 && (
+              <div className="import-preview-errors" role="alert">
+                {importErrors.map((error) => (
+                  <p key={error}>{error}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="import-preview-list">
+              {importDrafts.map((item) => (
+                <div className="import-preview-item" key={item.id}>
+                  <label>
+                    Date
+                    <input
+                      type="date"
+                      value={item.date}
+                      onChange={(event) => updateImportDraft(item.id, { date: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Meal
+                    <input
+                      value={item.meal}
+                      onChange={(event) => updateImportDraft(item.id, { meal: event.target.value })}
+                    />
+                  </label>
+                  <label className="import-wide-field">
+                    Name
+                    <input
+                      value={item.name}
+                      onChange={(event) => updateImportDraft(item.id, { name: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Serving
+                    <input
+                      value={item.serving}
+                      onChange={(event) => updateImportDraft(item.id, { serving: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Calories
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      value={item.calories}
+                      onChange={(event) => updateImportDraft(item.id, { calories: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Protein
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      value={item.protein}
+                      onChange={(event) => updateImportDraft(item.id, { protein: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Carbs
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      value={item.carbs}
+                      onChange={(event) => updateImportDraft(item.id, { carbs: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Fat
+                    <input
+                      type="number"
+                      min="0"
+                      inputMode="decimal"
+                      value={item.fat}
+                      onChange={(event) => updateImportDraft(item.id, { fat: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Source
+                    <input
+                      value={item.source}
+                      onChange={(event) => updateImportDraft(item.id, { source: event.target.value })}
+                    />
+                  </label>
+                  <label className="import-wide-field">
+                    Notes
+                    <textarea
+                      value={item.notes}
+                      onChange={(event) => updateImportDraft(item.id, { notes: event.target.value })}
+                    />
+                  </label>
+                  <button type="button" className="danger-button" onClick={() => removeImportDraft(item.id)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="floating-actions">
+              <button type="button" className="primary-button" onClick={confirmFoodLogImport}>
+                Add Items
+              </button>
+              <button type="button" className="secondary-button" onClick={closeImportPreview}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isExportPanelOpen && (
         <div className="floating-overlay" role="presentation">
           <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="export-day-title">
@@ -5482,6 +6063,7 @@ function startEditWeightEntry(entry: WeightEntry) {
               </label>
             )}
             {exportStatus && <p className="scan-status">{exportStatus}</p>}
+            {driveImportStatus && <p className="scan-status">{driveImportStatus}</p>}
             {exportDriveLink && (
               <a className="drive-export-link" href={exportDriveLink} target="_blank" rel="noreferrer">
                 Open in Google Drive
@@ -5495,11 +6077,61 @@ function startEditWeightEntry(entry: WeightEntry) {
                 {isUploadingToDrive ? "Uploading..." : "Upload Drive"}
               </button>
             </div>
+            <button type="button" onClick={openDriveImport} disabled={isUploadingToDrive || isLoadingDriveImport}>
+              {isLoadingDriveImport ? "Loading Drive..." : "Import Drive JSON"}
+            </button>
             <button type="button" onClick={shareDayExport} disabled={isUploadingToDrive}>
               Share Sheet
             </button>
             <button type="button" className="secondary-button" onClick={() => setIsExportPanelOpen(false)} disabled={isUploadingToDrive}>
               Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isDriveImportOpen && (
+        <div className="floating-overlay import-preview-overlay" role="presentation">
+          <div className="floating-popover drive-import-popover" role="dialog" aria-modal="true" aria-labelledby="drive-import-title">
+            <div className="import-preview-header">
+              <div>
+                <h2 id="drive-import-title">Import from Drive</h2>
+                <p>Select a JSON file available to Jessica.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDriveImportOpen(false)}
+                aria-label="Close Google Drive import"
+                disabled={isLoadingDriveImport}
+              >
+                ×
+              </button>
+            </div>
+            {driveImportStatus && <p className="scan-status">{driveImportStatus}</p>}
+            <div className="drive-import-list">
+              {driveImportFiles.map((file) => (
+                <button
+                  type="button"
+                  key={file.id}
+                  className="drive-import-file"
+                  onClick={() => importGoogleDriveFile(file)}
+                  disabled={isLoadingDriveImport}
+                >
+                  <strong>{file.name}</strong>
+                  <span>
+                    {file.modifiedTime ? formatEntryDate(file.modifiedTime.slice(0, 10)) : "Google Drive JSON"}
+                    {file.size ? ` · ${Math.ceil(Number(file.size) / 1024).toLocaleString()} KB` : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setIsDriveImportOpen(false)}
+              disabled={isLoadingDriveImport}
+            >
+              Cancel
             </button>
           </div>
         </div>
