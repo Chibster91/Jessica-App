@@ -1,2 +1,6 @@
 .codex
 **/.codex
+.env
+**/.env
+food-log-*.json
+jessica-app/public/Icons/old icon/

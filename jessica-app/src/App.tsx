@@ -258,7 +258,87 @@ const debugLogKey = "jessicaDebugLog";
 const googleDriveClientIdKey = "googleDriveClientId";
 const googleDriveScope = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly";
 const googleIdentityScriptUrl = "https://accounts.google.com/gsi/client";
-const defaultFoodIconUrl = `${import.meta.env.BASE_URL}Apple.png`;
+const iconBaseUrl = `${import.meta.env.BASE_URL}Icons/`;
+
+const foodIconRules: [string, string][] = [
+  ["apple", "apple.svg"],
+  ["avocado", "avocado.svg"],
+  ["bacon", "bacon.svg"],
+  ["banana", "banana.svg"],
+  ["blueberry", "blueberries.svg"],
+  ["blueberries", "blueberries.svg"],
+  ["broccoli", "broccoli.svg"],
+  ["cabbage", "cabbage.svg"],
+  ["carrot", "carrot.svg"],
+  ["cherry", "cherry.svg"],
+  ["cherries", "cherry.svg"],
+  ["chicken", "chicken-leg.svg"],
+  ["coconut", "coconut.svg"],
+  ["corn", "corn.svg"],
+  ["cucumber", "cucumber.svg"],
+  ["fish", "fish.svg"],
+  ["garlic", "garlic.svg"],
+  ["grape", "grapes.svg"],
+  ["grapes", "grapes.svg"],
+  ["kiwi", "kiwi.svg"],
+  ["kale", "lettuce.svg"],
+  ["lemon", "lemon.svg"],
+  ["lettuce", "lettuce.svg"],
+  ["lime", "lime.svg"],
+  ["mango", "mango.svg"],
+  ["mushroom", "mushroom.svg"],
+  ["onion", "onion.svg"],
+  ["orange", "orange.svg"],
+  ["peach", "peach.svg"],
+  ["pear", "pear.svg"],
+  ["pineapple", "pineapple.svg"],
+  ["potato", "potato.svg"],
+  ["raspberry", "raspberry.svg"],
+  ["sausage", "sausage.svg"],
+  ["shrimp", "shrimp.svg"],
+  ["oyster", "shrimp.svg"],
+  ["seafood", "shrimp.svg"],
+  ["strawberry", "strawberry.svg"],
+  ["tomato", "tomato.svg"],
+  ["watermelon", "watermelon.svg"],
+  ["bread", "bread.svg"],
+  ["toast", "bread.svg"],
+  ["bun", "bread.svg"],
+  ["roll", "bread.svg"],
+  ["bagel", "bread.svg"],
+  ["egg", "egg.svg"],
+  ["eggs", "egg.svg"],
+  ["milk", "milk.svg"],
+  ["cheese", "cheese.svg"],
+  ["yogurt", "yogurt.svg"],
+  ["yoghurt", "yogurt.svg"],
+  ["dairy", "dairy.svg"],
+  ["dessert", "dessert.svg"],
+  ["cake", "dessert.svg"],
+  ["cookie", "dessert.svg"],
+  ["ice cream", "dessert.svg"],
+  ["brownie", "dessert.svg"],
+  ["oil", "oil.svg"],
+  ["butter", "oil.svg"],
+  ["mayo", "oil.svg"],
+  ["mayonnaise", "oil.svg"],
+  ["ranch", "oil.svg"],
+  ["sauce", "oil.svg"],
+  ["dressing", "oil.svg"],
+  ["drink", "drink.svg"],
+  ["coffee", "drink.svg"],
+  ["tea", "drink.svg"],
+  ["juice", "drink.svg"],
+  ["soda", "drink.svg"],
+  ["water", "drink.svg"],
+  ["vegetable", "Vegetable.svg"],
+  ["vegetables", "Vegetable.svg"],
+  ["veggie", "Vegetable.svg"],
+  ["veggies", "Vegetable.svg"],
+  ["fruit", "generic-fruit.svg"],
+  ["meat", "generic-meat.svg"],
+  ["meal", "Meal.svg"],
+];
 
 const emptyCustomFoodForm: CustomFoodForm = {
   name: "",
@@ -474,6 +554,24 @@ function getSavedTopFoods(): TopFoodEntry[] {
 }
 function saveTopFoods(foods: TopFoodEntry[]): void {
   setStorageJson("topFoods", foods);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesFoodIconKeyword(text: string, keyword: string) {
+  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(keyword)}([^a-z0-9]|$)`, "i").test(text);
+}
+
+function getFoodIconUrl(food: Pick<Food, "name" | "brand" | "category" | "dataType">) {
+  const searchableText = [food.name, food.brand, food.category, food.dataType]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const match = foodIconRules.find(([keyword]) => matchesFoodIconKeyword(searchableText, keyword));
+
+  return `${iconBaseUrl}${match?.[1] ?? "Meal.svg"}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -4626,7 +4724,7 @@ function startEditWeightEntry(entry: WeightEntry) {
                     onClick={() => setLibrarySelection({ type: "recent", food })}
                   >
                     <span className="food-card-title">
-                      <img src={defaultFoodIconUrl} alt="" />
+                      <img src={getFoodIconUrl(food)} alt="" />
                       <strong>{food.name}</strong>
                     </span>
                     <span>Brand: {getBrandDisplayName(food.brand)}</span>
@@ -4652,7 +4750,7 @@ function startEditWeightEntry(entry: WeightEntry) {
                     onClick={() => setLibrarySelection({ type: "custom", food })}
                   >
                     <span className="food-card-title">
-                      <img src={defaultFoodIconUrl} alt="" />
+                      <img src={getFoodIconUrl(food)} alt="" />
                       <strong>{food.name}</strong>
                     </span>
                     <span>Brand: {getBrandDisplayName(food.brand)}</span>
@@ -4677,7 +4775,7 @@ function startEditWeightEntry(entry: WeightEntry) {
                     onClick={() => setLibrarySelection({ type: "recipe", food: recipe })}
                   >
                     <span className="food-card-title">
-                      <img src={defaultFoodIconUrl} alt="" />
+                      <img src={getFoodIconUrl(recipe)} alt="" />
                       <strong>{recipe.name}</strong>
                     </span>
                     <span>{recipe.ingredients.length} ingredients</span>
@@ -4697,7 +4795,7 @@ function startEditWeightEntry(entry: WeightEntry) {
             {librarySelection && (
               <>
                 <div className="library-detail-heading">
-                  <img src={defaultFoodIconUrl} alt="" />
+                  <img src={getFoodIconUrl(librarySelection.food)} alt="" />
                   <h2>{librarySelection.food.name}</h2>
                 </div>
                 <p>{getBrandDisplayName(librarySelection.food.brand)}</p>
@@ -5258,7 +5356,7 @@ function startEditWeightEntry(entry: WeightEntry) {
                         {mealItems.map((item) => (
                           <div className="log-food-row" key={item.logId}>
                             <div className="log-food-icon" aria-hidden="true">
-                              <img src={defaultFoodIconUrl} alt="" />
+                              <img src={getFoodIconUrl(item)} alt="" />
                             </div>
                             <div className="log-food-main">
                               <strong>{getFoodDisplayName(item)}</strong>
@@ -5381,7 +5479,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                         key={food.id}
                         onClick={() => selectFood(food)}
                       >
-                        <strong>{getFoodDisplayName(food)}</strong>
+                        <span className="food-card-title">
+                          <img src={getFoodIconUrl(food)} alt="" />
+                          <strong>{getFoodDisplayName(food)}</strong>
+                        </span>
                         <span className="food-card-meta">
                           <span>Brand: {getBrandDisplayName(food.brand)}</span>
                         </span>
@@ -5409,7 +5510,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                     key={food.id}
                     onClick={() => selectLocalFood(food)}
                   >
-                    <strong>{food.name}</strong>
+                    <span className="food-card-title">
+                      <img src={getFoodIconUrl(food)} alt="" />
+                      <strong>{food.name}</strong>
+                    </span>
                     <span>Brand: {getBrandDisplayName(food.brand)}</span>
                     <span>
                       {food.calories} cal per {food.servingSize}
@@ -5634,7 +5738,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                         key={food.id}
                         onClick={() => selectLocalFood(food)}
                       >
-                        <strong>{food.name}</strong>
+                        <span className="food-card-title">
+                          <img src={getFoodIconUrl(food)} alt="" />
+                          <strong>{food.name}</strong>
+                        </span>
                         <span>Brand: {getBrandDisplayName(food.brand)}</span>
                         <span>
                           {food.calories} cal per {food.servingSize}
@@ -5737,7 +5844,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                               type="button"
                               onClick={() => selectRecipeIngredient(food)}
                             >
-                              <strong>{getFoodDisplayName(food)}</strong>
+                              <span className="food-card-title">
+                                <img src={getFoodIconUrl(food)} alt="" />
+                                <strong>{getFoodDisplayName(food)}</strong>
+                              </span>
                               <span className="food-card-meta">
                                 <span>Brand: {getBrandDisplayName(food.brand)}</span>
                               </span>
@@ -5752,7 +5862,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                       {pendingRecipeIngredient && (
                         <div className="ingredient-confirm">
                           <div>
-                            <strong>{pendingRecipeIngredient.name}</strong>
+                            <span className="food-card-title">
+                              <img src={getFoodIconUrl(pendingRecipeIngredient)} alt="" />
+                              <strong>{pendingRecipeIngredient.name}</strong>
+                            </span>
                             <span>
                               {pendingRecipeIngredient.calories} cal per{" "}
                               {pendingRecipeIngredient.servingSize}
@@ -5784,7 +5897,10 @@ function startEditWeightEntry(entry: WeightEntry) {
 
                         {recipeIngredients.map((ingredient) => (
                           <div className="ingredient-row" key={ingredient.food.id}>
-                            <span>{ingredient.food.name}</span>
+                            <span className="food-card-title">
+                              <img src={getFoodIconUrl(ingredient.food)} alt="" />
+                              <span>{ingredient.food.name}</span>
+                            </span>
                             <input
                               type="number"
                               min="0.1"
@@ -5826,7 +5942,10 @@ function startEditWeightEntry(entry: WeightEntry) {
                         key={recipe.id}
                         onClick={() => selectLocalFood(recipe)}
                       >
-                        <strong>{recipe.name}</strong>
+                        <span className="food-card-title">
+                          <img src={getFoodIconUrl(recipe)} alt="" />
+                          <strong>{recipe.name}</strong>
+                        </span>
                         <span>{recipe.ingredients.length} ingredients</span>
                         <span>
                           {recipe.calories} cal per {recipe.servingSize}
