@@ -4683,3 +4683,33 @@ button {
   .eo-cell { min-height: 44px; }
   .eo-export-actions { grid-template-columns: 1fr 1fr; }
 }
+
+/* ─── EggOracle dense spacing overrides ─────────────────── */
+.eo-app {
+  padding-top: 0.75rem;
+}
+
+.eo-app h1 {
+  font-size: 1.6rem;
+  margin: 4px 0 0;
+}
+
+.eo-app .week-range {
+  margin: 0 0 0.6rem;
+}
+
+.eo-app .tab-row {
+  margin-bottom: 0.35rem;
+}
+
+.eo-page .panel {
+  margin: 0.4rem 0;
+}
+
+.eo-hero {
+  padding: 0.85rem 1rem;
+}
+
+.eo-calendar-panel {
+  padding: 0.5rem 0.65rem 0.65rem;
+}

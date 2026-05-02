@@ -904,7 +904,7 @@ export default function EggOracle({ bottomNav }: EggOracleProps) {
   useEffect(() => saveData(data), [data]);
 
   return (
-    <main className="app">
+    <main className="app eo-app">
       <div className="top-bar">
         <div>
           <h1>Cycle</h1>
