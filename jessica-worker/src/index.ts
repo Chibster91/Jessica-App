@@ -57,9 +57,11 @@ export default {
 
       throw error;
     }
-    const dataFoods = resultSets.flatMap((data) => data.foods || []).filter(
-      (food: any) => !normalizeSearchText(food.dataType ?? "").includes("survey")
-    );
+    // Filter raw USDA results before any scoring or mapping
+    const dataFoods = resultSets
+      .flatMap((data) => data.foods || [])
+      .filter((food: any) => !isExperimentalFood(food));
+
     const seen = new Set();
 
     const foods = dataFoods
@@ -80,6 +82,8 @@ export default {
           fat: Math.max(0, getFatValue(food)),
         };
       })
+      // Defensive: exclude experimental entries and zero-calorie records that slipped through
+      .filter((food: any) => !isExperimentalFood(food) && food.calories > 0)
       .sort((a: any, b: any) => rankSearchResult(b, query) - rankSearchResult(a, query))
       .filter((food: any) => {
         const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
@@ -473,6 +477,17 @@ function rankSearchResult(food: any, query: string): number {
   if (queryWords.length > 1 && matchedWords.length === 1) score -= 45;
 
   return score;
+}
+
+function isExperimentalFood(food: any): boolean {
+  const candidates = [
+    food.dataType,
+    food.data_type,
+    food.foodDataType,
+    food.foodCategory,
+    food.category,
+  ];
+  return candidates.some((v) => normalizeSearchText(v ?? "").includes("experimental"));
 }
 
 function isBasicSearchQuery(queryText: string): boolean {
