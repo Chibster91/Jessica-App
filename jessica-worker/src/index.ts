@@ -487,7 +487,10 @@ function isExperimentalFood(food: any): boolean {
     food.foodCategory,
     food.category,
   ];
-  return candidates.some((v) => normalizeSearchText(v ?? "").includes("experimental"));
+  return candidates.some((v) => {
+    const t = normalizeSearchText(v ?? "");
+    return t.includes("experimental") || t.includes("survey");
+  });
 }
 
 function isBasicSearchQuery(queryText: string): boolean {
