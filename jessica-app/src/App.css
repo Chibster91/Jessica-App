@@ -4321,3 +4321,365 @@ button {
   background: #262932; border-color: #B46CFF; color: #B46CFF;
 }
 .streak-day-letter { font-size: 0.65rem; color: #B7BCC7; }
+
+/* ─── Egg Oracle ─────────────────────────────────────────────────── */
+
+.eo-tabs {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.eo-page {
+  display: grid;
+  gap: 0;
+}
+
+/* Hero summary card */
+.eo-hero {
+  border-color: var(--accent-border);
+}
+
+.eo-hero-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.eo-hero-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.eo-hero-lbl {
+  color: var(--fg-2);
+  font-size: 0.78rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.eo-hero-val {
+  color: var(--fg);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Calendar */
+.eo-calendar-panel {
+  padding: 0.75rem;
+}
+
+.eo-cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.eo-cal-month {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.eo-cal-arrow {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+}
+
+.eo-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--fg-2);
+  letter-spacing: 0.04em;
+  padding-bottom: 0.35rem;
+}
+
+.eo-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+/* Calendar cells */
+.eo-cell {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 52px;
+  padding: 4px 2px 3px;
+  gap: 3px;
+}
+
+.eo-cell--period { background: rgba(248, 113, 113, 0.18); border-color: rgba(248, 113, 113, 0.35); }
+.eo-cell--predicted { background: rgba(248, 113, 113, 0.07); border-color: rgba(248, 113, 113, 0.15); }
+.eo-cell--fertile { background: rgba(251, 191, 36, 0.14); border-color: rgba(251, 191, 36, 0.3); }
+.eo-cell--ovulation { background: var(--accent-bg); border-color: var(--accent-border); }
+.eo-cell--outside { opacity: 0.3; }
+
+.eo-cell-num {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.eo-cell-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  min-height: 14px;
+}
+
+/* Dot indicators */
+.eo-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.eo-dot--period { background: #f87171; }
+.eo-dot--fertile { background: #d97706; }
+.eo-dot--ovulation { background: var(--accent); width: 7px; height: 7px; }
+.eo-dot--intercourse { background: #f472b6; }
+.eo-dot--mucus { background: #34d399; }
+.eo-dot--note { background: var(--fg-2); }
+
+/* Badge indicators */
+.eo-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 3px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  padding: 1px 3px;
+}
+
+.eo-badge--start { background: #f87171; color: #fff; }
+.eo-badge--end { background: #fca5a5; color: #7f1d1d; }
+.eo-badge--lh { background: var(--accent); color: #171921; }
+
+/* Legend */
+.eo-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.eo-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--fg-2);
+}
+
+/* Stats */
+.eo-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.eo-stat-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+}
+
+.eo-stat-lbl {
+  color: var(--fg-2);
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-bottom: 0.2rem;
+}
+
+.eo-stat-val {
+  color: var(--fg);
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+/* Day modal */
+.eo-modal {
+  width: min(480px, 100%);
+  max-height: 85svh;
+}
+
+.eo-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.eo-modal-date {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.eo-modal-sub {
+  color: var(--fg-2);
+  font-size: 0.75rem;
+  margin-top: 0.2rem;
+}
+
+.eo-close-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--fg-2);
+  cursor: pointer;
+  font-size: 1.1rem;
+  height: 2rem;
+  line-height: 1;
+  padding: 0;
+  width: 2rem;
+  flex-shrink: 0;
+}
+
+.eo-modal-body {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.eo-modal-foot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.eo-log-section {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.eo-section-title {
+  color: var(--fg-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* Toggle buttons */
+.eo-toggle-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.eo-toggle-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.eo-toggle-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.eo-toggle-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.eo-toggle-btn {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--fg-2);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.5rem 0.35rem;
+  text-align: center;
+}
+
+.eo-toggle-btn.selected {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.eo-toggle-main {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.eo-toggle-hint {
+  font-size: 0.62rem;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+/* Notes textarea */
+.eo-notes {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  padding: 0.65rem 0.75rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.eo-notes:focus {
+  border-color: var(--accent-border);
+  outline: none;
+}
+
+/* Export box */
+.eo-export-box {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.eo-export-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.eo-export-text {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--fg-2);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  padding: 0.5rem;
+  resize: vertical;
+  width: 100%;
+}
+
+/* Mobile: make cells a bit shorter, collapse export actions */
+@media (max-width: 400px) {
+  .eo-cell { min-height: 44px; }
+  .eo-export-actions { grid-template-columns: 1fr 1fr; }
+}

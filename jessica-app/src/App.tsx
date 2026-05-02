@@ -1894,12 +1894,7 @@ function startEditWeightEntry(entry: WeightEntry) {
   }
 
 if (appView === "egg-oracle") {
-  return (
-    <>
-      <EggOracle />
-      {bottomNav}
-    </>
-  );
+  return <EggOracle bottomNav={bottomNav} />;
 }
 
   if (appView === "profile") {
