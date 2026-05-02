@@ -2326,7 +2326,9 @@ if (appView === "egg-oracle") {
                           <strong>{getFoodDisplayName(food)}</strong>
                         </span>
                         <span className="food-card-meta">
-                          <span>Brand: {getBrandDisplayName(food.brand)}</span>
+                          {food.brand
+                            ? <span>{getBrandDisplayName(food.brand)}</span>
+                            : <span className="food-card-source">{food.dataType ?? "USDA"}</span>}
                         </span>
                         <span>
                           {resultDisplay.isLoading
@@ -2691,7 +2693,9 @@ if (appView === "egg-oracle") {
                                 <strong>{getFoodDisplayName(food)}</strong>
                               </span>
                               <span className="food-card-meta">
-                                <span>Brand: {getBrandDisplayName(food.brand)}</span>
+                                {food.brand
+                                  ? <span>{getBrandDisplayName(food.brand)}</span>
+                                  : <span className="food-card-source">{food.dataType ?? "USDA"}</span>}
                               </span>
                               <span>
                                 {food.calories} cal per {food.servingSize}

@@ -68,6 +68,11 @@ input, button, textarea {
   gap: 0.35rem;
 }
 
+.food-card-source {
+  font-size: 0.78rem;
+  color: var(--fg-muted, #8b8fa8);
+}
+
 .food-card-title {
   display: flex;
   align-items: center;

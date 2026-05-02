@@ -1593,6 +1593,9 @@ function detectMilkType(food: Food) {
 
   if (!appearsToBeMilk) return null;
 
+  // Plant-based milks are not dairy — don't classify by fat content
+  if (/\b(almond|soy|oat|coconut|cashew|rice|hemp|flax|pea|macadamia|hazelnut|walnut|pistachio)\b/.test(name)) return null;
+
   if (/\b(whole|vitamin d|full fat|homogenized)\b/.test(text)) return "Whole Milk";
   if (/(^|\s)2\s*%|\breduced fat\b/.test(rawText) || /\breduced fat\b/.test(text)) return "2% Milk";
   if (/(^|\s)1\s*%/.test(rawText) || /\blowfat\b|\blow fat\b/.test(text)) return "1% Milk";
