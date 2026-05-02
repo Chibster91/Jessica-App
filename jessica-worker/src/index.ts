@@ -57,7 +57,9 @@ export default {
 
       throw error;
     }
-    const dataFoods = resultSets.flatMap((data) => data.foods || []);
+    const dataFoods = resultSets.flatMap((data) => data.foods || []).filter(
+      (food: any) => !normalizeSearchText(food.dataType ?? "").includes("survey")
+    );
     const seen = new Set();
 
     const foods = dataFoods
