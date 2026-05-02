@@ -2,14 +2,22 @@
   --text: #f2f2f0;
   --text-h: #F2F2F0;
   --bg: #15161a;
+  --surface: #1E2026;
+  --surface-2: #262932;
+  --fg: #F2F2F0;
+  --fg-2: #B7BCC7;
   --border: #343845;
   --code-bg: #262932;
   --accent: #b46cff;
   --accent-bg: rgba(180, 108, 255, 0.15);
+  --accent-soft: rgba(180, 108, 255, 0.22);
   --accent-border: rgba(180, 108, 255, 0.5);
   --macro-carbs: #4cc9f0;
   --macro-protein: #80ed99;
   --macro-fat: #ffb86b;
+  --danger-warm: #F87171;
+  --danger-bg: rgba(248, 113, 113, 0.14);
+  --danger-border: rgba(248, 113, 113, 0.4);
   --social-bg: rgba(38, 41, 50, 0.55);
   --shadow: rgba(0, 0, 0, 0.28) 0 10px 24px;
 

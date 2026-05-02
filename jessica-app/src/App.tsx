@@ -1,1789 +1,119 @@
 import { useEffect, useRef, useState, type CSSProperties, type SyntheticEvent } from "react";
 import { recognize } from "tesseract.js";
+import { AppChrome } from "./components/AppChrome";
+import { FoodLibraryView } from "./components/FoodLibraryView";
+import { HomeView } from "./components/HomeView";
+import { ProfileView } from "./components/ProfileView";
+import { WeightView } from "./components/WeightView";
+import {
+  debugLogKey,
+  googleDriveClientIdKey,
+  googleDriveScope,
+  googleIdentityScriptUrl,
+  emptyCustomFoodForm,
+  emptyRecipeForm,
+  macroPresets,
+  appendDebugLog,
+  setStorageJson,
+  verifyStorageCount,
+  getSavedLog,
+  getSavedCustomFoods,
+  saveCustomFoods,
+  getSavedRecipes,
+  getSavedWeightEntries,
+  saveWeightEntries,
+  getSavedCompletedDays,
+  saveCompletedDays,
+  getSavedTopFoods,
+  saveTopFoods,
+  getFoodIconUrl,
+  validateImportDraft,
+  parseFoodLogImportJson,
+  normalizeMealName,
+  getMealCategoriesForLog,
+  getSavedGoals,
+  getSavedProfile,
+  kgToLb,
+  cmToTotalInches,
+  formatProfileNumber,
+  profileToForm,
+  profileFormFromLegacyGoals,
+  getProfileHeightCm,
+  getProfileWeightKg,
+  getProfileGoalWeightKg,
+  calculateProfile,
+  getProfileValidationErrors,
+  profileFormToProfile,
+  profileToGoals,
+  saveRecipes,
+  shiftDate,
+  getLocalDateString,
+  getPortionOptions,
+  parseServingSize,
+  getMeasuredServingBasis,
+  convertAmountToBasisUnit,
+  getScaleFromServingBasis,
+  hasUsableSearchNutrition,
+  getFoodForSelectedPortion,
+  getCaloriesPerServing,
+  getModalResultCalories,
+  getRecentFoods,
+  matchesFoodQuery,
+  getFoodDisplayName,
+  getBrandDisplayName,
+  getIngredientCalories,
+  getRecipeTotals,
+  parseRecipe,
+  foodToCustomFoodForm,
+  recipeToRecipeForm,
+  parseCustomFood,
+  normalizeOcrText,
+  parseNutritionLabelText,
+  formatMacro,
+  formatShortDate,
+  formatEntryDate,
+  sortWeightEntriesNewestFirst,
+  sortWeightEntriesOldestFirst,
+  getPreferredWeightUnit,
+  getWeightRangeStartDate,
+  parseDecimalInput,
+  createClientId,
+  getConfiguredGoogleClientId,
+  searchUsdaFoodsWithSynonyms,
+  type Food,
+  type RecipeIngredient,
+  type Recipe,
+  type FoodDetail,
+  type AddFoodTab,
+  type AppView,
+  type FoodLibraryTab,
+  type LibrarySelection,
+  type TopFoodEntry,
+  type Goals,
+  type Profile,
+  type ProfileForm,
+  type WeightRange,
+  type WeightEntry,
+  type WeightForm,
+  type CustomFoodForm,
+  type FoodLogImportDraft,
+  type ScannedNutritionFields,
+  type RecipeForm,
+  type AmountUnit,
+  type GoogleDriveUploadResponse,
+  type GoogleDriveFile,
+  type GoogleDriveFileListResponse,
+  type MealCategory,
+  type LogItem
+} from "./appSupport";
 import "./App.css";
-
-type Food = {
-  id: number;
-  name: string;
-  brand: string | null;
-  category?: string | null;
-  dataType?: string | null;
-  source?: string;
-  servingSize: string;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  fiber?: number;
-  sugar?: number;
-  sodium?: number;
-  notes?: string;
-};
-
-type RecipeIngredient = {
-  food: Food;
-  quantity: number;
-};
-
-type Recipe = Food & {
-  ingredients: RecipeIngredient[];
-};
-
-type FoodPortion = {
-  id?: number | string;
-  amount?: number | null;
-  modifier?: string | null;
-  gramWeight?: number | null;
-  measureUnit?: {
-    name?: string | null;
-    abbreviation?: string | null;
-  } | null;
-};
-
-type FoodNutrient = {
-  amount?: number;
-  value?: number;
-  nutrientName?: string;
-  unitName?: string;
-  nutrient?: {
-    name?: string;
-    unitName?: string;
-  };
-};
-
-type FoodDetail = {
-  dataType?: string | null;
-  servingSize?: number | string | null;
-  servingSizeUnit?: string | null;
-  labelNutrients?: {
-    calories?: {
-      value?: number | null;
-    } | null;
-  } | null;
-  foodPortions?: FoodPortion[];
-  foodNutrients?: FoodNutrient[];
-  nutrients?: {
-    calories?: number;
-    protein?: number;
-    carbs?: number;
-    fat?: number;
-    fiber?: number;
-    sodium?: number;
-  };
-};
-
-type PortionOption = {
-  value: string;
-  label: string;
-  gramWeight: number;
-};
-
-type AddFoodTab = "search" | "recent" | "custom" | "recipes";
-
-type AppView = "home" | "day" | "library" | "profile" | "weight";
-
-type FoodLibraryTab = "recent" | "custom" | "recipes";
-
-type Sex = "female" | "male";
-
-type ActivityLevel = "sedentary" | "light" | "moderate" | "active" | "veryActive";
-
-type GoalType = "lose" | "maintain" | "gain";
-
-type GoalRate = "mild" | "moderate" | "aggressive";
-
-type HeightUnit = "ftIn" | "cm" | "in";
-
-type WeightUnit = "kg" | "lb";
-
-type LibrarySelection =
-  | { type: "recent"; food: Food & { loggedCount?: number; lastLoggedDate?: string } }
-  | { type: "custom"; food: Food }
-  | { type: "recipe"; food: Recipe };
-
-type CalculatorInputs = {
-  age: string;
-  sex: Sex;
-  height: string;
-  heightFeet?: string;
-  heightInches?: string;
-  heightUnit: HeightUnit;
-  weight: string;
-  weightUnit: WeightUnit;
-  activityLevel: ActivityLevel;
-  goal: GoalType;
-  rate: GoalRate;
-};
-
-type TopFoodEntry = { name: string; count: number };
-
-type Goals = {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  goalWeight?: number;
-  goalWeightUnit?: WeightUnit;
-  calculatorInputs?: CalculatorInputs;
-};
-
-type GoalsForm = {
-  calories: string;
-  protein: string;
-  carbs: string;
-  fat: string;
-  goalWeight: string;
-};
-
-type WeightRange = "1M" | "3M" | "6M" | "1Y" | "All";
-
-type WeightEntry = {
-  id: string;
-  date: string;
-  weight: number;
-  unit: WeightUnit;
-  note?: string;
-};
-
-type WeightForm = {
-  date: string;
-  weight: string;
-  note: string;
-};
-
-type CustomFoodForm = {
-  name: string;
-  brand: string;
-  servingSize: string;
-  servingUnit: string;
-  calories: string;
-  protein: string;
-  carbs: string;
-  fat: string;
-  fiber: string;
-  sugar: string;
-  sodium: string;
-  notes: string;
-};
-
-type FoodLogImportDraft = {
-  id: string;
-  date: string;
-  meal: string;
-  name: string;
-  serving: string;
-  calories: string;
-  protein: string;
-  carbs: string;
-  fat: string;
-  notes: string;
-  source: string;
-};
-
-type FoodLogImportResult =
-  | { ok: true; items: FoodLogImportDraft[] }
-  | { ok: false; errors: string[] };
-
-type ScannedNutritionFields = Partial<
-  Pick<
-    CustomFoodForm,
-    "servingSize" | "servingUnit" | "calories" | "fat" | "carbs" | "protein" | "sugar" | "fiber" | "sodium"
-  >
->;
-
-type RecipeForm = {
-  name: string;
-  servingSize: string;
-  servingUnit: string;
-  notes: string;
-};
-
-type AmountUnit = "serving" | "g" | "ml" | "oz";
-type MeasuredAmountUnit = Exclude<AmountUnit, "serving">;
-
-type DebugLogEntry = {
-  time: string;
-  event: string;
-  detail?: unknown;
-};
-
-type GoogleTokenResponse = {
-  access_token?: string;
-  error?: string;
-  error_description?: string;
-};
-
-type GoogleTokenClient = {
-  requestAccessToken: (options?: { prompt?: string }) => void;
-};
-
-type GoogleAccounts = {
-  accounts?: {
-    oauth2?: {
-      initTokenClient: (config: {
-        client_id: string;
-        scope: string;
-        callback: (response: GoogleTokenResponse) => void;
-      }) => GoogleTokenClient;
-    };
-  };
-};
-
-declare global {
-  interface Window {
-    google?: GoogleAccounts;
-  }
-}
-
-type GoogleDriveUploadResponse = {
-  id?: string;
-  name?: string;
-  webViewLink?: string;
-};
-
-type GoogleDriveFile = {
-  id: string;
-  name: string;
-  modifiedTime?: string;
-  size?: string;
-};
-
-type GoogleDriveFileListResponse = {
-  files?: GoogleDriveFile[];
-};
-
-const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
-const poundsPerKilogram = 2.2046226218;
-const debugLogKey = "jessicaDebugLog";
-const googleDriveClientIdKey = "googleDriveClientId";
-const googleDriveScope = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly";
-const googleIdentityScriptUrl = "https://accounts.google.com/gsi/client";
-const iconBaseUrl = `${import.meta.env.BASE_URL}Icons/`;
-
-const foodIconRules: [string, string][] = [
-  ["apple", "apple.svg"],
-  ["avocado", "avocado.svg"],
-  ["bacon", "bacon.svg"],
-  ["banana", "banana.svg"],
-  ["blueberry", "blueberries.svg"],
-  ["blueberries", "blueberries.svg"],
-  ["broccoli", "broccoli.svg"],
-  ["cabbage", "cabbage.svg"],
-  ["carrot", "carrot.svg"],
-  ["cherry", "cherry.svg"],
-  ["cherries", "cherry.svg"],
-  ["chicken", "chicken-leg.svg"],
-  ["coconut", "coconut.svg"],
-  ["corn", "corn.svg"],
-  ["cucumber", "cucumber.svg"],
-  ["fish", "fish.svg"],
-  ["garlic", "garlic.svg"],
-  ["grape", "grapes.svg"],
-  ["grapes", "grapes.svg"],
-  ["kiwi", "kiwi.svg"],
-  ["kale", "lettuce.svg"],
-  ["lemon", "lemon.svg"],
-  ["lettuce", "lettuce.svg"],
-  ["lime", "lime.svg"],
-  ["mango", "mango.svg"],
-  ["mushroom", "mushroom.svg"],
-  ["onion", "onion.svg"],
-  ["orange", "orange.svg"],
-  ["peach", "peach.svg"],
-  ["pear", "pear.svg"],
-  ["pineapple", "pineapple.svg"],
-  ["potato", "potato.svg"],
-  ["raspberry", "raspberry.svg"],
-  ["sausage", "sausage.svg"],
-  ["shrimp", "shrimp.svg"],
-  ["oyster", "shrimp.svg"],
-  ["seafood", "shrimp.svg"],
-  ["strawberry", "strawberry.svg"],
-  ["tomato", "tomato.svg"],
-  ["watermelon", "watermelon.svg"],
-  ["bread", "bread.svg"],
-  ["toast", "bread.svg"],
-  ["bun", "bread.svg"],
-  ["roll", "bread.svg"],
-  ["bagel", "bread.svg"],
-  ["egg", "egg.svg"],
-  ["eggs", "egg.svg"],
-  ["milk", "milk.svg"],
-  ["cheese", "cheese.svg"],
-  ["yogurt", "yogurt.svg"],
-  ["yoghurt", "yogurt.svg"],
-  ["dairy", "dairy.svg"],
-  ["dessert", "dessert.svg"],
-  ["cake", "dessert.svg"],
-  ["cookie", "dessert.svg"],
-  ["ice cream", "dessert.svg"],
-  ["brownie", "dessert.svg"],
-  ["oil", "oil.svg"],
-  ["butter", "oil.svg"],
-  ["mayo", "oil.svg"],
-  ["mayonnaise", "oil.svg"],
-  ["ranch", "oil.svg"],
-  ["sauce", "oil.svg"],
-  ["dressing", "oil.svg"],
-  ["drink", "drink.svg"],
-  ["coffee", "drink.svg"],
-  ["tea", "drink.svg"],
-  ["juice", "drink.svg"],
-  ["soda", "drink.svg"],
-  ["water", "drink.svg"],
-  ["vegetable", "Vegetable.svg"],
-  ["vegetables", "Vegetable.svg"],
-  ["veggie", "Vegetable.svg"],
-  ["veggies", "Vegetable.svg"],
-  ["fruit", "generic-fruit.svg"],
-  ["meat", "generic-meat.svg"],
-  ["meal", "Meal.svg"],
-];
-
-const emptyCustomFoodForm: CustomFoodForm = {
-  name: "",
-  brand: "",
-  servingSize: "",
-  servingUnit: "",
-  calories: "",
-  protein: "",
-  carbs: "",
-  fat: "",
-  fiber: "",
-  sugar: "",
-  sodium: "",
-  notes: "",
-};
-
-const emptyRecipeForm: RecipeForm = {
-  name: "",
-  servingSize: "",
-  servingUnit: "",
-  notes: "",
-};
-
-const defaultCalculatorInputs: CalculatorInputs = {
-  age: "",
-  sex: "female",
-  height: "",
-  heightFeet: "",
-  heightInches: "",
-  heightUnit: "ftIn",
-  weight: "",
-  weightUnit: "lb",
-  activityLevel: "moderate",
-  goal: "maintain",
-  rate: "moderate",
-};
-
-const activityMultipliers: Record<ActivityLevel, number> = {
-  sedentary: 1.2,
-  light: 1.375,
-  moderate: 1.55,
-  active: 1.725,
-  veryActive: 1.9,
-};
-
-const activityLabels: Record<ActivityLevel, string> = {
-  sedentary: "Sedentary",
-  light: "Light",
-  moderate: "Moderate",
-  active: "Active",
-  veryActive: "Very active",
-};
-
-const goalLabels: Record<GoalType, string> = {
-  lose: "Lose weight",
-  maintain: "Maintain",
-  gain: "Gain weight",
-};
-
-const rateLabels: Record<GoalRate, string> = {
-  mild: "Mild",
-  moderate: "Moderate",
-  aggressive: "Aggressive",
-};
-
-const activityOptions = Object.keys(activityLabels) as ActivityLevel[];
-const goalOptions = Object.keys(goalLabels) as GoalType[];
-const maxHeightInches = 108;
-const maxHeightCm = maxHeightInches * 2.54;
-const maxWeightLb = 1400;
-const maxWeightKg = maxWeightLb * 0.45359237;
-
-const brandSynonyms: Record<string, string[]> = {
-  "pop tart": ["pop tart", "pop-tart", "poptart", "pop-tarts", "toaster pastry", "toaster pastries"],
-  "pop tarts": ["pop tart", "pop-tart", "poptart", "pop-tarts", "toaster pastry", "toaster pastries"],
-  oreo: ["oreo", "oreo cookies", "chocolate sandwich cookie", "sandwich cookies"],
-  oreos: ["oreo", "oreo cookies", "chocolate sandwich cookie", "sandwich cookies"],
-  "cheez it": ["cheez it", "cheez-it", "cheezits", "cheese cracker", "baked cheese cracker"],
-  cheezits: ["cheez it", "cheez-it", "cheezits", "cheese cracker"],
-  doritos: ["doritos", "nacho cheese tortilla chips", "flavored tortilla chips", "tortilla chips"],
-  pringles: ["pringles", "potato crisps", "stacked potato chips", "potato snack crisps"],
-  ramen: ["ramen", "instant noodles", "instant ramen", "noodle soup mix"],
-  "kraft mac and cheese": [
-    "kraft mac and cheese",
-    "mac and cheese",
-    "macaroni and cheese",
-    "boxed macaroni and cheese",
-  ],
-  velveeta: ["velveeta", "processed cheese", "cheese product", "shells and cheese"],
-  nutella: ["nutella", "hazelnut spread", "chocolate hazelnut spread"],
-  spam: ["spam", "canned luncheon meat", "luncheon meat"],
-  gatorade: ["gatorade", "sports drink", "electrolyte drink"],
-  "red bull": ["red bull", "energy drink"],
-  "mountain dew": ["mountain dew", "citrus soda", "soft drink"],
-  coke: ["coke", "coca cola", "cola", "soft drink"],
-  pepsi: ["pepsi", "cola", "soft drink"],
-  benadryl: ["benadryl", "diphenhydramine"],
-  reeses: ["reeses", "reese's", "peanut butter cup", "chocolate peanut butter candy"],
-  snickers: ["snickers", "chocolate candy bar", "peanut caramel candy bar"],
-  twinkie: ["twinkie", "cream filled snack cake", "snack cake"],
-  "hostess cupcake": ["hostess cupcake", "chocolate cupcake", "frosted snack cake"],
-  goldfish: ["goldfish", "cheese crackers", "baked cheese crackers"],
-  ritz: ["ritz", "buttery crackers", "round crackers"],
-  triscuit: ["triscuit", "woven wheat crackers", "whole wheat crackers"],
-  fritos: ["fritos", "corn chips"],
-  cheetos: ["cheetos", "cheese puffs", "cheese curls"],
-  lunchable: ["lunchable", "cracker stacker meal", "packaged lunch kit"],
-};
-
-type MealCategory = string;
-
-type LogItem = Food & { logId: string; category: MealCategory; quantity: number };
-
-type SavedLogItem = Food & { logId: string; category?: MealCategory; quantity?: number };
-
-function appendDebugLog(event: string, detail?: unknown) {
-  const entry: DebugLogEntry = {
-    time: new Date().toISOString(),
-    event,
-    detail,
-  };
-
-  console.info(`[Jessica debug] ${event}`, detail ?? "");
-
-  try {
-    const saved = localStorage.getItem(debugLogKey);
-    const entries = saved ? (JSON.parse(saved) as DebugLogEntry[]) : [];
-    localStorage.setItem(debugLogKey, JSON.stringify([...entries.slice(-29), entry]));
-  } catch (error) {
-    console.warn("[Jessica debug] Could not persist debug log", error);
-  }
-}
-
-function getStorageArray<T>(key: string, fallback: T[] = []) {
-  try {
-    const saved = localStorage.getItem(key);
-    return saved ? (JSON.parse(saved) as T[]) : fallback;
-  } catch (error) {
-    appendDebugLog("storage-read-failed", {
-      key,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return fallback;
-  }
-}
-
-function setStorageJson(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (error) {
-    appendDebugLog("storage-write-failed", {
-      key,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-}
-
-function verifyStorageCount(key: string, expectedCount: number) {
-  try {
-    const saved = localStorage.getItem(key);
-    const parsed = saved ? (JSON.parse(saved) as unknown[]) : [];
-    const persisted = Array.isArray(parsed) && parsed.length === expectedCount;
-    appendDebugLog("storage-verify", { key, expectedCount, actualCount: parsed.length, persisted });
-    return persisted;
-  } catch (error) {
-    appendDebugLog("storage-verify-failed", {
-      key,
-      expectedCount,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
-}
-
-function getSavedLog(date: string) {
-  return getStorageArray<SavedLogItem>(`log-${date}`).map((item) => ({
-    ...item,
-    category: item.category ?? "Snacks",
-    quantity: item.quantity ?? 1,
-  }));
-}
-
-function getSavedCustomFoods() {
-  return getStorageArray<Food>("customFoods");
-}
-
-function saveCustomFoods(foods: Food[]) {
-  setStorageJson("customFoods", foods);
-}
-
-function getSavedRecipes() {
-  return getStorageArray<Recipe>("recipes");
-}
-
-function getSavedWeightEntries() {
-  return getStorageArray<WeightEntry>("weightEntries");
-}
-
-function saveWeightEntries(entries: WeightEntry[]) {
-  setStorageJson("weightEntries", entries);
-}
-
-function getSavedCompletedDays(): string[] {
-  return getStorageArray<string>("completedDays");
-}
-function saveCompletedDays(days: string[]): void {
-  setStorageJson("completedDays", days);
-}
-function getSavedTopFoods(): TopFoodEntry[] {
-  return getStorageArray<TopFoodEntry>("topFoods");
-}
-function saveTopFoods(foods: TopFoodEntry[]): void {
-  setStorageJson("topFoods", foods);
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function matchesFoodIconKeyword(text: string, keyword: string) {
-  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(keyword)}([^a-z0-9]|$)`, "i").test(text);
-}
-
-function getFoodIconUrl(food: Pick<Food, "name" | "brand" | "category" | "dataType">) {
-  const searchableText = [food.name, food.brand, food.category, food.dataType]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  const match = foodIconRules.find(([keyword]) => matchesFoodIconKeyword(searchableText, keyword));
-
-  return `${iconBaseUrl}${match?.[1] ?? "Meal.svg"}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readStringField(source: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "string") return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  }
-
-  return "";
-}
-
-function readOptionalNumberField(source: Record<string, unknown>, keys: string[]) {
-  const value = readStringField(source, keys);
-  return value ? value : "0";
-}
-
-function isValidLogDate(date: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-
-  const [year, month, day] = date.split("-").map(Number);
-  const parsed = new Date(year, month - 1, day);
-  return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
-}
-
-function validateImportDraft(item: FoodLogImportDraft, index: number) {
-  const errors: string[] = [];
-  const row = `Item ${index + 1}`;
-  const calories = parseDecimalInput(item.calories);
-  const protein = parseDecimalInput(item.protein || "0");
-  const carbs = parseDecimalInput(item.carbs || "0");
-  const fat = parseDecimalInput(item.fat || "0");
-
-  if (!isValidLogDate(item.date)) errors.push(`${row}: date must be YYYY-MM-DD.`);
-  if (!item.meal.trim()) errors.push(`${row}: meal is required.`);
-  if (!item.name.trim()) errors.push(`${row}: name is required.`);
-  if (!item.serving.trim()) errors.push(`${row}: serving is required.`);
-  if (!Number.isFinite(calories) || calories < 0) errors.push(`${row}: calories must be a non-negative number.`);
-  if (![protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)) {
-    errors.push(`${row}: protein, carbs, and fat must be non-negative numbers when provided.`);
-  }
-
-  return errors;
-}
-
-function buildImportDraft(date: string, meal: string, item: unknown): FoodLogImportDraft | null {
-  if (!isRecord(item)) return null;
-
-  const macros = isRecord(item.macros) ? item.macros : {};
-  const serving = readStringField(item, ["serving", "servingSize", "portion"]);
-
-  return {
-    id: createClientId(),
-    date,
-    meal,
-    name: readStringField(item, ["name", "food", "foodName"]),
-    serving,
-    calories: readStringField(item, ["calories", "kcal"]),
-    protein: readOptionalNumberField({ ...macros, ...item }, ["protein"]),
-    carbs: readOptionalNumberField({ ...macros, ...item }, ["carbs", "carbohydrates"]),
-    fat: readOptionalNumberField({ ...macros, ...item }, ["fat"]),
-    notes: readStringField(item, ["notes", "note"]),
-    source: readStringField(item, ["source"]),
-  };
-}
-
-function parseFoodLogImportJson(json: unknown): FoodLogImportResult {
-  if (!isRecord(json)) {
-    return { ok: false, errors: ["Import file must be a JSON object."] };
-  }
-
-  const date = readStringField(json, ["date"]);
-  const items: FoodLogImportDraft[] = [];
-  const errors: string[] = [];
-
-  if (!date) {
-    errors.push("Top-level date is required.");
-  } else if (!isValidLogDate(date)) {
-    errors.push("Top-level date must be YYYY-MM-DD.");
-  }
-
-  if (Array.isArray(json.meals)) {
-    json.meals.forEach((mealValue, mealIndex) => {
-      if (!isRecord(mealValue)) {
-        errors.push(`Meal ${mealIndex + 1}: meal must be an object.`);
-        return;
-      }
-
-      const mealName = readStringField(mealValue, ["name", "meal", "mealName"]);
-      const mealItems = Array.isArray(mealValue.items)
-        ? mealValue.items
-        : Array.isArray(mealValue.foods)
-          ? mealValue.foods
-          : null;
-
-      if (!mealName) errors.push(`Meal ${mealIndex + 1}: meal name is required.`);
-      if (!mealItems) {
-        errors.push(`Meal ${mealIndex + 1}: items must be an array.`);
-        return;
-      }
-
-      mealItems.forEach((food, foodIndex) => {
-        const draft = buildImportDraft(date, mealName, food);
-        if (draft) items.push(draft);
-        else errors.push(`Meal ${mealIndex + 1}, item ${foodIndex + 1}: item must be an object.`);
-      });
-    });
-  } else {
-    const mealName = readStringField(json, ["meal", "mealName"]);
-    if (!mealName) errors.push("Meal name is required.");
-    if (!Array.isArray(json.items)) {
-      errors.push("Items must be an array.");
-    } else {
-      json.items.forEach((food, index) => {
-        const draft = buildImportDraft(date, mealName, food);
-        if (draft) items.push(draft);
-        else errors.push(`Item ${index + 1}: item must be an object.`);
-      });
-    }
-  }
-
-  if (items.length === 0) errors.push("Import file must include at least one item.");
-  items.forEach((item, index) => errors.push(...validateImportDraft(item, index)));
-
-  return errors.length > 0 ? { ok: false, errors } : { ok: true, items };
-}
-
-function normalizeMealName(meal: string) {
-  return meal.trim().replace(/\s+/g, " ");
-}
-
-function getMealCategoriesForLog(items: LogItem[]) {
-  const importedMeals = items.map((item) => item.category).filter((category) => !mealCategories.includes(category));
-  return [...mealCategories, ...Array.from(new Set(importedMeals))];
-}
-
-function getSavedGoals(): Goals | null {
-  try {
-    const saved = localStorage.getItem("goals");
-    return saved ? (JSON.parse(saved) as Goals) : null;
-  } catch (error) {
-    appendDebugLog("storage-read-failed", {
-      key: "goals",
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return null;
-  }
-}
-
-function goalsToForm(goals: Goals | null): GoalsForm {
-  if (!goals) return { calories: "", protein: "", carbs: "", fat: "", goalWeight: "" };
-  return {
-    calories: String(goals.calories),
-    protein: String(goals.protein),
-    carbs: String(goals.carbs),
-    fat: String(goals.fat),
-    goalWeight: goals.goalWeight ? String(goals.goalWeight) : "",
-  };
-}
-
-function calculatorInputsToForm(goals: Goals | null): CalculatorInputs {
-  const inputs = goals?.calculatorInputs;
-  if (!inputs) return defaultCalculatorInputs;
-
-  if (inputs.heightUnit === "in") {
-    const totalInches = Number(inputs.height);
-
-    if (Number.isFinite(totalInches) && totalInches > 0) {
-      return {
-        ...inputs,
-        heightFeet: String(Math.floor(totalInches / 12)),
-        heightInches: String(Number((totalInches % 12).toFixed(1))),
-        heightUnit: "ftIn",
-      };
-    }
-
-    return {
-      ...inputs,
-      heightUnit: "ftIn",
-    };
-  }
-
-  return inputs;
-}
-
-function saveRecipes(recipes: Recipe[]) {
-  setStorageJson("recipes", recipes);
-}
-
-function shiftDate(date: string, dayOffset: number) {
-  const [year, month, day] = date.split("-").map(Number);
-  const nextDate = new Date(year, month - 1, day + dayOffset);
-  const nextYear = nextDate.getFullYear();
-  const nextMonth = String(nextDate.getMonth() + 1).padStart(2, "0");
-  const nextDay = String(nextDate.getDate()).padStart(2, "0");
-
-  return `${nextYear}-${nextMonth}-${nextDay}`;
-}
-
-function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
-}
-
-function getDateRangeEnding(date: string, days: number) {
-  return Array.from({ length: days }, (_, index) => shiftDate(date, -index));
-}
-
-function cleanPortionText(text: string | null | undefined) {
-  const cleaned = text?.trim();
-  if (!cleaned) return "";
-
-  if (cleaned.toLowerCase() === "undetermined") return "";
-  if (/^[\d\s.,-]+$/.test(cleaned)) return "";
-
-  return cleaned;
-}
-
-function formatPortionAmount(amount: number | null | undefined) {
-  if (!amount || !Number.isFinite(amount)) return "";
-
-  return Number.isInteger(amount) ? String(amount) : String(Number(amount.toFixed(2)));
-}
-
-function formatGramWeight(gramWeight: number) {
-  return Number.isInteger(gramWeight) ? `${gramWeight}g` : `${Number(gramWeight.toFixed(1))}g`;
-}
-
-function getLocalPortionUnit(food: Food) {
-  return parseServingSize(food.servingSize)?.unit === "ml" ? "ml" : "g";
-}
-
-function formatLocalPortionAmount(food: Food, amount: number) {
-  const value = Number.isInteger(amount) ? amount : Number(amount.toFixed(1));
-  return `${value}${getLocalPortionUnit(food)}`;
-}
-
-function getPortionLabel(portion: FoodPortion, foodName: string) {
-  const amount = formatPortionAmount(portion.amount);
-  const modifier = cleanPortionText(portion.modifier);
-  const measure = cleanPortionText(portion.measureUnit?.abbreviation || portion.measureUnit?.name);
-  const gramWeight = portion.gramWeight ?? 0;
-
-  if (modifier) {
-    const label = [amount || "1", modifier, foodName].join(" ");
-    return `${label} (${formatGramWeight(gramWeight)})`;
-  }
-
-  if (amount && measure) {
-    return `${amount} ${measure}`;
-  }
-
-  if (measure) {
-    return measure;
-  }
-
-  return formatGramWeight(gramWeight);
-}
-
-function getPortionOptions(detail: FoodDetail | null, foodName = ""): PortionOption[] {
-  return (
-    detail?.foodPortions
-      ?.map((portion, index) => ({
-        value: String(portion.id ?? index),
-        label: getPortionLabel(portion, foodName),
-        gramWeight: portion.gramWeight ?? 0,
-      }))
-      .filter((portion) => portion.gramWeight > 0) ?? []
-  );
-}
-
-function getEnergyCaloriesPer100Units(detail: FoodDetail | null) {
-  const energy = detail?.foodNutrients?.find((nutrient) => {
-    const name = nutrient.nutrient?.name ?? nutrient.nutrientName ?? "";
-    const unit = nutrient.nutrient?.unitName ?? nutrient.unitName ?? "";
-
-    return name.toLowerCase() === "energy" && unit.toLowerCase() === "kcal";
-  });
-
-  const amount = energy?.amount ?? energy?.value;
-  return typeof amount === "number" && Number.isFinite(amount) ? amount : null;
-}
-
-function getLabelCaloriesPerServing(detail: FoodDetail | null) {
-  const calories = detail?.labelNutrients?.calories?.value;
-
-  return typeof calories === "number" && Number.isFinite(calories) && calories > 0
-    ? Math.round(calories)
-    : null;
-}
-
-function parseServingSize(value: string | number | null | undefined, fallbackUnit = "") {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return {
-      amount: value,
-      unit: fallbackUnit.trim().toLowerCase(),
-    };
-  }
-
-  if (typeof value !== "string") return null;
-
-  const trimmedValue = value.trim();
-  const embeddedMeasure = trimmedValue.match(/([\d.]+)\s*(ml|milliliter|milliliters|g|gram|grams|oz|ounce|ounces)\b/i);
-
-  if (embeddedMeasure) {
-    const amount = Number(embeddedMeasure[1]);
-    const unit = normalizeAmountUnit(embeddedMeasure[2]);
-
-    if (Number.isFinite(amount) && amount > 0 && unit) {
-      return { amount, unit };
-    }
-  }
-
-  const match = trimmedValue.match(/^([\d.]+)\s*([a-zA-Z]*)/);
-  if (!match) return null;
-
-  const amount = Number(match[1]);
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-
-  return {
-    amount,
-    unit: normalizeAmountUnit(fallbackUnit || match[2]) ?? (fallbackUnit || match[2]).trim().toLowerCase(),
-  };
-}
-
-function isGramUnit(unit: string) {
-  return unit === "g" || unit === "ml" || unit === "oz";
-}
-
-function normalizeAmountUnit(unit: string): MeasuredAmountUnit | null {
-  const normalized = unit.trim().toLowerCase();
-  if (normalized === "ml" || normalized === "milliliter" || normalized === "milliliters") return "ml";
-  if (normalized === "g" || normalized === "gram" || normalized === "grams") return "g";
-  if (normalized === "oz" || normalized === "ounce" || normalized === "ounces") return "oz";
-  return null;
-}
-
-function getMeasuredServingBasis(food: Food) {
-  const basis = parseServingSize(food.servingSize);
-  const unit = basis ? normalizeAmountUnit(basis.unit) : null;
-  return basis && unit ? { amount: basis.amount, unit } : null;
-}
-
-function convertAmountToBasisUnit(amount: number, amountUnit: MeasuredAmountUnit, basisUnit: MeasuredAmountUnit) {
-  if (amountUnit === basisUnit) return amount;
-  if (amountUnit === "oz" && basisUnit === "g") return amount * 28.349523125;
-  if (amountUnit === "g" && basisUnit === "oz") return amount / 28.349523125;
-  return null;
-}
-
-function getScaleFromServingBasis(food: Food, amount: number) {
-  const basis = getMeasuredServingBasis(food);
-  if (!basis) return null;
-
-  return amount / basis.amount;
-}
-
-function getServingSizeBasis(detail: FoodDetail | null, food: Food) {
-  return (
-    parseServingSize(detail?.servingSize, detail?.servingSizeUnit ?? "") ??
-    parseServingSize(food.servingSize)
-  );
-}
-
-function hasUsableSearchNutrition(food: Food) {
-  const basis = getMeasuredServingBasis(food);
-  return Boolean(basis && isGramUnit(basis.unit) && food.calories > 0);
-}
-
-function getServingSizeLabel(detail: FoodDetail | null, food: Food) {
-  const basis = getServingSizeBasis(detail, food);
-  return basis ? `${basis.amount} ${basis.unit}`.trim() : food.servingSize;
-}
-
-function scaleFoodNutrition(food: Food, factor: number, servingSize: string): Food {
-  return {
-    ...food,
-    servingSize,
-    calories: Math.round(food.calories * factor),
-    protein: food.protein * factor,
-    carbs: food.carbs * factor,
-    fat: food.fat * factor,
-    fiber: food.fiber === undefined ? undefined : food.fiber * factor,
-    sugar: food.sugar === undefined ? undefined : food.sugar * factor,
-    sodium: food.sodium === undefined ? undefined : food.sodium * factor,
-  };
-}
-
-function foodFromDetailNutrition(food: Food, detail: FoodDetail, servingSize: string): Food {
-  return {
-    ...food,
-    servingSize,
-    calories: Math.round(detail.nutrients?.calories ?? food.calories),
-    protein: detail.nutrients?.protein ?? food.protein,
-    carbs: detail.nutrients?.carbs ?? food.carbs,
-    fat: detail.nutrients?.fat ?? food.fat,
-    fiber: detail.nutrients?.fiber ?? food.fiber,
-    sodium: detail.nutrients?.sodium ?? food.sodium,
-  };
-}
-
-function getFoodForSelectedPortion(
-  food: Food,
-  detail: FoodDetail | null,
-  portion: PortionOption | undefined,
-  amount: number
-): Food {
-  const localScale =
-    hasUsableSearchNutrition(food) && Number.isFinite(amount) && amount > 0
-      ? getScaleFromServingBasis(food, amount)
-      : null;
-
-  if (localScale !== null) {
-    return scaleFoodNutrition(food, localScale, formatLocalPortionAmount(food, amount));
-  }
-
-  if (portion && detail) {
-    const servingSize = `${portion.label} (${portion.gramWeight}g)`;
-    const portionScale = getScaleFromServingBasis(food, portion.gramWeight);
-    const portionFood =
-      portionScale !== null
-        ? scaleFoodNutrition(food, portionScale, servingSize)
-        : foodFromDetailNutrition(food, detail, servingSize);
-
-    return {
-      ...portionFood,
-      calories: getCaloriesPerServing(food, detail, portion),
-    };
-  }
-
-  if (detail) {
-    const servingSize = getServingSizeLabel(detail, food);
-
-    return {
-      ...foodFromDetailNutrition(food, detail, servingSize),
-      calories: getCaloriesPerServing(food, detail),
-    };
-  }
-
-  return food;
-}
-
-function getCaloriesPerServing(food: Food, detail: FoodDetail | null, portion?: PortionOption) {
-  const caloriesPer100Units = getEnergyCaloriesPer100Units(detail);
-
-  if (portion && caloriesPer100Units !== null) {
-    return Math.round((caloriesPer100Units * portion.gramWeight) / 100);
-  }
-
-  const labelCalories = getLabelCaloriesPerServing(detail);
-  if (labelCalories !== null) return labelCalories;
-
-  const basis = getServingSizeBasis(detail, food);
-  if (
-    caloriesPer100Units !== null &&
-    basis &&
-    isGramUnit(basis.unit)
-  ) {
-    return Math.round((caloriesPer100Units * basis.amount) / 100);
-  }
-
-  return food.calories;
-}
-
-function getModalResultCalories(
-  food: Food,
-  selectedFood: Food | null,
-  selectedFoodDetail: FoodDetail | null,
-  selectedPortion: PortionOption | undefined,
-  isLoadingDetail: boolean
-) {
-  if (selectedFood?.id !== food.id) {
-    return {
-      calories: food.calories,
-      servingSize: food.servingSize,
-      isLoading: false,
-    };
-  }
-
-  if (isLoadingDetail) {
-    return {
-      calories: food.calories,
-      servingSize: food.servingSize,
-      isLoading: true,
-    };
-  }
-
-  if (selectedFoodDetail) {
-    return {
-      calories: getCaloriesPerServing(food, selectedFoodDetail, selectedPortion),
-      servingSize: selectedPortion
-        ? `${selectedPortion.label} (${selectedPortion.gramWeight}g)`
-        : getServingSizeLabel(selectedFoodDetail, food),
-      isLoading: false,
-    };
-  }
-
-  return {
-    calories: food.calories,
-    servingSize: food.servingSize,
-    isLoading: false,
-  };
-}
-
-function getRecentFoods(selectedDate: string) {
-  const recentFoodMap = new Map<number, Food & { loggedCount: number; lastLoggedDate: string }>();
-
-  for (const date of getDateRangeEnding(selectedDate, 7)) {
-    for (const item of getSavedLog(date)) {
-      const current = recentFoodMap.get(item.id);
-
-      if (!current) {
-        recentFoodMap.set(item.id, {
-          id: item.id,
-          name: item.name,
-          brand: item.brand,
-          servingSize: item.servingSize,
-          calories: item.calories,
-          protein: item.protein,
-          carbs: item.carbs,
-          fat: item.fat,
-          loggedCount: 1,
-          lastLoggedDate: date,
-        });
-        continue;
-      }
-
-      recentFoodMap.set(item.id, {
-        ...current,
-        loggedCount: current.loggedCount + 1,
-        lastLoggedDate: current.lastLoggedDate > date ? current.lastLoggedDate : date,
-      });
-    }
-  }
-
-  return [...recentFoodMap.values()].sort((a, b) => {
-    if (b.loggedCount !== a.loggedCount) return b.loggedCount - a.loggedCount;
-    return b.lastLoggedDate.localeCompare(a.lastLoggedDate);
-  });
-}
-
-function matchesFoodQuery(food: Food, query: string) {
-  const normalizedQuery = query.trim().toLowerCase();
-  if (!normalizedQuery) return true;
-
-  return `${food.name} ${food.brand ?? ""}`.toLowerCase().includes(normalizedQuery);
-}
-
-function normalizeSearchText(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function getSearchTokens(value: string) {
-  return normalizeSearchText(value).split(/\s+/).filter(Boolean);
-}
-
-function getSearchSynonyms(query: string) {
-  const queryText = normalizeSearchText(query);
-  const compactQuery = queryText.replace(/\s+/g, "");
-  const directSynonyms = brandSynonyms[queryText];
-  const compactSynonyms = Object.entries(brandSynonyms).find(
-    ([key]) => normalizeSearchText(key).replace(/\s+/g, "") === compactQuery
-  )?.[1];
-
-  return [...new Set((directSynonyms ?? compactSynonyms ?? []).map(normalizeSearchText))];
-}
-
-function getFoodSearchScore(food: Food, query: string) {
-  const queryText = normalizeSearchText(query);
-  const queryWords = getSearchTokens(query);
-  if (!queryText || queryWords.length === 0) return 0;
-
-  const nameText = normalizeSearchText(food.name);
-  const brandText = normalizeSearchText(food.brand ?? "");
-  const servingText = normalizeSearchText(food.servingSize);
-  const dataTypeText = normalizeSearchText(food.dataType ?? "");
-  const searchableText = `${nameText} ${brandText} ${servingText}`.trim();
-  const compactName = nameText.replace(/\s+/g, "");
-  const compactQuery = queryText.replace(/\s+/g, "");
-  const matchedNameWords = queryWords.filter((word) => nameText.includes(word));
-  const matchedSearchWords = queryWords.filter((word) => searchableText.includes(word));
-  const synonymMatches = getSearchSynonyms(query).filter(
-    (synonym) => nameText.includes(synonym) || brandText.includes(synonym)
-  );
-  let score = 0;
-
-  if (dataTypeText === "branded") score += 25;
-  if (dataTypeText === "foundation" || dataTypeText === "sr legacy" || dataTypeText.includes("survey")) {
-    score -= queryWords.length > 2 ? 30 : 0;
-  }
-  if (searchableText.includes(queryText)) score += 130;
-  if (matchedSearchWords.length === queryWords.length) score += 95;
-  if (nameText.includes(queryText) || compactName.includes(compactQuery)) score += 100;
-  if (synonymMatches.length > 0) score += 95 + synonymMatches.length * 8;
-  if (matchedNameWords.length === queryWords.length) score += 70;
-  if (nameText.startsWith(queryText)) score += 50;
-  if (brandText.includes(queryText) || queryWords.some((word) => brandText.includes(word))) score += 45;
-  if (brandText && getSearchTokens(brandText).every((word) => queryWords.includes(word))) score += 40;
-  score += matchedSearchWords.length * 16;
-  score += matchedNameWords.length * 12;
-
-  if (queryWords.length > 1 && matchedSearchWords.length === 1) score -= 45;
-  if (matchedSearchWords.length === 0 && !brandText.includes(queryText)) score -= 60;
-
-  return score;
-}
-
-function rankSearchResults(foods: Food[], query: string) {
-  return [...foods].sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query));
-}
-
-function detectMilkType(food: Food) {
-  const rawText = `${food.name} ${food.brand ?? ""} ${food.category ?? ""}`.toLowerCase();
-  const name = normalizeSearchText(food.name);
-  const brand = normalizeSearchText(food.brand ?? "");
-  const category = normalizeSearchText(food.category ?? "");
-  const text = `${name} ${brand} ${category}`.trim();
-  const appearsToBeMilk =
-    /\bmilk\b/.test(name) ||
-    /\bmilk\b/.test(category) ||
-    category.includes("milk substitutes");
-
-  if (!appearsToBeMilk) return null;
-
-  if (/\b(whole|vitamin d|full fat|homogenized)\b/.test(text)) return "Whole Milk";
-  if (/(^|\s)2\s*%|\breduced fat\b/.test(rawText) || /\breduced fat\b/.test(text)) return "2% Milk";
-  if (/(^|\s)1\s*%/.test(rawText) || /\blowfat\b|\blow fat\b/.test(text)) return "1% Milk";
-  if (/\b(skim|nonfat|non fat|fat free)\b/.test(text)) return "Skim Milk";
-
-  if (food.fat <= 0.5) return "Skim Milk";
-  if (food.fat <= 2.5) return "1% Milk";
-  if (food.fat <= 5.5) return "2% Milk";
-  if (food.fat >= 6) return "Whole Milk";
-
-  return null;
-}
-
-function formatDisplayName(name: string) {
-  const trimmedName = name.trim();
-  const hasLetters = /[a-z]/i.test(trimmedName);
-  const isAllCaps = hasLetters && trimmedName === trimmedName.toUpperCase();
-
-  if (!isAllCaps) return trimmedName;
-
-  return trimmedName
-    .toLowerCase()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase())
-    .replace(/\bUsda\b/g, "USDA");
-}
-
-function getFoodDisplayName(food: Food) {
-  const milkType = detectMilkType(food);
-
-  if (!milkType) return formatDisplayName(food.name);
-
-  return `Milk, ${milkType.replace(" Milk", "")}`;
-}
-
-function getBrandDisplayName(brand: string | null | undefined) {
-  return brand ? formatDisplayName(brand) : "Generic";
-}
-
-async function fetchUsdaFoods(query: string) {
-  const res = await fetch(
-    `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(query)}`
-  );
-
-  return (await res.json()) as Food[];
-}
-
-async function searchUsdaFoodsWithSynonyms(query: string) {
-  const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
-  const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
-  const foodsById = new Map<number, Food>();
-
-  for (const foods of resultSets) {
-    for (const food of foods) {
-      if (!foodsById.has(food.id)) foodsById.set(food.id, food);
-    }
-  }
-
-  return rankSearchResults([...foodsById.values()], query);
-}
-
-function getIngredientCalories(ingredient: RecipeIngredient) {
-  return Math.round(ingredient.food.calories * ingredient.quantity);
-}
-
-function getIngredientMacro(
-  ingredient: RecipeIngredient,
-  key: "protein" | "carbs" | "fat" | "fiber" | "sugar" | "sodium"
-) {
-  return (ingredient.food[key] ?? 0) * ingredient.quantity;
-}
-
-function getRecipeTotals(ingredients: RecipeIngredient[]) {
-  return ingredients.reduce(
-    (totals, ingredient) => ({
-      calories: totals.calories + getIngredientCalories(ingredient),
-      protein: totals.protein + getIngredientMacro(ingredient, "protein"),
-      carbs: totals.carbs + getIngredientMacro(ingredient, "carbs"),
-      fat: totals.fat + getIngredientMacro(ingredient, "fat"),
-      fiber: totals.fiber + getIngredientMacro(ingredient, "fiber"),
-      sugar: totals.sugar + getIngredientMacro(ingredient, "sugar"),
-      sodium: totals.sodium + getIngredientMacro(ingredient, "sodium"),
-    }),
-    {
-      calories: 0,
-      protein: 0,
-      carbs: 0,
-      fat: 0,
-      fiber: 0,
-      sugar: 0,
-      sodium: 0,
-    }
-  );
-}
-
-function parseRecipe(form: RecipeForm, ingredients: RecipeIngredient[]): Recipe | null {
-  const name = form.name.trim();
-  const servingSize = form.servingSize.trim();
-  const servingUnit = form.servingUnit.trim();
-
-  if (!name || !servingSize || !servingUnit || ingredients.length === 0) return null;
-
-  const totals = getRecipeTotals(ingredients);
-
-  return {
-    id: -Date.now(),
-    name,
-    brand: "Recipe",
-    servingSize: `${servingSize} ${servingUnit}`,
-    calories: Math.round(totals.calories),
-    protein: totals.protein,
-    carbs: totals.carbs,
-    fat: totals.fat,
-    fiber: totals.fiber,
-    sugar: totals.sugar,
-    sodium: totals.sodium,
-    notes: form.notes.trim() || undefined,
-    ingredients,
-  };
-}
-
-function foodToCustomFoodForm(food: Food): CustomFoodForm {
-  const serving = parseServingSize(food.servingSize);
-
-  return {
-    name: food.name,
-    brand: food.brand ?? "",
-    servingSize: serving ? String(serving.amount) : food.servingSize,
-    servingUnit: serving?.unit ?? "",
-    calories: String(food.calories),
-    protein: String(food.protein),
-    carbs: String(food.carbs),
-    fat: String(food.fat),
-    fiber: String(food.fiber ?? 0),
-    sugar: String(food.sugar ?? 0),
-    sodium: String(food.sodium ?? 0),
-    notes: food.notes ?? "",
-  };
-}
-
-function recipeToRecipeForm(recipe: Recipe): RecipeForm {
-  const serving = parseServingSize(recipe.servingSize);
-
-  return {
-    name: recipe.name,
-    servingSize: serving ? String(serving.amount) : recipe.servingSize,
-    servingUnit: serving?.unit ?? "",
-    notes: recipe.notes ?? "",
-  };
-}
-
-function parseCustomFood(form: CustomFoodForm): Food | null {
-  const name = form.name.trim();
-  const servingSize = form.servingSize.trim();
-  const servingUnit = form.servingUnit.trim();
-  const calories = parseDecimalInput(form.calories);
-  const protein = parseDecimalInput(form.protein || "0");
-  const carbs = parseDecimalInput(form.carbs || "0");
-  const fat = parseDecimalInput(form.fat || "0");
-  const fiber = parseDecimalInput(form.fiber || "0");
-  const sugar = parseDecimalInput(form.sugar || "0");
-  const sodium = parseDecimalInput(form.sodium || "0");
-
-  if (!name || !servingSize || !servingUnit || !Number.isFinite(calories) || calories < 0) {
-    return null;
-  }
-
-  if (![protein, carbs, fat, fiber, sugar, sodium].every((value) => Number.isFinite(value) && value >= 0)) {
-    return null;
-  }
-
-  return {
-    id: -Date.now(),
-    name,
-    brand: form.brand.trim() || null,
-    servingSize: `${servingSize} ${servingUnit}`,
-    calories: Math.round(calories),
-    protein,
-    carbs,
-    fat,
-    fiber,
-    sugar,
-    sodium,
-    notes: form.notes.trim() || undefined,
-  };
-}
-
-function normalizeOcrText(text: string) {
-  return text
-    .replace(/\r/g, "\n")
-    .replace(/[|]/g, " ")
-    .replace(/[^\S\n]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function parseOcrNumber(value: string) {
-  const normalized = value.replace(/,/g, "").replace(/[oO]/g, "0");
-  const fractionMatch = normalized.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
-
-  if (fractionMatch) {
-    const numerator = Number(fractionMatch[1]);
-    const denominator = Number(fractionMatch[2]);
-    return denominator ? numerator / denominator : null;
-  }
-
-  const number = Number(normalized);
-  return Number.isFinite(number) ? number : null;
-}
-
-function formatScannedNumber(value: number, decimals = 1) {
-  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(decimals)));
-}
-
-function getNutritionLine(text: string, labelPattern: RegExp) {
-  return text.split("\n").find((line) => labelPattern.test(line.toLowerCase())) ?? "";
-}
-
-function extractNutritionAmount(text: string, labelPattern: RegExp, unit: "g" | "mg" | "any" = "g") {
-  const line = getNutritionLine(text, labelPattern);
-  if (!line) return "";
-
-  const amountMatch =
-    unit === "mg"
-      ? line.match(/(\d+(?:[.,]\d+)?)\s*(mg|g)\b/i)
-      : unit === "g"
-        ? line.match(/(\d+(?:[.,]\d+)?)\s*g\b/i)
-        : line.match(/(\d+(?:[.,]\d+)?)/);
-
-  if (!amountMatch) return "";
-
-  const amount = parseOcrNumber(amountMatch[1].replace(",", "."));
-  if (amount === null) return "";
-
-  if (unit === "mg" && amountMatch[2]?.toLowerCase() === "g") {
-    return formatScannedNumber(amount * 1000, 0);
-  }
-
-  return formatScannedNumber(amount, unit === "mg" ? 0 : 1);
-}
-
-function extractCalories(text: string) {
-  const line = getNutritionLine(text, /\bcalories\b/);
-  const match = line.match(/\bcalories\b\D{0,12}(\d{1,4})\b/i) ?? line.match(/\b(\d{1,4})\b/);
-  const calories = match ? parseOcrNumber(match[1]) : null;
-
-  return calories === null ? "" : formatScannedNumber(calories, 0);
-}
-
-function extractServingSize(text: string) {
-  const line = getNutritionLine(text, /\bserving size\b/);
-  if (!line) return {};
-
-  const servingText = line.replace(/.*?\bserving size\b[:\s]*/i, "").trim();
-  const parenGramMatch = servingText.match(/\((\d+(?:[.,]\d+)?)\s*(g|ml|mL)\)/);
-  const amountUnitMatch = servingText.match(
-    /(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|piece|pieces|bar|bars|slice|slices|container|package|packet|pouch|bottle|can|serving|g|gram|grams|ml|mL|oz|ounce|ounces)\b/i
-  );
-
-  if (amountUnitMatch) {
-    return {
-      servingSize: amountUnitMatch[1].replace(/\s+/g, ""),
-      servingUnit: amountUnitMatch[2],
-    };
-  }
-
-  if (parenGramMatch) {
-    return {
-      servingSize: parenGramMatch[1].replace(",", "."),
-      servingUnit: parenGramMatch[2],
-    };
-  }
-
-  return {};
-}
-
-function parseNutritionLabelText(text: string): ScannedNutritionFields {
-  const normalizedText = normalizeOcrText(text);
-
-  return {
-    ...extractServingSize(normalizedText),
-    calories: extractCalories(normalizedText),
-    fat: extractNutritionAmount(normalizedText, /\btotal fat\b/),
-    carbs: extractNutritionAmount(normalizedText, /\b(total carbohydrate|total carbs|carbohydrate)\b/),
-    protein: extractNutritionAmount(normalizedText, /\bprotein\b/),
-    sugar: extractNutritionAmount(normalizedText, /\b(total sugars|sugars|sugar)\b/),
-    fiber: extractNutritionAmount(normalizedText, /\b(dietary fiber|fiber)\b/),
-    sodium: extractNutritionAmount(normalizedText, /\bsodium\b/, "mg"),
-  };
-}
-
-function formatMacro(value: number) {
-  return Number(value.toFixed(1));
-}
-
-function getValidRates(goal: GoalType): GoalRate[] {
-  if (goal === "maintain") return ["moderate"];
-  if (goal === "gain") return ["mild", "moderate"];
-  return ["mild", "moderate", "aggressive"];
-}
-
-function getGoalAdjustment(goal: GoalType, rate: GoalRate) {
-  if (goal === "maintain") return 0;
-  if (goal === "lose") {
-    return {
-      mild: -250,
-      moderate: -500,
-      aggressive: -750,
-    }[rate];
-  }
-
-  return {
-    mild: 250,
-    moderate: 500,
-    aggressive: 500,
-  }[rate];
-}
-
-function getMacroGoals(goalCalories: number) {
-  return {
-    calories: Math.round(goalCalories),
-    protein: Math.round((goalCalories * 0.3) / 4),
-    carbs: Math.round((goalCalories * 0.4) / 4),
-    fat: Math.round((goalCalories * 0.3) / 9),
-  };
-}
-
-function getHeightCm(inputs: CalculatorInputs) {
-  if (inputs.heightUnit === "cm") {
-    const height = Number(inputs.height);
-    return Number.isFinite(height) && height > 0 && height <= maxHeightCm ? height : null;
-  }
-
-  if (inputs.heightUnit === "in") {
-    const height = Number(inputs.height);
-    return Number.isFinite(height) && height > 0 && height <= maxHeightInches
-      ? height * 2.54
-      : null;
-  }
-
-  const feet = Number(inputs.heightFeet || 0);
-  const inches = Number(inputs.heightInches || 0);
-
-  if (!Number.isFinite(feet) || !Number.isFinite(inches) || feet < 0 || inches < 0) return null;
-
-  const totalInches = feet * 12 + inches;
-  return totalInches > 0 && totalInches <= maxHeightInches ? totalInches * 2.54 : null;
-}
-
-function calculateGoalsFromInputs(inputs: CalculatorInputs): Goals | null {
-  const age = Number(inputs.age);
-  const weight = Number(inputs.weight);
-  const heightCm = getHeightCm(inputs);
-  const weightKg = inputs.weightUnit === "kg" ? weight : weight * 0.45359237;
-
-  if (
-    !Number.isFinite(age) ||
-    age < 18 ||
-    age > 120 ||
-    !Number.isFinite(weight) ||
-    weight <= 0 ||
-    !Number.isFinite(weightKg) ||
-    weightKg > maxWeightKg ||
-    heightCm === null
-  ) {
-    return null;
-  }
-
-  const bmr =
-    10 * weightKg + 6.25 * heightCm - 5 * age + (inputs.sex === "female" ? -161 : 5);
-  const tdee = bmr * activityMultipliers[inputs.activityLevel];
-  const calorieGoal = tdee + getGoalAdjustment(inputs.goal, inputs.rate);
-
-  return {
-    ...getMacroGoals(calorieGoal),
-    calculatorInputs: inputs,
-  };
-}
-
-function getAgeValidationMessage(ageInput: string) {
-  const age = Number(ageInput);
-
-  if (!Number.isFinite(age) || ageInput === "") return "";
-  if (age < 18) return "Calculator is for adults only.";
-  if (age > 120) return "Please enter a valid age.";
-
-  return "";
-}
-
-function getHeightValidationMessage(inputs: CalculatorInputs) {
-  if (inputs.heightUnit === "ftIn") {
-    const hasHeightInput = Boolean(inputs.heightFeet || inputs.heightInches);
-    if (!hasHeightInput) return "";
-
-    const feet = Number(inputs.heightFeet || 0);
-    const inches = Number(inputs.heightInches || 0);
-    const totalInches = feet * 12 + inches;
-
-    if (
-      !Number.isFinite(feet) ||
-      !Number.isFinite(inches) ||
-      feet < 0 ||
-      inches < 0 ||
-      inches >= 12 ||
-      totalInches <= 0 ||
-      totalInches > maxHeightInches
-    ) {
-      return "Please enter a valid height.";
-    }
-
-    return "";
-  }
-
-  if (!inputs.height) return "";
-
-  const height = Number(inputs.height);
-  const maxHeight = inputs.heightUnit === "cm" ? maxHeightCm : maxHeightInches;
-
-  if (!Number.isFinite(height) || height <= 0 || height > maxHeight) {
-    return "Please enter a valid height.";
-  }
-
-  return "";
-}
-
-function getWeightValidationMessage(inputs: CalculatorInputs) {
-  if (!inputs.weight) return "";
-
-  const weight = Number(inputs.weight);
-  const maxWeight = inputs.weightUnit === "kg" ? maxWeightKg : maxWeightLb;
-
-  if (!Number.isFinite(weight) || weight <= 0 || weight > maxWeight) {
-    return "Please enter a valid weight.";
-  }
-
-  return "";
-}
-
-function getWeekDates(referenceDate: string) {
-  const [year, month, day] = referenceDate.split("-").map(Number);
-  const d = new Date(year, month - 1, day);
-  const dow = d.getDay();
-  const daysToMonday = dow === 0 ? -6 : 1 - dow;
-  return Array.from({ length: 7 }, (_, i) => shiftDate(referenceDate, daysToMonday + i));
-}
-
-function formatShortDate(date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatEntryDate(date: string) {
-  const [year, month, day] = date.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatWeekOf(start: string, end: string): string {
-  const [sy, sm, sd] = start.split("-").map(Number);
-  const [ey, em, ed] = end.split("-").map(Number);
-  const s = new Date(sy, sm - 1, sd);
-  const e = new Date(ey, em - 1, ed);
-  return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-}
-
-function getDayLetter(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  const dow = new Date(y, m - 1, d).getDay(); // 0=Sun
-  return ["S", "M", "T", "W", "R", "F", "S"][dow];
-}
-
-function getShortDayName(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  const dow = new Date(y, m - 1, d).getDay();
-  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
-}
-
-function formatDateRange(startDate: string, endDate: string) {
-  const [sy, sm, sd] = startDate.split("-").map(Number);
-  const [ey, em, ed] = endDate.split("-").map(Number);
-  const start = new Date(sy, sm - 1, sd);
-  const end = new Date(ey, em - 1, ed);
-  const sameYear = start.getFullYear() === end.getFullYear();
-
-  return sameYear
-    ? `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-    : `${start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
-}
-
-function formatWeightValue(weight: number, unit: WeightUnit) {
-  return `${Number(weight.toFixed(1))} ${unit}`;
-}
-
-function convertWeightValue(weight: number, fromUnit: WeightUnit, toUnit: WeightUnit) {
-  if (fromUnit === toUnit) return weight;
-  if (fromUnit === "kg" && toUnit === "lb") return weight * poundsPerKilogram;
-  if (fromUnit === "lb" && toUnit === "kg") return weight / poundsPerKilogram;
-  return weight;
-}
-
-function formatWeightValueInUnit(weight: number, fromUnit: WeightUnit, toUnit: WeightUnit) {
-  return formatWeightValue(convertWeightValue(weight, fromUnit, toUnit), toUnit);
-}
-
-function roundToIncrement(value: number, increment: number) {
-  return Math.round(value / increment) * increment;
-}
-
-function getNiceWeightStep(range: number) {
-  return range <= 6 ? 0.5 : 1;
-}
-
-function getWeightTickLabel(value: number, step: number, unit: WeightUnit) {
-  const precision = step === 0.5 ? 1 : 0;
-  return `${Number(value.toFixed(precision))} ${unit}`;
-}
-
-function sortWeightEntriesNewestFirst(entries: WeightEntry[]) {
-  return [...entries].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-}
-
-function sortWeightEntriesOldestFirst(entries: WeightEntry[]) {
-  return [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-}
-
-function getPreferredWeightUnit(goals: Goals | null): WeightUnit {
-  return goals?.calculatorInputs?.weightUnit ?? "lb";
-}
-
-function getWeightRangeStartDate(range: WeightRange, referenceDate: string) {
-  if (range === "All") return "";
-
-  const [year, month, day] = referenceDate.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  const monthOffsets: Record<Exclude<WeightRange, "All">, number> = {
-    "1M": 1,
-    "3M": 3,
-    "6M": 6,
-    "1Y": 12,
-  };
-
-  date.setMonth(date.getMonth() - monthOffsets[range]);
-  return date.toISOString().slice(0, 10);
-}
-
-function getWeightRangeLabel(range: WeightRange) {
-  return range;
-}
-
-function parseDecimalInput(value: string) {
-  return Number(value.trim().replace(",", "."));
-}
-
-function createClientId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-
-  const randomPart =
-    typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function"
-      ? Array.from(crypto.getRandomValues(new Uint32Array(2)), (value) => value.toString(36)).join("")
-      : Math.random().toString(36).slice(2);
-
-  return `${Date.now().toString(36)}-${randomPart}`;
-}
-
-function getConfiguredGoogleClientId() {
-  return import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem(googleDriveClientIdKey) || "";
-}
 
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
   const foodLogImportInputRef = useRef<HTMLInputElement | null>(null);
   const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
-  const [appView, setAppView] = useState<AppView>("home");
+  const [appView, setAppView] = useState<AppView>(() => (getSavedProfile() ? "home" : "profile"));
   const [selectedDate, setSelectedDate] = useState(today);
   const [log, setLog] = useState<LogItem[]>(() => getSavedLog(today));
   const [pendingCategory, setPendingCategory] = useState<MealCategory | null>(null);
@@ -1819,11 +149,18 @@ function App() {
   const [foodLibraryTab, setFoodLibraryTab] = useState<FoodLibraryTab>("recent");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [librarySelection, setLibrarySelection] = useState<LibrarySelection | null>(null);
-  const [goals, setGoals] = useState<Goals | null>(() => getSavedGoals());
-  const [goalsForm, setGoalsForm] = useState<GoalsForm>(() => goalsToForm(getSavedGoals()));
-  const [calculatorInputs, setCalculatorInputs] = useState<CalculatorInputs>(() =>
-    calculatorInputsToForm(getSavedGoals())
-  );
+  const [profile, setProfile] = useState<Profile | null>(() => getSavedProfile());
+  const [profileForm, setProfileForm] = useState<ProfileForm>(() => {
+    const savedProfile = getSavedProfile();
+    return savedProfile ? profileToForm(savedProfile) : profileFormFromLegacyGoals(getSavedGoals());
+  });
+  const [goals, setGoals] = useState<Goals | null>(() => {
+    const savedProfile = getSavedProfile();
+    return savedProfile ? profileToGoals(savedProfile) : getSavedGoals();
+  });
+  const [profileSaveStatus, setProfileSaveStatus] = useState("");
+  const [profileWizardStep, setProfileWizardStep] = useState(0);
+  const [isProfileWizardOpen, setIsProfileWizardOpen] = useState(() => !getSavedProfile());
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(() => getSavedWeightEntries());
   const [weightForm, setWeightForm] = useState<WeightForm>({
     date: today,
@@ -1835,8 +172,6 @@ function App() {
   const [weightChartPointId, setWeightChartPointId] = useState<string | null>(null);
   const [weightEntryToDelete, setWeightEntryToDelete] = useState<WeightEntry | null>(null);
   const [editingWeightEntryId, setEditingWeightEntryId] = useState<string | null>(null);
-  const [isCalculatorOpen, setIsCalculatorOpen] = useState(() => !getSavedGoals());
-  const [isManualGoalsOpen, setIsManualGoalsOpen] = useState(false);
   const [editingCustomFoodId, setEditingCustomFoodId] = useState<number | null>(null);
   const [editingRecipeId, setEditingRecipeId] = useState<number | null>(null);
   const [isCreatingLibraryCustomFood, setIsCreatingLibraryCustomFood] = useState(false);
@@ -2714,6 +1049,53 @@ function App() {
     setExportStatus("Downloaded JSON file.");
   }
 
+  function exportAllData() {
+    const logs: Record<string, unknown> = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith("log-")) {
+        try {
+          const val = localStorage.getItem(key);
+          if (val) logs[key.slice(4)] = JSON.parse(val);
+        } catch {}
+      }
+    }
+    const data = {
+      exportedAt: new Date().toISOString(),
+      profile: getSavedProfile(),
+      customFoods: getSavedCustomFoods(),
+      recipes: getSavedRecipes(),
+      weightEntries: getSavedWeightEntries(),
+      foodLogs: logs,
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `jessica-data-${getLocalDateString()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function clearAllData() {
+    localStorage.clear();
+    setLog([]);
+    setCustomFoods([]);
+    setRecipes([]);
+    setWeightEntries([]);
+    setCompletedDays([]);
+    setTopFoods([]);
+    setProfile(null);
+    setGoals(null);
+    setProfileForm(profileFormFromLegacyGoals(null));
+    setProfileSaveStatus("");
+    setIsProfileWizardOpen(true);
+    setAppView("profile");
+  }
+
   async function shareDayExport() {
     setExportDriveLink("");
     const file = getDayExportFile();
@@ -3137,52 +1519,87 @@ function startEditWeightEntry(entry: WeightEntry) {
     cancelLibraryEditing();
   }
 
-  function submitGoals() {
-    const calories = Number(goalsForm.calories);
-    const protein = Number(goalsForm.protein);
-    const carbs = Number(goalsForm.carbs);
-    const fat = Number(goalsForm.fat);
+  function updateProfileForm(updates: Partial<ProfileForm>) {
+    setProfileForm((current) => {
+      const next = { ...current, ...updates };
 
-    if (!Number.isFinite(calories) || calories <= 0) return;
-    if (![protein, carbs, fat].every((v) => Number.isFinite(v) && v >= 0)) return;
+      if (updates.units && updates.units !== current.units) {
+        const currentHeightCm = getProfileHeightCm(current);
+        const currentWeightKg = getProfileWeightKg(current);
+        const currentGoalWeightKg = getProfileGoalWeightKg(current);
 
-    const newGoals: Goals = {
-      calories: Math.round(calories),
-      protein,
-      carbs,
-      fat,
-      ...(goalsForm.goalWeight && Number(goalsForm.goalWeight) > 0
-        ? { goalWeight: Number(goalsForm.goalWeight), goalWeightUnit: weightUnit }
-        : {}),
-      calculatorInputs: goals?.calculatorInputs,
-    };
-    setGoals(newGoals);
-    setStorageJson("goals", newGoals);
-    setIsManualGoalsOpen(false);
-  }
+        if (currentHeightCm !== null) {
+          const totalInches = cmToTotalInches(currentHeightCm);
+          next.heightCm = formatProfileNumber(currentHeightCm, 1);
+          next.heightFeet = String(Math.floor(totalInches / 12));
+          next.heightInches = formatProfileNumber(totalInches % 12, 1);
+        }
 
-  function updateCalculatorInputs(updates: Partial<CalculatorInputs>) {
-    setCalculatorInputs((currentInputs) => {
-      const nextInputs = { ...currentInputs, ...updates };
-      const validRates = getValidRates(nextInputs.goal);
+        if (currentWeightKg !== null) {
+          next.weight = updates.units === "metric"
+            ? formatProfileNumber(currentWeightKg, 1)
+            : formatProfileNumber(kgToLb(currentWeightKg), 1);
+        }
 
-      if (!validRates.includes(nextInputs.rate)) {
-        nextInputs.rate = validRates[0];
+        if (currentGoalWeightKg !== null) {
+          next.goalWeight = updates.units === "metric"
+            ? formatProfileNumber(currentGoalWeightKg, 1)
+            : formatProfileNumber(kgToLb(currentGoalWeightKg), 1);
+        }
       }
 
-      return nextInputs;
+      if (updates.goal === "maintain") {
+        next.weeklyRateKg = "0.5";
+      }
+
+      if (updates.macroPreset && updates.macroPreset !== "custom") {
+        const preset = macroPresets[updates.macroPreset];
+        next.macroMode = "percentages";
+        next.proteinPct = preset.proteinPct;
+        next.carbPct = preset.carbPct;
+        next.fatPct = preset.fatPct;
+      }
+
+      if (updates.macroPreset === "custom") {
+        next.macroMode = "percentages";
+      }
+
+      return next;
     });
+    setProfileSaveStatus("");
   }
 
-  function applyCalculatedGoals() {
-    const newGoals = calculateGoalsFromInputs(calculatorInputs);
-    if (!newGoals) return;
+  function cancelProfileChanges() {
+    if (!profile) return;
+    setProfileForm(profileToForm(profile));
+    setProfileSaveStatus("");
+    setIsProfileWizardOpen(false);
+    setProfileWizardStep(0);
+  }
 
-    setGoals(newGoals);
-    setGoalsForm(goalsToForm(newGoals));
-    setStorageJson("goals", newGoals);
-    setIsCalculatorOpen(false);
-    setIsManualGoalsOpen(false);
+  function saveProfile() {
+    const errors = getProfileValidationErrors(profileForm);
+    if (Object.keys(errors).length > 0) return;
+
+    const nextProfile = profileFormToProfile(profileForm, profile);
+    if (!nextProfile) return;
+
+    if (profile) setStorageJson("profile_backup", profile);
+    const savedProfile = setStorageJson("profile", nextProfile);
+    if (!savedProfile) {
+      setProfileSaveStatus("Profile could not be saved in this browser.");
+      return;
+    }
+
+    const nextGoals = profileToGoals(nextProfile);
+    setStorageJson("goals", nextGoals);
+    setProfile(nextProfile);
+    setProfileForm(profileToForm(nextProfile));
+    setGoals(nextGoals);
+    setProfileSaveStatus("Profile saved.");
+    setIsProfileWizardOpen(false);
+    setProfileWizardStep(0);
+    setAppView("profile");
   }
 
   function cancelLibraryEditing() {
@@ -3419,1748 +1836,170 @@ function startEditWeightEntry(entry: WeightEntry) {
     !isLoadingDetail &&
     (amountUnit === "serving" || (allowedAmountUnits.includes(amountUnit) && localPortionScale !== null)) &&
     (portionOptions.length === 0 || Boolean(selectedPortion));
-  const calculatedGoals = calculateGoalsFromInputs(calculatorInputs);
-  const calculatorRates = getValidRates(calculatorInputs.goal);
-  const ageValidationMessage = getAgeValidationMessage(calculatorInputs.age);
-  const heightValidationMessage = getHeightValidationMessage(calculatorInputs);
-  const weightValidationMessage = getWeightValidationMessage(calculatorInputs);
+  const profileCalculation = calculateProfile(profileForm);
+  const profileErrors = getProfileValidationErrors(profileForm);
+  const profileHasBlockingErrors = Object.keys(profileErrors).length > 0 || profileCalculation === null;
+  const profileLowCalorieThreshold = profileForm.sex === "female" ? 1200 : 1500;
+  const profileLowCalorieWarning =
+    profileCalculation && profileCalculation.activeCalories < profileLowCalorieThreshold
+      ? `This target is below ${profileLowCalorieThreshold} kcal/day. Consider a slower rate.`
+      : "";
 
   const bottomNav = (
-    <>
-      <button type="button" className="debug-fab" onClick={openDebugPanel}>
-        Debug
-      </button>
-      <nav className="bottom-nav" aria-label="Main navigation">
-        <button
-          type="button"
-          className={appView === "home" ? "active" : ""}
-          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("home"); }}
-        >
-          <span className="nav-icon">⌂</span>
-          <span>Home</span>
-        </button>
-        <button
-          type="button"
-          className={appView === "day" ? "active" : ""}
-          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("day"); }}
-        >
-          <span className="nav-icon">≡</span>
-          <span>Log</span>
-        </button>
-        <button
-          type="button"
-          className={appView === "weight" ? "active" : ""}
-          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("weight"); }}
-        >
-          <span className="nav-icon">↕</span>
-          <span>Weight</span>
-        </button>
-        <button
-          type="button"
-          className={appView === "library" ? "active" : ""}
-          onClick={openFoodLibrary}
-        >
-          <span className="nav-icon">⊞</span>
-          <span>Library</span>
-        </button>
-        <button
-          type="button"
-          className={appView === "profile" ? "active" : ""}
-          onClick={() => { setLibrarySelection(null); cancelLibraryEditing(); setAppView("profile"); }}
-        >
-          <span className="nav-icon">◉</span>
-          <span>Profile</span>
-        </button>
-      </nav>
-      {isDebugPanelOpen && (
-        <div className="modal-backdrop debug-backdrop" role="presentation">
-          <div className="modal debug-panel" role="dialog" aria-modal="true" aria-labelledby="debug-panel-title">
-            <div className="debug-panel-header">
-              <h2 id="debug-panel-title">Debug Log</h2>
-              <button type="button" className="secondary-button" onClick={() => setIsDebugPanelOpen(false)}>
-                Close
-              </button>
-            </div>
-            <textarea readOnly value={debugLogText} />
-            {debugCopyStatus && <p className="scan-status">{debugCopyStatus}</p>}
-            <div className="form-actions">
-              <button type="button" onClick={copyDebugLog}>
-                Copy Log
-              </button>
-              <button type="button" className="danger-button" onClick={clearDebugLog}>
-                Clear Log
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {showStreakPopup && (() => {
-        const popupWeekDates = getWeekDates(streakPopupDate);
-        const popupCompletedDays = completedDays.includes(streakPopupDate)
-          ? completedDays
-          : [...completedDays, streakPopupDate];
-        const completedSet = new Set(popupCompletedDays);
-        return (
-          <div className="floating-overlay" role="presentation" onClick={() => setShowStreakPopup(false)}>
-            <div className="floating-popover streak-popup" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-              <h2 className="streak-popup-title">Day Logged!</h2>
-              <div className="streak-popup-num">{getCompletedStreak(streakPopupDate, popupCompletedDays)}</div>
-              <p className="streak-popup-label">day streak</p>
-              <div className="streak-week-grid">
-                {popupWeekDates.map((d) => {
-                  const done = completedSet.has(d);
-                  const letter = getDayLetter(d);
-                  return (
-                    <div key={d} className={`streak-day-cell${done ? " done" : ""}`}>
-                      <span className="streak-day-check">{done ? "✓" : ""}</span>
-                      <span className="streak-day-letter">{letter}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <button type="button" className="primary-button" onClick={() => setShowStreakPopup(false)}>
-                Close
-              </button>
-            </div>
-          </div>
-        );
-      })()}
-    </>
+    <AppChrome
+      appView={appView}
+      onNavigate={(view) => {
+        setLibrarySelection(null);
+        cancelLibraryEditing();
+        setAppView(view);
+      }}
+      onOpenLibrary={openFoodLibrary}
+      onOpenDebugPanel={openDebugPanel}
+      isDebugPanelOpen={isDebugPanelOpen}
+      debugLogText={debugLogText}
+      debugCopyStatus={debugCopyStatus}
+      onCloseDebugPanel={() => setIsDebugPanelOpen(false)}
+      onCopyDebugLog={copyDebugLog}
+      onClearDebugLog={clearDebugLog}
+      showStreakPopup={showStreakPopup}
+      streakPopupDate={streakPopupDate}
+      completedDays={completedDays}
+      getCompletedStreak={getCompletedStreak}
+      onCloseStreakPopup={() => setShowStreakPopup(false)}
+    />
   );
 
   if (appView === "home") {
-    const weekDates = getWeekDates(selectedDate);
-    const weekStats = weekDates.map((date) => {
-      const dayLog = date === selectedDate ? log : getSavedLog(date);
-      return {
-        date,
-        calories: dayLog.reduce((s, item) => s + Math.round(item.calories * (item.quantity ?? 1)), 0),
-        protein: dayLog.reduce((s, item) => s + item.protein * (item.quantity ?? 1), 0),
-        carbs: dayLog.reduce((s, item) => s + item.carbs * (item.quantity ?? 1), 0),
-        fat: dayLog.reduce((s, item) => s + item.fat * (item.quantity ?? 1), 0),
-      };
-    });
-
-    const goalCal = goals?.calories ?? 0;
-    const maxDayCalories = Math.max(...weekStats.map((d) => d.calories), 1);
-    const weekCalorieGoal = goalCal * 7;
-    const weekTotalCalories = weekStats.reduce((s, d) => s + d.calories, 0);
-    const weekTotalProtein = weekStats.reduce((s, d) => s + d.protein, 0);
-    const weekTotalCarbs = weekStats.reduce((s, d) => s + d.carbs, 0);
-    const weekTotalFat = weekStats.reduce((s, d) => s + d.fat, 0);
-    const selectedHomeStats = homeSelectedDate
-      ? weekStats.find((day) => day.date === homeSelectedDate) ?? null
-      : null;
-    const displayStats = selectedHomeStats ?? {
-      date: weekDates[0],
-      calories: weekTotalCalories,
-      protein: weekTotalProtein,
-      carbs: weekTotalCarbs,
-      fat: weekTotalFat,
-    };
-    const displayGoalCal = selectedHomeStats ? goalCal : weekCalorieGoal;
-    const remaining = displayGoalCal - displayStats.calories;
-
-    const totalMacroGrams = displayStats.fat + displayStats.carbs + displayStats.protein;
-    const macroPieSlices = [
-      { label: "Protein", value: displayStats.protein, color: "var(--macro-protein)" },
-      { label: "Carbs", value: displayStats.carbs, color: "var(--macro-carbs)" },
-      { label: "Fat", value: displayStats.fat, color: "var(--macro-fat)" },
-    ].reduce(
-      (slices, macro) => {
-        if (totalMacroGrams <= 0 || macro.value <= 0) return slices;
-
-        const startAngle = slices.at(-1)?.endAngle ?? -90;
-        const angle = (macro.value / totalMacroGrams) * 360;
-        const endAngle = startAngle + angle;
-        const midAngle = startAngle + angle / 2;
-        const startRad = (Math.PI / 180) * startAngle;
-        const endRad = (Math.PI / 180) * endAngle;
-        const midRad = (Math.PI / 180) * midAngle;
-        const largeArc = angle > 180 ? 1 : 0;
-        const startX = 50 + 48 * Math.cos(startRad);
-        const startY = 50 + 48 * Math.sin(startRad);
-        const endX = 50 + 48 * Math.cos(endRad);
-        const endY = 50 + 48 * Math.sin(endRad);
-        const labelX = 50 + 27 * Math.cos(midRad);
-        const labelY = 50 + 27 * Math.sin(midRad);
-
-        return [
-          ...slices,
-          {
-            ...macro,
-            endAngle,
-            percentage: Math.round((macro.value / totalMacroGrams) * 100),
-            path: `M 50 50 L ${startX} ${startY} A 48 48 0 ${largeArc} 1 ${endX} ${endY} Z`,
-            labelX,
-            labelY,
-          },
-        ];
-      },
-      [] as {
-        label: string;
-        value: number;
-        color: string;
-        endAngle: number;
-        percentage: number;
-        path: string;
-        labelX: number;
-        labelY: number;
-      }[]
-    );
-
-    const completedStreak = getCompletedStreak();
-    const weekLabel = formatWeekOf(weekDates[0], weekDates[6]);
-    const calPct = displayGoalCal > 0
-      ? Math.min(100, Math.round((displayStats.calories / displayGoalCal) * 100))
-      : 0;
-    const calorieBudgetMarkerPct = 75;
-    const calorieOverflowCapacity = goalCal * 0.35;
-
     return (
-      <main className="app">
-        {/* Week navigation */}
-        <div className="dash-week-nav">
-          <button type="button" className="dash-week-arrow" onClick={() => { setHomeSelectedDate(null); changeSelectedDate(shiftDate(selectedDate, -7)); }} aria-label="Previous week">‹</button>
-          <span className="dash-week-label">Week of: {weekLabel}</span>
-          <button type="button" className="dash-week-arrow" onClick={() => { setHomeSelectedDate(null); changeSelectedDate(shiftDate(selectedDate, 7)); }} aria-label="Next week">›</button>
-        </div>
-
-        {/* CALORIES CARD */}
-        <section className="panel dash-card">
-          <p className="dash-card-label">CALORIES</p>
-          <div className="dash-cal-hero">
-            <div className="dash-cal-bar-bg">
-              <div className="dash-cal-bar-fill" style={{ width: `${calPct}%` }} />
-            </div>
-            <span className="dash-cal-number" style={{ color: remaining < 0 ? "#f87171" : "#f3f4f6" }}>
-              {displayStats.calories.toLocaleString()}
-            </span>
-            <span className="dash-cal-sub">
-              {displayGoalCal > 0
-                ? (remaining >= 0 ? `${remaining.toLocaleString()} remaining` : `${Math.abs(remaining).toLocaleString()} over`)
-                : "calories eaten"}
-            </span>
-          </div>
-          <div className="dash-day-bars" aria-label="Weekly calorie bars">
-            {weekStats.map(({ date, calories }) => {
-              const isSel = date === homeSelectedDate;
-              const isToday = date === today;
-              const greenPct = goalCal > 0
-                ? Math.min(calorieBudgetMarkerPct, (calories / goalCal) * calorieBudgetMarkerPct)
-                : Math.min(100, (calories / maxDayCalories) * 100);
-              const redPct = goalCal > 0 && calories > goalCal
-                ? Math.min(100 - calorieBudgetMarkerPct, ((calories - goalCal) / calorieOverflowCapacity) * (100 - calorieBudgetMarkerPct))
-                : 0;
-              const dayLabel = getShortDayName(date);
-              return (
-                <button key={date} type="button"
-                  className={`dash-day-col${isSel ? " selected" : ""}`}
-                  aria-pressed={isSel}
-                  onClick={() => toggleHomeDate(date)}>
-                  <div className={`dash-bar-wrap dash-budget-wrap${isSel ? " sel" : ""}`}>
-                    <div className="dash-budget-marker" style={{ bottom: `${calorieBudgetMarkerPct}%` }} />
-                    <div className={`dash-cal-budget-fill${isToday ? " today" : ""}`} style={{ height: `${greenPct}%` }} />
-                  {redPct > 0 && (
-                      <div className="dash-cal-over-fill" style={{ bottom: `${calorieBudgetMarkerPct}%`, height: `${redPct}%` }} />
-                    )}
-                  </div>
-                  <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{dayLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* MACROS CARD */}
-        <section className="panel dash-card dash-macro-card">
-          <p className="dash-card-label">MACROS</p>
-          <div className="dash-macro-layout">
-            <div className="dash-pie-wrap">
-              <svg viewBox="0 0 100 100" className="dash-pie-chart" role="img" aria-label="Macro split">
-                {macroPieSlices.length > 0 ? (
-                  macroPieSlices.map((slice) => (
-                    <g key={slice.label}>
-                      <path d={slice.path} fill={slice.color} />
-                    </g>
-                  ))
-                ) : (
-                  <circle cx="50" cy="50" r="48" fill="#3E505B" />
-                )}
-              </svg>
-            </div>
-            <div className="dash-macro-side">
-              <div className="dash-macro-meter-col" aria-label="Weekly macro composition bars">
-                {weekStats.map(({ date, protein, carbs, fat }) => {
-                  const isSel = date === homeSelectedDate;
-                  const isToday = date === today;
-                  const total = protein + carbs + fat;
-
-                  return (
-                    <button
-                      key={date}
-                      type="button"
-                      className={`dash-day-col${isSel ? " selected" : ""}`}
-                      aria-pressed={isSel}
-                      onClick={() => toggleHomeDate(date)}
-                    >
-                      <div className={`dash-macro-meter${isSel ? " sel" : ""}${isToday ? " today" : ""}${total > 0 ? " logged" : ""}`}>
-                        {total > 0 ? (
-                          <div className="dash-macro-meter-fill">
-                            {protein > 0 && <div style={{ flex: protein, background: "var(--macro-protein)" }} />}
-                            {carbs > 0 && <div style={{ flex: carbs, background: "var(--macro-carbs)" }} />}
-                            {fat > 0 && <div style={{ flex: fat, background: "var(--macro-fat)" }} />}
-                          </div>
-                        ) : (
-                          <div className="dash-macro-meter-empty" />
-                        )}
-                      </div>
-                      <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{getShortDayName(date)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="dash-macro-summary-line" aria-label="Macro breakdown">
-                <span><b style={{ color: "var(--macro-protein)" }}>Protein</b> {Math.round(displayStats.protein)}g</span>
-                <span><b style={{ color: "var(--macro-carbs)" }}>Carbs</b> {Math.round(displayStats.carbs)}g</span>
-                <span><b style={{ color: "var(--macro-fat)" }}>Fat</b> {Math.round(displayStats.fat)}g</span>
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* BOTTOM CARDS */}
-        <section className="dash-bottom-grid">
-          {/* Top Left: Streak */}
-          <div className="panel dash-card dash-mini-card dash-streak-card">
-            <p className="dash-quad-label">Streak</p>
-            <strong className="dash-streak-num">{completedStreak > 0 ? completedStreak : "—"}</strong>
-            <span className="dash-quad-sub">days completed</span>
-          </div>
-
-          {/* Top Right: Weekly Macro Goals */}
-          <div className="panel dash-card dash-mini-card">
-            <div className="dash-card-title-row">
-              <p className="dash-quad-label">Goals</p>
-              <div className="dash-goals-toggle" aria-label="Goal range">
-                <button
-                  type="button"
-                  className={goalsView === "daily" ? "active" : ""}
-                  onClick={() => setGoalsView("daily")}
-                >
-                  Daily
-                </button>
-                <button
-                  type="button"
-                  className={goalsView === "weekly" ? "active" : ""}
-                  onClick={() => setGoalsView("weekly")}
-                >
-                  Weekly
-                </button>
-              </div>
-            </div>
-            {goals ? (
-              <div className="dash-macro-progress-list">
-                {[
-                  { label: "Protein", total: goalsView === "weekly" ? weekTotalProtein : displayStats.protein, goal: goals.protein * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-protein)", overflowColor: "#22c55e" },
-                  { label: "Carbs", total: goalsView === "weekly" ? weekTotalCarbs : displayStats.carbs, goal: goals.carbs * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-carbs)", overflowColor: "#38bdf8" },
-                  { label: "Fat", total: goalsView === "weekly" ? weekTotalFat : displayStats.fat, goal: goals.fat * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-fat)", overflowColor: "#fb923c" },
-                ].map(({ label, total, goal, color, overflowColor }) => {
-                  const markerPct = 80;
-                  const goalFillPct = goal > 0 ? Math.min(markerPct, (total / goal) * markerPct) : 0;
-                  const overflowPct = goal > 0 && total > goal
-                    ? Math.min(100 - markerPct, ((total - goal) / (goal * 0.25 || 1)) * (100 - markerPct))
-                    : 0;
-                  return (
-                    <div key={label} className="dash-macro-prog-row">
-                      <div className="dash-macro-prog-head">
-                        <span className="dash-macro-prog-label">{label}</span>
-                        <span className="dash-macro-prog-pct">
-                          {goal > 0 ? `${Math.round((total / goal) * 100)}% / ${Math.round(total)}g` : `${Math.round(total)}g`}
-                        </span>
-                      </div>
-                      <div className="dash-macro-prog-track">
-                        <div className="dash-goal-marker" style={{ left: `${markerPct}%` }} />
-                        <div className="dash-macro-prog-fill" style={{ width: `${goalFillPct}%`, background: color }} />
-                        {overflowPct > 0 && (
-                          <div
-                            className="dash-macro-prog-over"
-                            style={{ left: `${markerPct}%`, width: `${overflowPct}%`, background: overflowColor }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="dash-quad-sub">Set goals in Profile</p>
-            )}
-          </div>
-
-          {/* Bottom Left: Weight */}
-          <div className="panel dash-card dash-mini-card dash-weight-card">
-            <p className="dash-quad-label">Weight</p>
-            {currentWeightEntry ? (
-              <>
-                <strong className="dash-weight-num">
-                  {formatWeightValueInUnit(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit)}
-                </strong>
-                {startingWeightEntry && startingWeightEntry.id !== currentWeightEntry.id && (() => {
-                  const cur = convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit);
-                  const start = convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit);
-                  const diff = cur - start;
-                  return (
-                    <span className={`dash-quad-sub ${diff <= 0 ? "weight-lost" : "weight-gained"}`}>
-                      {diff < 0 ? `↓ ${formatWeightValue(Math.abs(diff), weightUnit)} lost` : `↑ ${formatWeightValue(diff, weightUnit)} gained`}
-                    </span>
-                  );
-                })()}
-                {goals?.goalWeight && (() => {
-                  const cur = convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, weightUnit);
-                  const goal = goals.goalWeightUnit
-                    ? convertWeightValue(goals.goalWeight, goals.goalWeightUnit, weightUnit)
-                    : goals.goalWeight;
-                  const remaining = Math.abs(cur - goal);
-                  const pct = startingWeightEntry
-                    ? Math.min(100, Math.max(0, Math.round(
-                        Math.abs(cur - convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit)) /
-                        Math.abs(goal - convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, weightUnit)) * 100
-                      )))
-                    : 0;
-                  return (
-                    <>
-                      <span className="dash-quad-sub">Goal: {formatWeightValue(goal, weightUnit)}</span>
-                      <div className="dash-macro-prog-track" style={{ marginTop: "0.3rem" }}>
-                        <div className="dash-macro-prog-fill" style={{ width: `${pct}%`, background: "#8AB0AB" }} />
-                      </div>
-                      <span className="dash-quad-sub">{formatWeightValue(remaining, weightUnit)} remaining</span>
-                    </>
-                  );
-                })()}
-                {!goals?.goalWeight && (
-                  <span className="dash-quad-sub">Last: {formatShortDate(currentWeightEntry.date)}</span>
-                )}
-              </>
-            ) : (
-              <span className="dash-quad-sub">No entries yet</span>
-            )}
-          </div>
-
-          {/* Bottom Right: Top Foods */}
-          <div className="panel dash-card dash-mini-card">
-            <p className="dash-quad-label">Top Foods</p>
-            {topFoods.length > 0 ? (
-              <ol className="dash-top-foods">
-                {topFoods.slice(0, 5).map((f, index) => (
-                  <li key={f.name} className="dash-top-food-item">
-                    <span className="dash-food-name">
-                      <span className="dash-food-medal" aria-hidden="true">
-                        {index === 0 ? "🏆" : index === 1 ? "🥈" : index === 2 ? "🥉" : `${index + 1}.`}
-                      </span>
-                      <span className="dash-food-name-text">{f.name}</span>
-                    </span>
-                    <span className="dash-food-count">×{f.count}</span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <span className="dash-quad-sub">Log foods to see top items</span>
-            )}
-          </div>
-        </section>
-
-        {bottomNav}
-      </main>
+      <HomeView
+        bottomNav={bottomNav}
+        selectedDate={selectedDate}
+        log={log}
+        goals={goals}
+        homeSelectedDate={homeSelectedDate}
+        setHomeSelectedDate={setHomeSelectedDate}
+        changeSelectedDate={changeSelectedDate}
+        toggleHomeDate={toggleHomeDate}
+        today={today}
+        getCompletedStreak={getCompletedStreak}
+        goalsView={goalsView}
+        setGoalsView={setGoalsView}
+        currentWeightEntry={currentWeightEntry}
+        startingWeightEntry={startingWeightEntry}
+        weightUnit={weightUnit}
+      />
     );
   }
 
   if (appView === "profile") {
     return (
-      <main className="app">
-        <div className="top-bar">
-          <h1>Profile</h1>
-        </div>
-
-        <section className="panel targets-card">
-          <div className="section-heading-row">
-            <div>
-              <h2>Your Targets</h2>
-              <p className="week-range">Daily nutrition goals used by Home and Log.</p>
-            </div>
-          </div>
-
-          {goals ? (
-            <div className="targets-grid">
-              <div>
-                <span>Calories</span>
-                <strong>{goals.calories}/day</strong>
-              </div>
-              <div>
-                <span>Protein</span>
-                <strong>{goals.protein}g</strong>
-              </div>
-              <div>
-                <span>Carbs</span>
-                <strong>{goals.carbs}g</strong>
-              </div>
-              <div>
-                <span>Fat</span>
-                <strong>{goals.fat}g</strong>
-              </div>
-            </div>
-          ) : (
-            <p className="empty-meal">No saved targets yet.</p>
-          )}
-
-          <div className="profile-actions">
-            <button type="button" onClick={() => setIsCalculatorOpen(true)}>
-              Recalculate
-            </button>
-            <button type="button" onClick={() => setIsManualGoalsOpen((isOpen) => !isOpen)}>
-              Edit manually
-            </button>
-          </div>
-        </section>
-
-        <section className="panel">
-          <button
-            type="button"
-            className="section-toggle"
-            onClick={() => setIsCalculatorOpen((isOpen) => !isOpen)}
-            aria-expanded={isCalculatorOpen}
-          >
-            <span>
-              <strong>Calorie & Macro Calculator</strong>
-              <small>Estimate your daily targets from your stats and goal.</small>
-            </span>
-            <span>{isCalculatorOpen ? "Hide" : "Open"}</span>
-          </button>
-
-          {isCalculatorOpen && (
-            <div className="calculator-form">
-              <fieldset className="calculator-group">
-                <legend>About You</legend>
-
-                <div className="calculator-fields">
-                  <label>
-                    Age
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={calculatorInputs.age}
-                      onChange={(e) => updateCalculatorInputs({ age: e.target.value })}
-                    />
-                  </label>
-
-                  <label>
-                    Sex
-                    <select
-                      value={calculatorInputs.sex}
-                      onChange={(e) => updateCalculatorInputs({ sex: e.target.value as Sex })}
-                    >
-                      <option value="female">Female</option>
-                      <option value="male">Male</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    Height
-                    <div
-                      className={
-                        calculatorInputs.heightUnit === "ftIn"
-                          ? "height-input-row"
-                          : "compound-input-row"
-                      }
-                    >
-                      {calculatorInputs.heightUnit === "ftIn" ? (
-                        <>
-                          <input
-                            aria-label="Height feet"
-                            type="number"
-                            min="0"
-                            max="9"
-                            step="1"
-                            placeholder="ft"
-                            value={calculatorInputs.heightFeet ?? ""}
-                            onChange={(e) =>
-                              updateCalculatorInputs({ heightFeet: e.target.value })
-                            }
-                          />
-                          <input
-                            aria-label="Height inches"
-                            type="number"
-                            min="0"
-                            max="11.5"
-                            step="0.5"
-                            placeholder="in"
-                            value={calculatorInputs.heightInches ?? ""}
-                            onChange={(e) =>
-                              updateCalculatorInputs({ heightInches: e.target.value })
-                            }
-                          />
-                        </>
-                      ) : (
-                        <input
-                          type="number"
-                          min="1"
-                          max={
-                            calculatorInputs.heightUnit === "cm"
-                              ? Number(maxHeightCm.toFixed(2))
-                              : maxHeightInches
-                          }
-                          step="0.1"
-                          value={calculatorInputs.height}
-                          onChange={(e) => updateCalculatorInputs({ height: e.target.value })}
-                        />
-                      )}
-                      <select
-                        value={calculatorInputs.heightUnit}
-                        onChange={(e) =>
-                          updateCalculatorInputs({ heightUnit: e.target.value as HeightUnit })
-                        }
-                      >
-                        <option value="ftIn">ft/in</option>
-                        <option value="in">in only</option>
-                        <option value="cm">cm</option>
-                      </select>
-                    </div>
-                  </label>
-
-                  <label>
-                    Weight
-                    <div className="compound-input-row">
-                      <input
-                        type="number"
-                        min="1"
-                        max={
-                          calculatorInputs.weightUnit === "kg"
-                            ? Number(maxWeightKg.toFixed(1))
-                            : maxWeightLb
-                        }
-                        step="0.1"
-                        value={calculatorInputs.weight}
-                        onChange={(e) => updateCalculatorInputs({ weight: e.target.value })}
-                      />
-                      <select
-                        value={calculatorInputs.weightUnit}
-                        onChange={(e) =>
-                          updateCalculatorInputs({ weightUnit: e.target.value as WeightUnit })
-                        }
-                      >
-                        <option value="lb">lb</option>
-                        <option value="kg">kg</option>
-                      </select>
-                    </div>
-                  </label>
-                </div>
-
-                {ageValidationMessage && <p className="profile-warning">{ageValidationMessage}</p>}
-                {heightValidationMessage && (
-                  <p className="profile-warning">{heightValidationMessage}</p>
-                )}
-                {weightValidationMessage && (
-                  <p className="profile-warning">{weightValidationMessage}</p>
-                )}
-              </fieldset>
-
-              <fieldset className="calculator-group">
-                <legend>Activity</legend>
-                <div className="option-card-grid">
-                  {activityOptions.map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      className={`option-card${
-                        calculatorInputs.activityLevel === level ? " selected" : ""
-                      }`}
-                      onClick={() => updateCalculatorInputs({ activityLevel: level })}
-                    >
-                      {activityLabels[level]}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset className="calculator-group">
-                <legend>Goal</legend>
-                <div className="option-card-grid three">
-                  {goalOptions.map((goal) => (
-                    <button
-                      key={goal}
-                      type="button"
-                      className={`option-card${calculatorInputs.goal === goal ? " selected" : ""}`}
-                      onClick={() => updateCalculatorInputs({ goal })}
-                    >
-                      {goalLabels[goal]}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              {calculatorInputs.goal !== "maintain" && (
-                <fieldset className="calculator-group">
-                  <legend>Pace</legend>
-                  <div className="option-card-grid three">
-                    {calculatorRates.map((rate) => (
-                      <button
-                        key={rate}
-                        type="button"
-                        className={`option-card${calculatorInputs.rate === rate ? " selected" : ""}`}
-                        onClick={() => updateCalculatorInputs({ rate })}
-                      >
-                        {rateLabels[rate]}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
-              )}
-
-              <div className="calculator-estimate">
-                <span>Estimated target</span>
-                {calculatedGoals ? (
-                  <>
-                    <strong>{calculatedGoals.calories} cal/day</strong>
-                    <small>
-                      {calculatedGoals.protein}g P / {calculatedGoals.carbs}g C /{" "}
-                      {calculatedGoals.fat}g F
-                    </small>
-                  </>
-                ) : (
-                  <strong>Enter age, height, and weight</strong>
-                )}
-              </div>
-
-              <button
-                type="button"
-                className="primary-button"
-                onClick={applyCalculatedGoals}
-                disabled={!calculatedGoals}
-              >
-                Save Targets
-              </button>
-            </div>
-          )}
-        </section>
-
-        {isManualGoalsOpen && (
-          <section className="panel">
-            <h2>Manual Targets</h2>
-            <p className="week-range">Fine-tune your saved targets manually.</p>
-
-            <div className="goals-form">
-              {[
-                { key: "calories" as const, label: "Calories", unit: "cal / day" },
-                { key: "protein" as const, label: "Protein", unit: "g / day" },
-                { key: "carbs" as const, label: "Carbs", unit: "g / day" },
-                { key: "fat" as const, label: "Fat", unit: "g / day" },
-              ].map(({ key, label, unit }) => (
-                <label key={key}>
-                  {label}
-                  <div className="goals-input-row">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={goalsForm[key]}
-                      onChange={(e) => setGoalsForm({ ...goalsForm, [key]: e.target.value })}
-                    />
-                    <span>{unit}</span>
-                  </div>
-                </label>
-              ))}
-
-              <label key="goalWeight">
-                Goal Weight
-                <div className="goals-input-row">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={goalsForm.goalWeight}
-                    onChange={(e) => setGoalsForm({ ...goalsForm, goalWeight: e.target.value })}
-                  />
-                  <span>{weightUnit}</span>
-                </div>
-              </label>
-
-              <button type="button" className="primary-button" onClick={submitGoals}>
-                Save goals
-              </button>
-            </div>
-          </section>
-        )}
-
-        {bottomNav}
-      </main>
+      <ProfileView
+        bottomNav={bottomNav}
+        profile={profile}
+        profileForm={profileForm}
+        setProfileForm={setProfileForm}
+        updateProfileForm={updateProfileForm}
+        profileCalculation={profileCalculation}
+        profileErrors={profileErrors}
+        profileHasBlockingErrors={profileHasBlockingErrors}
+        profileLowCalorieWarning={profileLowCalorieWarning}
+        profileWizardStep={profileWizardStep}
+        setProfileWizardStep={setProfileWizardStep}
+        isProfileWizardOpen={isProfileWizardOpen}
+        setIsProfileWizardOpen={setIsProfileWizardOpen}
+        profileSaveStatus={profileSaveStatus}
+        setProfileSaveStatus={setProfileSaveStatus}
+        cancelProfileChanges={cancelProfileChanges}
+        saveProfile={saveProfile}
+        onOpenExport={exportAllData}
+        onOpenImport={() => foodLogImportInputRef.current?.click()}
+        onConnectDrive={openDriveImport}
+        onDeleteAllData={clearAllData}
+      />
     );
   }
 
   if (appView === "weight") {
-    const displayUnit = weightUnit;
-    const chartWidth = 360;
-    const chartHeight = 240;
-    const chartLeft = 60;
-    const chartRight = 24;
-    const chartTop = 18;
-    const chartBottom = 48;
-    const chartPlotWidth = chartWidth - chartLeft - chartRight;
-    const chartPlotHeight = chartHeight - chartTop - chartBottom;
-    const chartEntries = chartWeightEntries.map((entry) => ({
-      ...entry,
-      displayWeight: convertWeightValue(entry.weight, entry.unit, displayUnit),
-    }));
-    const chartWeights = chartEntries.map((entry) => entry.displayWeight);
-    const minDisplayWeight = chartWeights.length ? Math.min(...chartWeights) : 0;
-    const maxDisplayWeight = chartWeights.length ? Math.max(...chartWeights) : 0;
-    const chartRange = Math.max(1, maxDisplayWeight - minDisplayWeight);
-    const chartStep = getNiceWeightStep(chartRange);
-    const chartMin = roundToIncrement(minDisplayWeight, chartStep) - chartStep;
-    const chartMax = roundToIncrement(maxDisplayWeight, chartStep) + chartStep;
-    const chartDomainRange = Math.max(chartStep, chartMax - chartMin);
-    const chartTickValues = [
-      chartMin,
-      chartMin + chartDomainRange * 0.25,
-      chartMin + chartDomainRange * 0.5,
-      chartMin + chartDomainRange * 0.75,
-      chartMax,
-    ].map((value) => roundToIncrement(value, chartStep));
-    const chartExtraTickValues = [
-      chartMin + chartDomainRange * 0.125,
-      chartMin + chartDomainRange * 0.375,
-      chartMin + chartDomainRange * 0.625,
-      chartMin + chartDomainRange * 0.875,
-    ].map((value) => roundToIncrement(value, chartStep));
-    const chartXIndexMid = Math.round((chartEntries.length - 1) / 2);
-    const chartPoints = chartEntries.map((entry, index) => {
-      const x = chartLeft + (index / Math.max(1, chartEntries.length - 1)) * chartPlotWidth;
-      const y = chartTop + ((chartMax - entry.displayWeight) / chartDomainRange) * chartPlotHeight;
-
-      return { ...entry, x, y };
-    });
-    const chartLinePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(" ");
-    const chartYAxisTicks = [...new Set(chartTickValues)];
-    for (const value of chartExtraTickValues) {
-      if (chartYAxisTicks.length >= 5) break;
-      if (!chartYAxisTicks.includes(value)) {
-        chartYAxisTicks.push(value);
-      }
-    }
-    chartYAxisTicks.sort((a, b) => a - b);
-    const chartYAxisPositions = chartYAxisTicks.map((value) => chartTop + ((chartMax - value) / chartDomainRange) * chartPlotHeight);
-    const chartXAxisPositions = [
-      chartPoints[0]?.x ?? chartLeft,
-      chartPoints[chartXIndexMid]?.x ?? chartLeft,
-      chartPoints[chartPoints.length - 1]?.x ?? chartLeft,
-    ];
-    const chartFirstDate = chartEntries[0]?.date ?? "";
-    const chartMiddleDate = chartEntries[chartXIndexMid]?.date ?? "";
-    const chartLastDate = chartEntries[chartEntries.length - 1]?.date ?? "";
-    const chartRangeLabel =
-      chartEntries.length > 0 ? formatDateRange(chartFirstDate, chartLastDate) : "No entries";
-    const chartHighest = chartEntries.length > 0 ? Math.max(...chartWeights) : 0;
-    const chartLowest = chartEntries.length > 0 ? Math.min(...chartWeights) : 0;
-    const chartAverage =
-      chartEntries.length > 0
-        ? chartWeights.reduce((sum, value) => sum + value, 0) / chartEntries.length
-        : 0;
-    const chartDelta =
-      chartEntries.length > 1
-        ? chartEntries[chartEntries.length - 1].displayWeight - chartEntries[0].displayWeight
-        : null;
-    const selectedChartPoint =
-      chartPoints.find((point) => point.id === weightChartPointId) ?? chartPoints[chartPoints.length - 1] ?? null;
-    const summaryCurrentWeight = currentWeightEntry
-      ? convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit)
-      : null;
-    const summaryStartingWeight = startingWeightEntry
-      ? convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, displayUnit)
-      : null;
-    const summaryChange =
-      summaryCurrentWeight !== null && summaryStartingWeight !== null
-        ? summaryCurrentWeight - summaryStartingWeight
-        : null;
-    const summaryChangeLabel =
-      summaryChange === null
-        ? "No entry"
-        : summaryChange === 0
-        ? "No change"
-        : summaryChange < 0
-        ? `Lost ${formatWeightValue(Math.abs(summaryChange), displayUnit)}`
-        : `Gained ${formatWeightValue(summaryChange, displayUnit)}`;
-
     return (
-      <main className="app">
-        <div className="top-bar">
-          <h1>Weight</h1>
-        </div>
-
-        <section className="panel">
-          <div className="targets-grid weight-summary-grid">
-            <div>
-              <span>Current</span>
-              <strong>
-                {currentWeightEntry
-                  ? formatWeightValueInUnit(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit)
-                  : "No entry"}
-              </strong>
-            </div>
-            <div>
-              <span>Starting</span>
-              <strong>
-                {startingWeightEntry
-                  ? formatWeightValueInUnit(startingWeightEntry.weight, startingWeightEntry.unit, displayUnit)
-                  : "No entry"}
-              </strong>
-            </div>
-            <div>
-              <span>Total change</span>
-              <strong>
-                {summaryChangeLabel}
-              </strong>
-            </div>
-            <div>
-              <span>Latest weigh-in</span>
-              <strong>{currentWeightEntry ? formatShortDate(currentWeightEntry.date) : "No entry"}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="panel weight-entry-panel" {...tapProbeProps("weight-entry-panel")}>
-          <h2>Log Weight</h2>
-          <div className="weight-form" {...tapProbeProps("weight-form")}>
-            <label>
-              Date
-              <input
-                type="date"
-                value={weightForm.date}
-                onChange={(e) => {
-                  setWeightSaveError("");
-                  setWeightForm({ ...weightForm, date: e.target.value });
-                }}
-              />
-            </label>
-            <label>
-              Weight ({weightUnit})
-              <input
-                type="text"
-                inputMode="decimal"
-                pattern="[0-9]*[.]?[0-9]*"
-                value={weightForm.weight}
-                onChange={(e) => {
-                  setWeightSaveError("");
-                  setWeightForm({ ...weightForm, weight: e.target.value });
-                }}
-              />
-            </label>
-            <label>
-              Note
-              <input
-                value={weightForm.note}
-                placeholder="Optional"
-                onChange={(e) => {
-                  setWeightSaveError("");
-                  setWeightForm({ ...weightForm, note: e.target.value });
-                }}
-              />
-            </label>
-            {weightSaveError && <p className="form-error">{weightSaveError}</p>}
-            <button
-  type="button"
-  className="primary-button"
-  onPointerDown={(event) => logTapProbe("weight-save-button", "pointerdown", event)}
-  onTouchStart={(event) => logTapProbe("weight-save-button", "touchstart", event)}
-  onClick={(event) => {
-    logTapProbe("weight-save-button", "click", event);
-    saveWeightEntry();
-  }}
-  disabled={!isWeightFormValid}
->
-  {editingWeightEntryId ? "Update" : "Save"}
-</button>
-
-{editingWeightEntryId && (
-  <button
-    type="button"
-    className="secondary-button"
-    onClick={() => {
-      setEditingWeightEntryId(null);
-      setWeightForm({ date: today, weight: "", note: "" });
-    }}
-  >
-    Cancel
-  </button>
-)}
-          </div>
-        </section>
-
-        <section className="panel">
-          <div className="weight-chart-header">
-            <div>
-              <span>Date Range</span>
-              <strong>{chartRangeLabel}</strong>
-            </div>
-            <div>
-              <span>Highest Weight</span>
-              <strong>{chartEntries.length ? formatWeightValue(chartHighest, displayUnit) : "No entry"}</strong>
-            </div>
-            <div>
-              <span>Lowest Weight</span>
-              <strong>{chartEntries.length ? formatWeightValue(chartLowest, displayUnit) : "No entry"}</strong>
-            </div>
-            <div>
-              <span>Net Change</span>
-              <strong>{chartDelta === null ? "No entry" : `${chartDelta < 0 ? "Lost" : "Gained"} ${formatWeightValue(Math.abs(chartDelta), displayUnit)}`}</strong>
-            </div>
-            <div>
-              <span>Average Weight</span>
-              <strong>{chartEntries.length ? formatWeightValue(chartAverage, displayUnit) : "No entry"}</strong>
-            </div>
-          </div>
-
-          <div className="weight-range-controls" role="tablist" aria-label="Weight chart range">
-            {(["1M", "3M", "6M", "1Y", "All"] as WeightRange[]).map((range) => (
-              <button
-                key={range}
-                type="button"
-                className={weightRange === range ? "active" : ""}
-                onClick={() => setWeightRange(range)}
-                role="tab"
-                aria-selected={weightRange === range}
-              >
-                {getWeightRangeLabel(range)}
-              </button>
-            ))}
-          </div>
-
-          <div className="section-heading-row">
-            <h2>Trend</h2>
-          </div>
-
-          {sortedWeightEntriesOldest.length === 0 && (
-            <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>
-          )}
-
-          {sortedWeightEntriesOldest.length === 1 && (
-            <p className="empty-meal">Add at least two weight entries to see your trend.</p>
-          )}
-
-          {sortedWeightEntriesOldest.length >= 2 && (
-            <div className="weight-chart-shell">
-              <div className="weight-chart" aria-label="Weight trend graph">
-                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img">
-                  {chartYAxisPositions.map((y, index) => (
-                    <line
-                      key={`h-${index}`}
-                      className="weight-chart-grid"
-                      x1={chartLeft}
-                      y1={y}
-                      x2={chartWidth - chartRight}
-                      y2={y}
-                    />
-                  ))}
-                  {chartXAxisPositions.map((x, index) => (
-                    <line
-                      key={`v-${index}`}
-                      className="weight-chart-grid"
-                      x1={x}
-                      y1={chartTop}
-                      x2={x}
-                      y2={chartHeight - chartBottom}
-                    />
-                  ))}
-                  <line
-                    className="weight-chart-axis"
-                    x1={chartLeft}
-                    y1={chartHeight - chartBottom}
-                    x2={chartWidth - chartRight}
-                    y2={chartHeight - chartBottom}
-                  />
-                  <line
-                    className="weight-chart-axis"
-                    x1={chartLeft}
-                    y1={chartTop}
-                    x2={chartLeft}
-                    y2={chartHeight - chartBottom}
-                  />
-                  <polyline className="weight-chart-line" points={chartLinePoints} />
-                  {chartPoints.map((point) => {
-                    const tooltip = [
-                      formatShortDate(point.date),
-                      formatWeightValue(point.displayWeight, displayUnit),
-                      point.note ? `Note: ${point.note}` : null,
-                    ]
-                      .filter(Boolean)
-                      .join("\n");
-
-                    return (
-                      <g key={point.id}>
-                        <circle
-                          className="weight-chart-dot"
-                          cx={point.x}
-                          cy={point.y}
-                          r="4"
-                          tabIndex={0}
-                          aria-label={tooltip}
-                          onMouseEnter={() => setWeightChartPointId(point.id)}
-                          onFocus={() => setWeightChartPointId(point.id)}
-                          onClick={() => setWeightChartPointId(point.id)}
-                        >
-                          <title>{tooltip}</title>
-                        </circle>
-                      </g>
-                    );
-                  })}
-                  {chartYAxisTicks.map((value, index) => (
-                    <text
-                      key={`y-label-${index}`}
-                      className="weight-chart-label"
-                      x={chartLeft - 10}
-                      y={chartYAxisPositions[index] + 4}
-                      textAnchor="end"
-                    >
-                      {getWeightTickLabel(value, chartStep, displayUnit)}
-                    </text>
-                  ))}
-                  {[
-                    { value: chartFirstDate, x: chartXAxisPositions[0], anchor: "start" as const },
-                    {
-                      value: chartMiddleDate,
-                      x: chartXAxisPositions[1],
-                      anchor: "middle" as const,
-                    },
-                    {
-                      value: chartLastDate,
-                      x: chartXAxisPositions[2],
-                      anchor: "end" as const,
-                    },
-                  ].map((label, index) => (
-                    <text
-                      key={`x-label-${index}`}
-                      className="weight-chart-label"
-                      x={label.x}
-                      y={chartHeight - 10}
-                      textAnchor={label.anchor}
-                    >
-                      {formatShortDate(label.value)}
-                    </text>
-                  ))}
-                </svg>
-              </div>
-              {selectedChartPoint && (
-                <div className="weight-chart-point-card" aria-live="polite">
-                  <strong>{formatShortDate(selectedChartPoint.date)}</strong>
-                  <span>{formatWeightValue(selectedChartPoint.displayWeight, displayUnit)}</span>
-                  {selectedChartPoint.note && <small>{selectedChartPoint.note}</small>}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        <section className="panel">
-          <h2>Entries</h2>
-
-          {sortedWeightEntriesNewest.length === 0 && (
-            <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>
-          )}
-
-          <div className="weight-entry-list">
-            {sortedWeightEntriesNewest.map((entry) => {
-  const chronological = sortedWeightEntriesOldest;
-  const index = chronological.findIndex((item) => item.id === entry.id);
-  const previous = index > 0 ? chronological[index - 1] : null;
-
-  const entryWeight = convertWeightValue(entry.weight, entry.unit, displayUnit);
-  const previousWeight = previous
-    ? convertWeightValue(previous.weight, previous.unit, displayUnit)
-    : null;
-
-  const change = previousWeight === null ? null : entryWeight - previousWeight;
-
-  return (
-    <div className="weight-entry-row" key={entry.id}>
-      <div className="weight-entry-info">
-        <strong>{formatEntryDate(entry.date)} — {formatWeightValue(entryWeight, displayUnit)}</strong>
-        {change !== null && (
-          <span
-            className={
-              change < 0
-                ? "weight-change-loss"
-                : change > 0
-                ? "weight-change-gain"
-                : "weight-change-neutral"
-            }
-          >
-            {change > 0 ? "+" : ""}{formatWeightValue(change, displayUnit)}
-          </span>
-        )}
-        {entry.note && <small className="weight-entry-note">{entry.note}</small>}
-      </div>
-
-      <div className="weight-entry-actions">
-        <button type="button" onClick={() => startEditWeightEntry(entry)}>Edit</button>
-        <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
-      </div>
-    </div>
-  );
-})}
-          </div>
-        </section>
-
-        {weightEntryToDelete && (
-          <div className="floating-overlay" role="presentation">
-            <div
-              className="floating-popover confirm-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="remove-weight-title"
-            >
-              <h2 id="remove-weight-title">Delete weight entry?</h2>
-              <p>
-                {formatWeightValue(weightEntryToDelete.weight, weightEntryToDelete.unit)} from{" "}
-                {formatShortDate(weightEntryToDelete.date)} will be deleted.
-              </p>
-
-              <button className="danger-button" onClick={confirmDeleteWeightEntry}>
-                Delete
-              </button>
-              <button className="secondary-button" onClick={() => setWeightEntryToDelete(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {bottomNav}
-      </main>
+      <WeightView
+        bottomNav={bottomNav}
+        today={today}
+        weightUnit={weightUnit}
+        profile={profile}
+        chartWeightEntries={chartWeightEntries}
+        currentWeightEntry={currentWeightEntry}
+        startingWeightEntry={startingWeightEntry}
+        weightForm={weightForm}
+        setWeightForm={setWeightForm}
+        weightSaveError={weightSaveError}
+        setWeightSaveError={setWeightSaveError}
+        isWeightFormValid={isWeightFormValid}
+        editingWeightEntryId={editingWeightEntryId}
+        setEditingWeightEntryId={setEditingWeightEntryId}
+        saveWeightEntry={saveWeightEntry}
+        tapProbeProps={tapProbeProps}
+        logTapProbe={logTapProbe}
+        weightRange={weightRange}
+        setWeightRange={setWeightRange}
+        weightChartPointId={weightChartPointId}
+        setWeightChartPointId={setWeightChartPointId}
+        sortedWeightEntriesOldest={sortedWeightEntriesOldest}
+        sortedWeightEntriesNewest={sortedWeightEntriesNewest}
+        startEditWeightEntry={startEditWeightEntry}
+        weightEntryToDelete={weightEntryToDelete}
+        setWeightEntryToDelete={setWeightEntryToDelete}
+        confirmDeleteWeightEntry={confirmDeleteWeightEntry}
+      />
     );
   }
 
   if (appView === "library") {
     return (
-      <main className="app">
-        <div className="top-bar">
-          <h1>Food Library</h1>
-        </div>
-
-        <section className="panel library-layout">
-          <div className="library-main">
-            <div className="tab-row" role="tablist" aria-label="Food library sections">
-              <button
-                className={foodLibraryTab === "recent" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setFoodLibraryTab("recent");
-                  setLibrarySelection(null);
-                  cancelLibraryEditing();
-                }}
-                role="tab"
-                aria-selected={foodLibraryTab === "recent"}
-              >
-                Recent
-              </button>
-              <button
-                className={foodLibraryTab === "custom" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setFoodLibraryTab("custom");
-                  setLibrarySelection(null);
-                  cancelLibraryEditing();
-                }}
-                role="tab"
-                aria-selected={foodLibraryTab === "custom"}
-              >
-                Custom
-              </button>
-              <button
-                className={foodLibraryTab === "recipes" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setFoodLibraryTab("recipes");
-                  setLibrarySelection(null);
-                  cancelLibraryEditing();
-                }}
-                role="tab"
-                aria-selected={foodLibraryTab === "recipes"}
-              >
-                Recipes
-              </button>
-            </div>
-
-            <div className="search-row">
-              <input
-                className="library-search"
-                value={libraryQuery}
-                placeholder={`Search ${foodLibraryTab}...`}
-                onChange={(e) => setLibraryQuery(e.target.value)}
-              />
-              {foodLibraryTab === "custom" && (
-                <button type="button" onClick={createLibraryCustomFood}>
-                  Add custom
-                </button>
-              )}
-              {foodLibraryTab === "recipes" && (
-                <button type="button" onClick={createLibraryRecipe}>
-                  Add recipe
-                </button>
-              )}
-            </div>
-
-            <div className="library-list">
-              {foodLibraryTab === "recent" && libraryRecentFoods.length === 0 && (
-                <p className="empty-meal">No recent foods match this search.</p>
-              )}
-
-              {foodLibraryTab === "recent" &&
-                libraryRecentFoods.map((food) => (
-                  <button
-                    className={`food-card ${
-                      librarySelection?.food.id === food.id ? "selected" : ""
-                    }`}
-                    key={food.id}
-                    type="button"
-                    onClick={() => setLibrarySelection({ type: "recent", food })}
-                  >
-                    <span className="food-card-title">
-                      <img src={getFoodIconUrl(food)} alt="" />
-                      <strong>{food.name}</strong>
-                    </span>
-                    <span>Brand: {getBrandDisplayName(food.brand)}</span>
-                    <span>
-                      {food.calories} cal per {food.servingSize}
-                    </span>
-                    <span>Logged {food.loggedCount ?? 0} times this week</span>
-                  </button>
-                ))}
-
-              {foodLibraryTab === "custom" && libraryCustomFoods.length === 0 && (
-                <p className="empty-meal">No custom foods match this search.</p>
-              )}
-
-              {foodLibraryTab === "custom" &&
-                libraryCustomFoods.map((food) => (
-                  <button
-                    className={`food-card ${
-                      librarySelection?.food.id === food.id ? "selected" : ""
-                    }`}
-                    key={food.id}
-                    type="button"
-                    onClick={() => setLibrarySelection({ type: "custom", food })}
-                  >
-                    <span className="food-card-title">
-                      <img src={getFoodIconUrl(food)} alt="" />
-                      <strong>{food.name}</strong>
-                    </span>
-                    <span>Brand: {getBrandDisplayName(food.brand)}</span>
-                    <span>
-                      {food.calories} cal per {food.servingSize}
-                    </span>
-                  </button>
-                ))}
-
-              {foodLibraryTab === "recipes" && libraryRecipes.length === 0 && (
-                <p className="empty-meal">No recipes match this search.</p>
-              )}
-
-              {foodLibraryTab === "recipes" &&
-                libraryRecipes.map((recipe) => (
-                  <button
-                    className={`food-card ${
-                      librarySelection?.food.id === recipe.id ? "selected" : ""
-                    }`}
-                    key={recipe.id}
-                    type="button"
-                    onClick={() => setLibrarySelection({ type: "recipe", food: recipe })}
-                  >
-                    <span className="food-card-title">
-                      <img src={getFoodIconUrl(recipe)} alt="" />
-                      <strong>{recipe.name}</strong>
-                    </span>
-                    <span>{recipe.ingredients.length} ingredients</span>
-                    <span>
-                      {recipe.calories} cal per {recipe.servingSize}
-                    </span>
-                  </button>
-                ))}
-            </div>
-          </div>
-
-          <aside className="library-detail">
-            {!librarySelection && !isCreatingLibraryCustomFood && !isCreatingLibraryRecipe && (
-              <p className="empty-meal">Select a food to view details.</p>
-            )}
-
-            {librarySelection && (
-              <>
-                <div className="library-detail-heading">
-                  <img src={getFoodIconUrl(librarySelection.food)} alt="" />
-                  <h2>{librarySelection.food.name}</h2>
-                </div>
-                <p>{getBrandDisplayName(librarySelection.food.brand)}</p>
-                <div className="nutrition-grid">
-                  <span>Serving</span>
-                  <strong>{librarySelection.food.servingSize}</strong>
-                  <span>Calories</span>
-                  <strong>{librarySelection.food.calories}</strong>
-                  <span>Protein</span>
-                  <strong>{Number(librarySelection.food.protein.toFixed(1))}g</strong>
-                  <span>Carbs</span>
-                  <strong>{Number(librarySelection.food.carbs.toFixed(1))}g</strong>
-                  <span>Fat</span>
-                  <strong>{Number(librarySelection.food.fat.toFixed(1))}g</strong>
-                  <span>Fiber</span>
-                  <strong>{Number((librarySelection.food.fiber ?? 0).toFixed(1))}g</strong>
-                  <span>Sugar</span>
-                  <strong>{Number((librarySelection.food.sugar ?? 0).toFixed(1))}g</strong>
-                  <span>Sodium</span>
-                  <strong>{Number((librarySelection.food.sodium ?? 0).toFixed(1))}mg</strong>
-                </div>
-                {librarySelection.food.notes && <p>{librarySelection.food.notes}</p>}
-              </>
-            )}
-
-            {librarySelection?.type === "recent" && (
-              <p className="empty-meal">Recent foods are read-only shortcuts from your log history.</p>
-            )}
-
-            {librarySelection?.type === "custom" && editingCustomFoodId !== librarySelection.food.id && (
-              <div className="form-actions">
-                <button type="button" onClick={() => editCustomFood(librarySelection.food)}>
-                  Edit
-                </button>
-                <button type="button" onClick={() => deleteCustomFood(librarySelection.food.id)}>
-                  Delete
-                </button>
-              </div>
-            )}
-
-            {(isCreatingLibraryCustomFood ||
-              (librarySelection?.type === "custom" && editingCustomFoodId === librarySelection.food.id)) && (
-              <div className="custom-food-form library-edit-form">
-                {isCreatingLibraryCustomFood && <h2>Create Custom Food</h2>}
-                <label>
-                  Name
-                  <input
-                    value={libraryCustomFoodForm.name}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, name: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Brand
-                  <input
-                    value={libraryCustomFoodForm.brand}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, brand: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Serving size
-                  <input
-                    value={libraryCustomFoodForm.servingSize}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({
-                        ...libraryCustomFoodForm,
-                        servingSize: e.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  Serving unit
-                  <input
-                    value={libraryCustomFoodForm.servingUnit}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({
-                        ...libraryCustomFoodForm,
-                        servingUnit: e.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  Calories
-                  <input
-                    type="number"
-                    min="0"
-                    value={libraryCustomFoodForm.calories}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({
-                        ...libraryCustomFoodForm,
-                        calories: e.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  Protein
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={libraryCustomFoodForm.protein}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, protein: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Carbs
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={libraryCustomFoodForm.carbs}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, carbs: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Fat
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={libraryCustomFoodForm.fat}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, fat: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Fiber
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={libraryCustomFoodForm.fiber}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, fiber: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Sugar
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={libraryCustomFoodForm.sugar}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, sugar: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Sodium
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={libraryCustomFoodForm.sodium}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, sodium: e.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Notes
-                  <textarea
-                    value={libraryCustomFoodForm.notes}
-                    onChange={(e) =>
-                      setLibraryCustomFoodForm({ ...libraryCustomFoodForm, notes: e.target.value })
-                    }
-                  />
-                </label>
-                <div className="form-actions">
-                  <button
-                    type="button"
-                    onClick={isCreatingLibraryCustomFood ? saveNewLibraryCustomFood : saveLibraryCustomFood}
-                  >
-                    {isCreatingLibraryCustomFood ? "Create" : "Save"}
-                  </button>
-                  <button type="button" onClick={cancelLibraryEditing}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {librarySelection?.type === "recipe" && (
-              <>
-                <div className="ingredient-list">
-                  {librarySelection.food.ingredients.map((ingredient) => (
-                    <div className="ingredient-row" key={ingredient.food.id}>
-                      <span>{ingredient.food.name}</span>
-                      <span>x {ingredient.quantity}</span>
-                      <span>{getIngredientCalories(ingredient)} cal</span>
-                    </div>
-                  ))}
-                </div>
-
-                {editingRecipeId !== librarySelection.food.id && (
-                  <div className="form-actions">
-                    <button type="button" onClick={() => editRecipe(librarySelection.food)}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => deleteRecipe(librarySelection.food.id)}>
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-
-            {(isCreatingLibraryRecipe ||
-              (librarySelection?.type === "recipe" && editingRecipeId === librarySelection.food.id)) && (
-              <div className="recipe-builder library-edit-form">
-                {isCreatingLibraryRecipe && <h2>Create Recipe</h2>}
-                <div className="custom-food-form">
-                  <label>
-                    Recipe name
-                    <input
-                      value={libraryRecipeForm.name}
-                      onChange={(e) =>
-                        setLibraryRecipeForm({ ...libraryRecipeForm, name: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Serving size
-                    <input
-                      value={libraryRecipeForm.servingSize}
-                      onChange={(e) =>
-                        setLibraryRecipeForm({ ...libraryRecipeForm, servingSize: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Serving unit
-                    <input
-                      value={libraryRecipeForm.servingUnit}
-                      onChange={(e) =>
-                        setLibraryRecipeForm({ ...libraryRecipeForm, servingUnit: e.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    Notes
-                    <textarea
-                      value={libraryRecipeForm.notes}
-                      onChange={(e) =>
-                        setLibraryRecipeForm({ ...libraryRecipeForm, notes: e.target.value })
-                      }
-                    />
-                  </label>
-                </div>
-
-                <div className="search-row">
-                  <input
-                    value={recipeIngredientQuery}
-                    placeholder="Search USDA and custom foods..."
-                    onChange={(e) => setRecipeIngredientQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
-                  />
-                  <button type="button" onClick={searchRecipeIngredientFoods}>
-                    Search
-                  </button>
-                </div>
-
-                {recipeIngredientOptions.length > 0 && (
-                  <div className="ingredient-picker">
-                    {recipeIngredientOptions.map((food) => (
-                      <button
-                        className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
-                        key={food.id}
-                        type="button"
-                        onClick={() => selectRecipeIngredient(food)}
-                      >
-                        <strong>{getFoodDisplayName(food)}</strong>
-                        <span>
-                          {food.calories} cal per {food.servingSize}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {isSearchingRecipeIngredients && <p className="empty-meal">Searching foods...</p>}
-
-                {pendingRecipeIngredient && (
-                  <div className="ingredient-confirm">
-                    <div>
-                      <strong>{getFoodDisplayName(pendingRecipeIngredient)}</strong>
-                      <span>
-                        {pendingRecipeIngredient.calories} cal per{" "}
-                        {pendingRecipeIngredient.servingSize}
-                      </span>
-                    </div>
-                    <label>
-                      Quantity
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={pendingRecipeIngredientQuantity}
-                        onChange={(e) => setPendingRecipeIngredientQuantity(e.target.value)}
-                      />
-                    </label>
-                    <button type="button" onClick={confirmLibraryRecipeIngredient}>
-                      Add ingredient
-                    </button>
-                    <button type="button" onClick={() => setPendingRecipeIngredient(null)}>
-                      Cancel
-                    </button>
-                  </div>
-                )}
-
-                <div className="ingredient-list">
-                  {libraryRecipeIngredients.map((ingredient) => (
-                    <div className="ingredient-row" key={ingredient.food.id}>
-                      <span>{ingredient.food.name}</span>
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={ingredient.quantity}
-                        onChange={(e) =>
-                          updateLibraryRecipeIngredientQuantity(ingredient.food.id, e.target.value)
-                        }
-                      />
-                      <span>{getIngredientCalories(ingredient)} cal</span>
-                      <button
-                        type="button"
-                        onClick={() => removeLibraryRecipeIngredient(ingredient.food.id)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="form-actions">
-                  <button
-                    type="button"
-                    onClick={isCreatingLibraryRecipe ? saveNewLibraryRecipe : saveLibraryRecipe}
-                  >
-                    {isCreatingLibraryRecipe ? "Create" : "Save"}
-                  </button>
-                  <button type="button" onClick={cancelLibraryEditing}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </aside>
-        </section>
-
-        {bottomNav}
-      </main>
+      <FoodLibraryView
+        bottomNav={bottomNav}
+        foodLibraryTab={foodLibraryTab}
+        setFoodLibraryTab={setFoodLibraryTab}
+        libraryQuery={libraryQuery}
+        setLibraryQuery={setLibraryQuery}
+        librarySelection={librarySelection}
+        setLibrarySelection={setLibrarySelection}
+        cancelLibraryEditing={cancelLibraryEditing}
+        createLibraryCustomFood={createLibraryCustomFood}
+        createLibraryRecipe={createLibraryRecipe}
+        libraryRecentFoods={libraryRecentFoods}
+        libraryCustomFoods={libraryCustomFoods}
+        libraryRecipes={libraryRecipes}
+        isCreatingLibraryCustomFood={isCreatingLibraryCustomFood}
+        isCreatingLibraryRecipe={isCreatingLibraryRecipe}
+        editingCustomFoodId={editingCustomFoodId}
+        editingRecipeId={editingRecipeId}
+        editCustomFood={editCustomFood}
+        deleteCustomFood={deleteCustomFood}
+        libraryCustomFoodForm={libraryCustomFoodForm}
+        setLibraryCustomFoodForm={setLibraryCustomFoodForm}
+        saveNewLibraryCustomFood={saveNewLibraryCustomFood}
+        saveLibraryCustomFood={saveLibraryCustomFood}
+        editRecipe={editRecipe}
+        deleteRecipe={deleteRecipe}
+        libraryRecipeForm={libraryRecipeForm}
+        setLibraryRecipeForm={setLibraryRecipeForm}
+        recipeIngredientQuery={recipeIngredientQuery}
+        setRecipeIngredientQuery={setRecipeIngredientQuery}
+        searchRecipeIngredientFoods={searchRecipeIngredientFoods}
+        recipeIngredientOptions={recipeIngredientOptions}
+        pendingRecipeIngredient={pendingRecipeIngredient}
+        selectRecipeIngredient={selectRecipeIngredient}
+        isSearchingRecipeIngredients={isSearchingRecipeIngredients}
+        pendingRecipeIngredientQuantity={pendingRecipeIngredientQuantity}
+        setPendingRecipeIngredientQuantity={setPendingRecipeIngredientQuantity}
+        confirmLibraryRecipeIngredient={confirmLibraryRecipeIngredient}
+        setPendingRecipeIngredient={setPendingRecipeIngredient}
+        libraryRecipeIngredients={libraryRecipeIngredients}
+        updateLibraryRecipeIngredientQuantity={updateLibraryRecipeIngredientQuantity}
+        removeLibraryRecipeIngredient={removeLibraryRecipeIngredient}
+        saveNewLibraryRecipe={saveNewLibraryRecipe}
+        saveLibraryRecipe={saveLibraryRecipe}
+      />
     );
   }
 
@@ -5183,73 +2022,70 @@ function startEditWeightEntry(entry: WeightEntry) {
 
         return (
           <section className="log-screen">
-            <div className="log-date-nav">
+            <div className="log-date-row">
               <button type="button" onClick={() => moveSelectedDate(-1)} aria-label="Previous day">
                 ‹
               </button>
-              <label className="log-calendar-button" aria-label="Pick date">
-                <span>📅</span>
+              <label className="log-date-label" aria-label="Pick date">
+                <strong>{formatEntryDate(selectedDate)}</strong>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={(e) => changeSelectedDate(e.target.value)}
                 />
               </label>
-              <strong>{formatEntryDate(selectedDate)}</strong>
               <button type="button" onClick={() => moveSelectedDate(1)} aria-label="Next day">
                 ›
               </button>
-              <div className="log-file-actions">
-                <button
-                  type="button"
-                  className="log-import-button"
-                  onClick={openDriveImport}
-                  disabled={isUploadingToDrive || isLoadingDriveImport}
-                >
-                  {isLoadingDriveImport ? "Loading Drive..." : "Import JSON"}
-                </button>
-                <label className="log-local-import-button">
-                  Import File
-                  <input
-                    ref={foodLogImportInputRef}
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={(event) => readFoodLogImport(event.target.files?.[0])}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="log-export-button"
-                  onClick={() => {
-                    setExportStatus("");
-                    setIsExportPanelOpen(true);
-                  }}
-                >
-                  Export Day
-                </button>
-              </div>
-              {importStatus && <p className="import-inline-status">{importStatus}</p>}
-              {importErrors.length > 0 && importDrafts.length === 0 && (
-                <div className="import-inline-errors" role="alert">
-                  {importErrors.slice(0, 3).map((error) => (
-                    <p key={error}>{error}</p>
-                  ))}
-                </div>
-              )}
             </div>
+            <div className="log-file-actions">
+              <button
+                type="button"
+                className="log-import-button"
+                onClick={openDriveImport}
+                disabled={isUploadingToDrive || isLoadingDriveImport}
+              >
+                {isLoadingDriveImport ? "Loading Drive..." : "Import JSON"}
+              </button>
+              <label className="log-local-import-button">
+                Import File
+                <input
+                  ref={foodLogImportInputRef}
+                  type="file"
+                  accept="application/json,.json"
+                  onChange={(event) => readFoodLogImport(event.target.files?.[0])}
+                />
+              </label>
+              <button
+                type="button"
+                className="log-export-button"
+                onClick={() => {
+                  setExportStatus("");
+                  setIsExportPanelOpen(true);
+                }}
+              >
+                Export Day
+              </button>
+            </div>
+            {importStatus && <p className="import-inline-status">{importStatus}</p>}
+            {importErrors.length > 0 && importDrafts.length === 0 && (
+              <div className="import-inline-errors" role="alert">
+                {importErrors.slice(0, 3).map((error) => (
+                  <p key={error}>{error}</p>
+                ))}
+              </div>
+            )}
 
-            <section className="panel log-summary-card">
+            <section className="log-summary-card">
               <div className="log-calorie-stat">
                 <span>Logged</span>
                 <strong>{netCalories.toLocaleString()}</strong>
               </div>
-              <div className="log-calorie-gauge" style={{ "--gauge-pct": `${calorieGaugePct}%` } as CSSProperties}>
-                <div className="log-gauge-ring">
-                  <div>
-                    <span>{calorieDelta >= 0 ? "Remaining" : "Over"}</span>
-                    <strong>{Math.abs(calorieDelta).toLocaleString()}</strong>
-                    <small>cal</small>
-                  </div>
+              <div className="log-gauge-ring" style={{ "--p": calorieGaugePct } as CSSProperties}>
+                <div>
+                  <span>{calorieDelta >= 0 ? "Remaining" : "Over"}</span>
+                  <strong>{Math.abs(calorieDelta).toLocaleString()}</strong>
+                  <small>cal</small>
                 </div>
               </div>
               <div className="log-calorie-stat">
@@ -5296,7 +2132,7 @@ function startEditWeightEntry(entry: WeightEntry) {
 
                 return (
                   <section
-                    className="panel log-meal-card"
+                    className="log-meal-card"
                     key={category}
                     ref={(element) => {
                       mealCardRefs.current[category] = element;
