@@ -5,6 +5,7 @@ import { FoodLibraryView } from "./components/FoodLibraryView";
 import { HomeView } from "./components/HomeView";
 import { ProfileView } from "./components/ProfileView";
 import { WeightView } from "./components/WeightView";
+import EggOracle from "./features/egg-oracle/EggOracle";
 import {
   debugLogKey,
   googleDriveClientIdKey,
@@ -1869,6 +1870,7 @@ function startEditWeightEntry(entry: WeightEntry) {
     />
   );
 
+
   if (appView === "home") {
     return (
       <HomeView
@@ -1890,6 +1892,15 @@ function startEditWeightEntry(entry: WeightEntry) {
       />
     );
   }
+
+if (appView === "egg-oracle") {
+  return (
+    <>
+      <EggOracle />
+      {bottomNav}
+    </>
+  );
+}
 
   if (appView === "profile") {
     return (

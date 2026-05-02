@@ -22,7 +22,7 @@ export function AppChrome({
   appView,
   onNavigate,
   onOpenLibrary,
-  onOpenDebugPanel,
+  onOpenDebugPanel: _onOpenDebugPanel,
   isDebugPanelOpen,
   debugLogText,
   debugCopyStatus,
@@ -43,31 +43,61 @@ export function AppChrome({
 
   return (
     <>
-      <button type="button" className="debug-fab" onClick={onOpenDebugPanel}>
-        Debug
-      </button>
-      <nav className="bottom-nav" aria-label="Main navigation">
-        <button type="button" className={appView === "home" ? "active" : ""} onClick={() => onNavigate("home")}>
-          <span className="nav-icon">⌂</span>
-          <span>Home</span>
-        </button>
-        <button type="button" className={appView === "day" ? "active" : ""} onClick={() => onNavigate("day")}>
-          <span className="nav-icon">≡</span>
-          <span>Log</span>
-        </button>
-        <button type="button" className={appView === "weight" ? "active" : ""} onClick={() => onNavigate("weight")}>
-          <span className="nav-icon">↕</span>
-          <span>Weight</span>
-        </button>
-        <button type="button" className={appView === "library" ? "active" : ""} onClick={onOpenLibrary}>
-          <span className="nav-icon">⊞</span>
-          <span>Library</span>
-        </button>
-        <button type="button" className={appView === "profile" ? "active" : ""} onClick={() => onNavigate("profile")}>
-          <span className="nav-icon">◉</span>
-          <span>Profile</span>
-        </button>
-      </nav>
+     <nav className="bottom-nav" aria-label="Main navigation">
+  <button
+    type="button"
+    className={appView === "home" ? "active" : ""}
+    onClick={() => onNavigate("home")}
+  >
+    <span className="nav-icon">⌂</span>
+    <span>Home</span>
+  </button>
+
+  <button
+    type="button"
+    className={appView === "day" ? "active" : ""}
+    onClick={() => onNavigate("day")}
+  >
+    <span className="nav-icon">≡</span>
+    <span>Log</span>
+  </button>
+
+  <button
+    type="button"
+    className={appView === "weight" ? "active" : ""}
+    onClick={() => onNavigate("weight")}
+  >
+    <span className="nav-icon">↕</span>
+    <span>Weight</span>
+  </button>
+
+  <button
+    type="button"
+    className={appView === "egg-oracle" ? "active" : ""}
+    onClick={() => onNavigate("egg-oracle")}
+  >
+    <span className="nav-icon">◌</span>
+    <span>Cycle</span>
+  </button>
+
+  <button
+    type="button"
+    className={appView === "library" ? "active" : ""}
+    onClick={onOpenLibrary}
+  >
+    <span className="nav-icon">⊞</span>
+    <span>Library</span>
+  </button>
+
+  <button
+    type="button"
+    className={appView === "profile" ? "active" : ""}
+    onClick={() => onNavigate("profile")}
+  >
+    <span className="nav-icon">◉</span>
+    <span>Profile</span>
+  </button>
+</nav>
       {isDebugPanelOpen && (
         <div className="modal-backdrop debug-backdrop" role="presentation">
           <div className="modal debug-panel" role="dialog" aria-modal="true" aria-labelledby="debug-panel-title">

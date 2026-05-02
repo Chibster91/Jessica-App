@@ -17,8 +17,10 @@ import {
   profileToForm,
   profileToGoals,
   profileWizardSteps,
+  poundsPerKilogram,
   shiftDate,
   toProfileActivityLevel,
+  type GoalType,
   type MacroPreset,
   type Profile,
   type ProfileCalculation,
@@ -70,11 +72,32 @@ function computeTdee(profile: Profile): number {
 }
 
 function computeGoalDate(profile: Profile): string | null {
-  if (profile.goal !== "lose" || profile.weeklyRateKg <= 0 || !profile.goalWeightKg) return null;
-  if (profile.weightKg <= profile.goalWeightKg) return null;
-  const weeksNeeded = (profile.weightKg - profile.goalWeightKg) / profile.weeklyRateKg;
-  return shiftDate(getLocalDateString(), Math.ceil(weeksNeeded * 7));
+  if (profile.goal === "maintain" || profile.weeklyRateKg <= 0 || !profile.goalWeightKg) return null;
+  if (profile.goal === "lose" && profile.weightKg <= profile.goalWeightKg) return null;
+  if (profile.goal === "gain" && profile.weightKg >= profile.goalWeightKg) return null;
+  const diff = Math.abs(profile.weightKg - profile.goalWeightKg);
+  return shiftDate(getLocalDateString(), Math.ceil((diff / profile.weeklyRateKg) * 7));
 }
+
+const stepSubtitles: Record<number, string> = {
+  0: "Name, age & height",
+  1: "Current weight",
+  2: "Activity level",
+  3: "Goal & pace",
+  4: "Macro targets",
+};
+
+const goalOptions: { goal: GoalType; label: string; sub: string }[] = [
+  { goal: "lose", label: "Lose", sub: "(-lb)" },
+  { goal: "maintain", label: "Maintain", sub: "(±0)" },
+  { goal: "gain", label: "Gain", sub: "(+lb)" },
+];
+
+const wizardPaceOptions: { key: string; label: string; sub: string; kg: number }[] = [
+  { key: "slow", label: "Slow", sub: "0.5 lb/wk", kg: 0.5 / poundsPerKilogram },
+  { key: "moderate", label: "Moderate", sub: "1.0 lb/wk", kg: 1.0 / poundsPerKilogram },
+  { key: "aggressive", label: "Aggressive", sub: "2.0 lb/wk", kg: 2.0 / poundsPerKilogram },
+];
 
 export function ProfileView({
   bottomNav,
@@ -127,22 +150,34 @@ export function ProfileView({
   const isSetupMode = !profile;
   const saveButtonLabel = isSetupMode ? "Get Started" : "Save Changes";
   const currentStepName = profileWizardSteps[profileWizardStep];
-  const selectedPace = profilePaceOptions.find(
-    (pace) => pace.goal === profileForm.goal && Math.abs(pace.weeklyRateKg - Number(profileForm.weeklyRateKg || 0)) < 0.001
-  ) ?? profilePaceOptions[0];
   const macroPresetOptions: MacroPreset[] = ["balanced", "high_protein", "custom"];
   const requiredStepError =
     profileWizardStep === 0
       ? profileErrors.age || profileErrors.height
       : profileWizardStep === 1
-        ? profileErrors.weight || profileErrors.goalWeight
-        : profileWizardStep === 5
-          ? profileErrors.macros
-          : "";
+        ? profileErrors.weight
+        : profileWizardStep === 3
+          ? profileErrors.goalWeight
+          : profileWizardStep === 4
+            ? profileErrors.macros
+            : "";
   const canMoveNext =
     !requiredStepError &&
-    (profileWizardStep !== 4 || Boolean(profileCalculation)) &&
-    (profileWizardStep !== 5 || !profileHasBlockingErrors);
+    (profileWizardStep !== 4 || !profileHasBlockingErrors);
+  const planGoalDate = (() => {
+    if (profileForm.goal === "maintain") return null;
+    const isMetric = profileForm.units === "metric";
+    const wKg = isMetric ? Number(profileForm.weight) : Number(profileForm.weight) / poundsPerKilogram;
+    const gKg = isMetric ? Number(profileForm.goalWeight) : Number(profileForm.goalWeight) / poundsPerKilogram;
+    const rate = Number(profileForm.weeklyRateKg) || 0;
+    if (!gKg || rate <= 0) return null;
+    if (profileForm.goal === "lose" && wKg <= gKg) return null;
+    if (profileForm.goal === "gain" && wKg >= gKg) return null;
+    return shiftDate(getLocalDateString(), Math.ceil((Math.abs(wKg - gKg) / rate) * 7));
+  })();
+  const proteinG = profileCalculation ? Math.round((profileCalculation.activeCalories * Number(profileForm.proteinPct)) / 100 / 4) : 0;
+  const carbsG = profileCalculation ? Math.round((profileCalculation.activeCalories * Number(profileForm.carbPct)) / 100 / 4) : 0;
+  const fatG = profileCalculation ? Math.round((profileCalculation.activeCalories * Number(profileForm.fatPct)) / 100 / 9) : 0;
   const moveProfileStep = (direction: 1 | -1) => {
     setProfileWizardStep((step) =>
       Math.min(profileWizardSteps.length - 1, Math.max(0, step + direction))
@@ -397,37 +432,39 @@ export function ProfileView({
   // ─── WIZARD VIEW ───────────────────────────────────────────────
   return (
     <main className="app">
-      <div className="top-bar">
-        <div>
-          <h1>{isSetupMode ? "Set Up Profile" : "Edit Profile"}</h1>
-          <p className="week-range">Step {profileWizardStep + 1} of {profileWizardSteps.length}</p>
-        </div>
-        {!isSetupMode && (
-          <button
-            type="button"
-            className="wizard-close"
-            onClick={cancelProfileChanges}
-            aria-label="Close profile wizard"
-          >
-            ×
-          </button>
-        )}
+      <div className="wz-topbar">
+        <span className="wz-topbar-label">EDIT PROFILE WIZARD</span>
+        <span className="wz-topbar-step">step {profileWizardStep + 1} of {profileWizardSteps.length} shown</span>
+      </div>
+      <div className="wz-header">
+        <h1 className="wz-title">{isSetupMode ? "Set Up Profile" : "Edit Profile"}</h1>
+        <span className="wz-step-badge">Step {profileWizardStep + 1} of {profileWizardSteps.length}</span>
       </div>
 
       {profileSaveStatus && <p className="profile-toast">{profileSaveStatus}</p>}
 
-      <section className="panel profile-card profile-wizard-card calculator-wizard">
-        <div className="wz-progress-bars" aria-label="Profile setup progress">
-          {profileWizardSteps.map((step, index) => (
-            <span
-              key={step}
-              className={`wz-bar${index < profileWizardStep ? " wz-bar-done" : index === profileWizardStep ? " wz-bar-cur" : ""}`}
-            />
-          ))}
-        </div>
-        <p className="wz-step-meta"><strong>{currentStepName}</strong></p>
+      <div className="wz-progress-bars" aria-label="Profile setup progress">
+        {profileWizardSteps.map((step, index) => (
+          <span
+            key={step}
+            className={`wz-bar${index < profileWizardStep ? " wz-bar-done" : index === profileWizardStep ? " wz-bar-cur" : ""}`}
+          />
+        ))}
+      </div>
+      <div className="wz-section-meta">
+        <span className="wz-section-name">
+          {currentStepName}{stepSubtitles[profileWizardStep] ? ` · ${stepSubtitles[profileWizardStep]}` : ""}
+        </span>
+        {profileWizardStep === 3 && (
+          <button type="button" className="wz-skip-btn" onClick={() => moveProfileStep(1)}>
+            Skip
+          </button>
+        )}
+      </div>
 
-        {profileWizardStep === 0 && (
+      {/* Step 0: Basics */}
+      {profileWizardStep === 0 && (
+        <section className="panel">
           <div className="wizard-card profile-form-grid">
             <label>
               Display Name
@@ -526,9 +563,12 @@ export function ProfileView({
               {profileErrors.height && <span className="profile-field-error">{profileErrors.height}</span>}
             </label>
           </div>
-        )}
+        </section>
+      )}
 
-        {profileWizardStep === 1 && (
+      {/* Step 1: Body */}
+      {profileWizardStep === 1 && (
+        <section className="panel">
           <div className="wizard-card profile-form-grid">
             <label>
               Current Weight
@@ -545,26 +585,13 @@ export function ProfileView({
               </div>
               {profileErrors.weight && <span className="profile-field-error">{profileErrors.weight}</span>}
             </label>
-
-            <label>
-              Goal Weight
-              <div className="goals-input-row">
-                <input
-                  type="number"
-                  min={profileForm.units === "metric" ? "30" : "66"}
-                  max={profileForm.units === "metric" ? "300" : "661"}
-                  step="0.1"
-                  value={profileForm.goalWeight}
-                  onChange={(e) => updateProfileForm({ goalWeight: e.target.value })}
-                />
-                <span>{profileForm.units === "metric" ? "kg" : "lb"}</span>
-              </div>
-              {profileErrors.goalWeight && <span className="profile-field-error">{profileErrors.goalWeight}</span>}
-            </label>
           </div>
-        )}
+        </section>
+      )}
 
-        {profileWizardStep === 2 && (
+      {/* Step 2: Activity */}
+      {profileWizardStep === 2 && (
+        <section className="panel">
           <div className="wizard-card">
             <p className="wizard-hint">How active are you on a typical week?</p>
             <div className="profile-option-grid">
@@ -581,84 +608,122 @@ export function ProfileView({
               ))}
             </div>
           </div>
-        )}
+        </section>
+      )}
 
-        {profileWizardStep === 3 && (
-          <div className="wizard-card">
-            <p className="wizard-hint">Choose the pace you want the calorie target to support.</p>
-            <div className="profile-option-grid pace-grid">
-              {profilePaceOptions.map((pace) => (
-                <button
-                  key={pace.label}
-                  type="button"
-                  className={`option-card profile-option${selectedPace.label === pace.label ? " selected" : ""}`}
-                  onClick={() =>
-                    updateProfileForm({
-                      goal: pace.goal,
-                      weeklyRateKg: pace.weeklyRateKg === 0 ? "0.5" : String(pace.weeklyRateKg),
-                    })
-                  }
-                >
-                  <strong>{pace.label}</strong>
-                  <span>
-                    {pace.goal === "maintain"
-                      ? "Keep calories near your TDEE."
-                      : `${Math.round(pace.weeklyRateKg * 1100)} kcal/day estimated deficit.`}
-                  </span>
-                </button>
-              ))}
+      {/* Step 3: Plan */}
+      {profileWizardStep === 3 && (
+        <>
+          <section className="panel">
+            <p className="wz-card-title">Set your weight goal</p>
+
+            <div className="wz-field-block">
+              <p className="wz-field-lbl">Goal</p>
+              <div className="wz-3btn">
+                {goalOptions.map(({ goal, label, sub }) => (
+                  <button
+                    key={goal}
+                    type="button"
+                    className={`wz-3btn-item${profileForm.goal === goal ? " selected" : ""}`}
+                    onClick={() => updateProfileForm({ goal })}
+                  >
+                    <span className="wz-3btn-main">{label}</span>
+                    <span className="wz-3btn-sub">{sub}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
 
-        {profileWizardStep === 4 && (
-          <div className="wizard-card">
-            <div className="profile-summary-card">
-              {profileCalculation ? (
-                <>
-                  <div>
-                    <span>BMR Formula</span>
-                    <strong>Mifflin-St Jeor</strong>
-                    <small>
-                      10 x weight + 6.25 x height - 5 x age {profileForm.sex === "female" ? "- 161" : "+ 5"}
-                    </small>
-                  </div>
-                  <div>
-                    <span>Activity Multiplier</span>
-                    <strong>{profileActivityMultipliers[profileForm.activityLevel]}</strong>
-                    <small>{profileActivityLabels[profileForm.activityLevel].title}</small>
-                  </div>
-                  <div>
-                    <span>BMR</span>
-                    <strong>{profileCalculation.bmr} kcal</strong>
-                  </div>
-                  <div>
-                    <span>TDEE</span>
-                    <strong>{profileCalculation.tdee} kcal</strong>
-                  </div>
-                  <div>
-                    <span>Deficit / Surplus</span>
-                    <strong>{profileCalculation.goalAdjustment > 0 ? "+" : ""}{profileCalculation.goalAdjustment} kcal</strong>
-                  </div>
-                  <div className="profile-target">
-                    <span>Final calorie target</span>
-                    <strong>{profileCalculation.activeCalories} kcal/day</strong>
-                  </div>
-                </>
-              ) : (
-                <div className="profile-target">
-                  <span>Math Preview</span>
-                  <strong>Complete previous steps</strong>
+            {profileForm.goal !== "maintain" && (
+              <div className="wz-field-block">
+                <p className="wz-field-lbl">Desired pace</p>
+                <div className="wz-3btn">
+                  {wizardPaceOptions.map(({ key, label, sub, kg }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`wz-3btn-item${Math.abs(Number(profileForm.weeklyRateKg) - kg) < 0.01 ? " selected" : ""}`}
+                      onClick={() => updateProfileForm({ weeklyRateKg: String(kg) })}
+                    >
+                      <span className="wz-3btn-main">{label}</span>
+                      <span className="wz-3btn-sub">{profileForm.goal === "gain" ? "+" : "-"}{sub}</span>
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
-            {profileLowCalorieWarning && <p className="profile-warning">{profileLowCalorieWarning}</p>}
-          </div>
-        )}
+              </div>
+            )}
 
-        {profileWizardStep === 5 && (
+            <div className="wz-field-block">
+              <label>
+                <span className="wz-field-lbl">Goal weight</span>
+                <div className="goals-input-row">
+                  <input
+                    type="number"
+                    min={profileForm.units === "metric" ? "30" : "66"}
+                    max={profileForm.units === "metric" ? "300" : "661"}
+                    step="0.1"
+                    value={profileForm.goalWeight}
+                    onChange={(e) => updateProfileForm({ goalWeight: e.target.value })}
+                  />
+                  <span>{profileForm.units === "metric" ? "kg" : "lb"}</span>
+                </div>
+                {profileErrors.goalWeight && <span className="profile-field-error">{profileErrors.goalWeight}</span>}
+              </label>
+            </div>
+
+            <div className="wz-field-block">
+              <p className="wz-field-lbl">Estimated goal date</p>
+              <input
+                type="text"
+                readOnly
+                className="wz-readonly-input"
+                value={planGoalDate ? formatEntryDate(planGoalDate) : "—"}
+              />
+            </div>
+          </section>
+
+          <section className="panel">
+            <p className="wz-card-title">Live calculation</p>
+            {profileCalculation ? (
+              <div className="wz-live-grid">
+                <div className="wz-live-tile">
+                  <div className="wz-live-label">BMR</div>
+                  <div className="wz-live-val">{profileCalculation.bmr.toLocaleString()}<small>kcal</small></div>
+                </div>
+                <div className="wz-live-tile">
+                  <div className="wz-live-label">TDEE</div>
+                  <div className="wz-live-val">{profileCalculation.tdee.toLocaleString()}<small>kcal</small></div>
+                </div>
+                <div className="wz-live-tile wz-live-accent">
+                  <div className="wz-live-label">Recommended target</div>
+                  <div className="wz-live-val">{profileCalculation.activeCalories.toLocaleString()}<small>kcal/day</small></div>
+                </div>
+                <div className="wz-live-tile">
+                  <div className="wz-live-label">Protein</div>
+                  <div className="wz-live-val">{proteinG}<small>g</small></div>
+                </div>
+                <div className="wz-live-tile">
+                  <div className="wz-live-label">Carbs</div>
+                  <div className="wz-live-val">{carbsG}<small>g</small></div>
+                </div>
+                <div className="wz-live-tile wz-live-fat">
+                  <div className="wz-live-label">Fat</div>
+                  <div className="wz-live-val">{fatG}<small>g</small></div>
+                </div>
+              </div>
+            ) : (
+              <p className="wz-live-empty">Complete earlier steps to see your targets.</p>
+            )}
+            {profileLowCalorieWarning && <p className="profile-warning">{profileLowCalorieWarning}</p>}
+          </section>
+        </>
+      )}
+
+      {/* Step 4: Macros */}
+      {profileWizardStep === 4 && (
+        <section className="panel">
           <div className="wizard-card profile-macro-section">
-            <div className="profile-option-grid pace-grid">
+            <div className="profile-option-grid">
               {macroPresetOptions.map((preset) => (
                 <button
                   key={preset}
@@ -706,44 +771,29 @@ export function ProfileView({
 
             {profileCalculation && profileForm.macroMode === "percentages" && (
               <p className="profile-macro-total">
-                Targets: {Math.round((profileCalculation.activeCalories * Number(profileForm.proteinPct)) / 100 / 4)}g protein /{" "}
-                {Math.round((profileCalculation.activeCalories * Number(profileForm.carbPct)) / 100 / 4)}g carbs /{" "}
-                {Math.round((profileCalculation.activeCalories * Number(profileForm.fatPct)) / 100 / 9)}g fat
+                Targets: {proteinG}g protein / {carbsG}g carbs / {fatG}g fat
               </p>
             )}
 
             {profileErrors.macros && <p className="profile-warning">{profileErrors.macros}</p>}
           </div>
-        )}
+        </section>
+      )}
 
-        {profileCalculation && profileWizardStep !== 4 && (
-          <div className="calculator-estimate">
-            <span>Estimated target</span>
-            <strong>{profileCalculation.activeCalories} cal/day</strong>
-            <small>
-              {Math.round((profileCalculation.activeCalories * Number(profileForm.proteinPct)) / 100 / 4)}g P /{" "}
-              {Math.round((profileCalculation.activeCalories * Number(profileForm.carbPct)) / 100 / 4)}g C /{" "}
-              {Math.round((profileCalculation.activeCalories * Number(profileForm.fatPct)) / 100 / 9)}g F
-            </small>
-          </div>
-        )}
-      </section>
-
-      <section className="profile-save-bar wizard-nav">
-        {profileWizardStep > 0 && (
-          <button type="button" className="secondary-button" onClick={() => moveProfileStep(-1)}>
-            Back
-          </button>
-        )}
-        {!isSetupMode && profileWizardStep === 0 && (
-          <button type="button" className="secondary-button" onClick={cancelProfileChanges}>
-            Cancel
+      <div className="wz-footer">
+        {(profileWizardStep > 0 || !isSetupMode) && (
+          <button
+            type="button"
+            className="wz-back-btn"
+            onClick={profileWizardStep > 0 ? () => moveProfileStep(-1) : cancelProfileChanges}
+          >
+            {profileWizardStep > 0 ? "Back" : "Cancel"}
           </button>
         )}
         {profileWizardStep < profileWizardSteps.length - 1 ? (
           <button
             type="button"
-            className="primary-button"
+            className="wz-next-btn"
             onClick={() => moveProfileStep(1)}
             disabled={!canMoveNext}
           >
@@ -752,14 +802,14 @@ export function ProfileView({
         ) : (
           <button
             type="button"
-            className="primary-button"
+            className="wz-next-btn"
             onClick={handleProfileSave}
             disabled={profileHasBlockingErrors}
           >
             {saveButtonLabel}
           </button>
         )}
-      </section>
+      </div>
 
       {bottomNav}
     </main>

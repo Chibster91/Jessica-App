@@ -76,7 +76,7 @@ type PortionOption = {
 
 type AddFoodTab = "search" | "recent" | "custom" | "recipes";
 
-type AppView = "home" | "day" | "library" | "profile" | "weight";
+type AppView = "home" | "day" | "library" | "profile" | "weight" | "egg-oracle";
 
 type FoodLibraryTab = "recent" | "custom" | "recipes";
 
@@ -455,11 +455,10 @@ const profilePaceOptions = [
 ] as const;
 const profileWizardSteps = [
   "Basics",
-  "Current Body",
+  "Body",
   "Activity",
-  "Goal Pace",
-  "Math Preview",
-  "Macro Setup",
+  "Plan",
+  "Macros",
 ] as const;
 const macroPresets: Record<Exclude<MacroPreset, "custom">, { label: string; proteinPct: string; carbPct: string; fatPct: string }> = {
   balanced: { label: "Balanced", proteinPct: "30", carbPct: "40", fatPct: "30" },
