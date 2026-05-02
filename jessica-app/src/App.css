@@ -4686,16 +4686,16 @@ button {
 
 /* ─── EggOracle dense spacing overrides ─────────────────── */
 .eo-app {
-  padding-top: 0.75rem;
+  padding-top: 0.15rem;
 }
 
 .eo-app h1 {
   font-size: 1.6rem;
-  margin: 4px 0 0;
+  margin: 1px 0 0;
 }
 
 .eo-app .week-range {
-  margin: 0 0 0.6rem;
+  margin: 0 0 .1rem;
 }
 
 .eo-app .tab-row {
@@ -4707,7 +4707,7 @@ button {
 }
 
 .eo-hero {
-  padding: 0.85rem 1rem;
+  padding: 0.1rem 1rem;
 }
 
 .eo-calendar-panel {

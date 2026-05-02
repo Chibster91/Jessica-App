@@ -1553,9 +1553,9 @@ function getFoodSearchScore(food: Food, query: string) {
   );
   let score = 0;
 
-  if (dataTypeText === "branded") score += 25;
-  if (dataTypeText === "foundation" || dataTypeText === "sr legacy" || dataTypeText.includes("survey")) {
-    score -= queryWords.length > 2 ? 30 : 0;
+  // Foundation/SR descriptions are authoritative — boost when all query words appear in the name itself.
+  if (dataTypeText === "foundation" || dataTypeText === "sr legacy") {
+    if (matchedNameWords.length === queryWords.length && queryWords.length > 0) score += 30;
   }
   if (searchableText.includes(queryText)) score += 130;
   if (matchedSearchWords.length === queryWords.length) score += 95;
@@ -1563,7 +1563,9 @@ function getFoodSearchScore(food: Food, query: string) {
   if (synonymMatches.length > 0) score += 95 + synonymMatches.length * 8;
   if (matchedNameWords.length === queryWords.length) score += 70;
   if (nameText.startsWith(queryText)) score += 50;
-  if (brandText.includes(queryText) || queryWords.some((word) => brandText.includes(word))) score += 45;
+  // Only boost for brand when the full query is in the brand name (user searched for a brand),
+  // not for incidental single-word overlap between brand and query.
+  if (brandText.includes(queryText)) score += 45;
   if (brandText && getSearchTokens(brandText).every((word) => queryWords.includes(word))) score += 40;
   score += matchedSearchWords.length * 16;
   score += matchedNameWords.length * 12;

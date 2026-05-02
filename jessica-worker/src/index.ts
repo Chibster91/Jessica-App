@@ -22,6 +22,7 @@ type SearchRequest = {
   query: string;
   brandOwner?: string;
   brandedOnly?: boolean;
+  requireAllWords?: boolean;
 };
 
 const detailCache = new Map<string, DetailCacheEntry>();
@@ -95,6 +96,10 @@ async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<
   searchUrl.searchParams.set("query", request.query);
   searchUrl.searchParams.set("pageSize", String(USDA_SEARCH_PAGE_SIZE));
   searchUrl.searchParams.set("api_key", apiKey);
+
+  if (request.requireAllWords) {
+    searchUrl.searchParams.set("requireAllWords", "true");
+  }
 
   if (request.brandedOnly) {
     searchUrl.searchParams.set("dataType", "Branded");
@@ -353,9 +358,10 @@ function expandSearchRequests(query: string): SearchRequest[] {
   const normalizedQuery = normalizeSearchText(query);
   const queryWithoutPunctuation = normalizeSearchForMatching(query);
   const brandMatch = getKnownBrandMatch(normalizedQuery);
+  const multiWord = getSearchWords(queryWithoutPunctuation).length > 1;
   const requests: SearchRequest[] = [
-    { query },
-    { query, brandedOnly: true },
+    { query, requireAllWords: multiWord },
+    { query, brandedOnly: true, requireAllWords: multiWord },
   ];
 
   if (brandMatch) {
@@ -435,13 +441,13 @@ function rankSearchResult(food: any, query: string): number {
   const category = normalizeSearchForMatching(food.category);
   const searchableText = `${name} ${brand} ${category}`.trim();
   const dataType = normalizeSearchForMatching(food.dataType);
+  const matchedNameWords = queryWords.filter((word) => hasSearchWord(name, word));
   const matchedWords = queryWords.filter((word) => hasSearchWord(searchableText, word));
   let score = 0;
 
-  if (dataType === "branded") {
-    score += 25;
-  } else if (dataType === "foundation" || dataType === "sr legacy" || dataType.includes("survey")) {
-    score -= queryWords.length > 2 ? 35 : 0;
+  // Foundation/SR descriptions are authoritative — boost when all query words appear in the name itself.
+  if ((dataType === "foundation" || dataType === "sr legacy") && matchedNameWords.length === queryWords.length && queryWords.length > 0) {
+    score += 30;
   }
 
   if (searchableText.includes(queryText)) score += 120;
@@ -450,6 +456,7 @@ function rankSearchResult(food: any, query: string): number {
   if (brand && queryText.includes(brand)) score += 55;
   if (brand && getSearchWords(brand).every((word) => hasSearchWord(queryText, word))) score += 35;
   score += matchedWords.length * 16;
+  score += matchedNameWords.length * 12;
 
   if (isBasicSearchQuery(queryText) && /\b(raw|cooked|plain)\b/.test(name)) {
     score += 15;
@@ -460,6 +467,8 @@ function rankSearchResult(food: any, query: string): number {
       score -= 25;
     }
   }
+
+  if (queryWords.length > 1 && matchedWords.length === 1) score -= 45;
 
   return score;
 }
