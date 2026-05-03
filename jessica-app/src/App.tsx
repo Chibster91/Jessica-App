@@ -134,6 +134,12 @@ function buildImportSteps(items: FoodLogImportDraft[], weightEntries: WeightImpo
   }));
 }
 
+function makeImportFoodKey(name: string, calories: number, protein: number, carbs: number, fat: number, serving: string): string {
+  const normName = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  const normServing = serving.toLowerCase().trim().replace(/\s+/g, " ");
+  return `${normName}|${Math.round(calories)}|${Math.round(protein * 10) / 10}|${Math.round(carbs * 10) / 10}|${Math.round(fat * 10) / 10}|${normServing}`;
+}
+
 function isPwaStandalone(): boolean {
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
@@ -1135,19 +1141,41 @@ function App() {
       return;
     }
 
-    const importedFoods = importDrafts.map((item, index) => {
-      const food: Food = {
-        id: -(Date.now() + index + 1),
-        name: item.name.trim(),
-        brand: null,
-        source: item.source.trim() || undefined,
-        servingSize: item.serving.trim(),
-        calories: Math.round(parseDecimalInput(item.calories)),
-        protein: parseDecimalInput(item.protein || "0"),
-        carbs: parseDecimalInput(item.carbs || "0"),
-        fat: parseDecimalInput(item.fat || "0"),
-        notes: item.notes.trim() || undefined,
-      };
+    const foodDedupeMap = new Map<string, Food>();
+    for (const food of customFoods) {
+      const key = makeImportFoodKey(food.name, food.calories, food.protein, food.carbs, food.fat, food.servingSize);
+      if (!foodDedupeMap.has(key)) foodDedupeMap.set(key, food);
+    }
+
+    const newCustomFoods: Food[] = [];
+    let nextFoodId = Date.now();
+
+    const importedFoods = importDrafts.map((item) => {
+      const calories = Math.round(parseDecimalInput(item.calories));
+      const protein = parseDecimalInput(item.protein || "0");
+      const carbs = parseDecimalInput(item.carbs || "0");
+      const fat = parseDecimalInput(item.fat || "0");
+      const name = item.name.trim();
+      const serving = item.serving.trim();
+
+      const key = makeImportFoodKey(name, calories, protein, carbs, fat, serving);
+      let food = foodDedupeMap.get(key);
+      if (!food) {
+        food = {
+          id: -(nextFoodId++),
+          name,
+          brand: null,
+          source: item.source.trim() || undefined,
+          servingSize: serving,
+          calories,
+          protein,
+          carbs,
+          fat,
+          notes: item.notes.trim() || undefined,
+        };
+        foodDedupeMap.set(key, food);
+        newCustomFoods.push(food);
+      }
 
       return {
         date: item.date,
@@ -1174,7 +1202,7 @@ function App() {
       setStorageJson(`log-${date}`, nextLog);
     }
 
-    setCustomFoods((current) => [...importedFoods.map((entry) => entry.food), ...current]);
+    setCustomFoods((current) => [...newCustomFoods, ...current]);
     setTopFoods((current) => {
       const counts = new Map(current.map((food) => [food.name, food.count]));
       importedFoods.forEach((entry) => {
