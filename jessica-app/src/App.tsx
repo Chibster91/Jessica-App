@@ -219,6 +219,7 @@ function App() {
   const [driveImportStatus, setDriveImportStatus] = useState("");
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
   const [isLoadingDriveImport, setIsLoadingDriveImport] = useState(false);
+  const [isImportDayOpen, setIsImportDayOpen] = useState(false);
 
   useEffect(() => {
     setStorageJson(`log-${selectedDate}`, log);
@@ -349,11 +350,18 @@ function App() {
   }
 
   function markDayComplete() {
-    setCompletedDays((prev) => (
-      prev.includes(selectedDate) ? prev : [...prev, selectedDate]
-    ));
+    if (completedDays.includes(selectedDate)) return;
+    setCompletedDays((prev) => [...prev, selectedDate]);
     setStreakPopupDate(selectedDate);
     setShowStreakPopup(true);
+  }
+
+  function handleFinishToggle() {
+    if (completedDays.includes(selectedDate)) {
+      reopenDayLogging();
+    } else {
+      markDayComplete();
+    }
   }
 
   function reopenDayLogging() {
@@ -2050,20 +2058,17 @@ if (appView === "egg-oracle") {
               <button
                 type="button"
                 className="log-import-button"
-                onClick={openDriveImport}
-                disabled={isUploadingToDrive || isLoadingDriveImport}
+                onClick={() => setIsImportDayOpen(true)}
               >
-                {isLoadingDriveImport ? "Loading Drive..." : "Import JSON"}
+                Import Day
               </button>
-              <label className="log-local-import-button">
-                Import File
-                <input
-                  ref={foodLogImportInputRef}
-                  type="file"
-                  accept="application/json,.json"
-                  onChange={(event) => readFoodLogImport(event.target.files?.[0])}
-                />
-              </label>
+              <input
+                ref={foodLogImportInputRef}
+                type="file"
+                accept="application/json,.json"
+                style={{ display: "none" }}
+                onChange={(event) => readFoodLogImport(event.target.files?.[0])}
+              />
               <button
                 type="button"
                 className="log-export-button"
@@ -2281,10 +2286,10 @@ if (appView === "egg-oracle") {
 
             <div className="finished-logging-row">
               <span className="finish-toggle-label">Finish Logging</span>
-              <div className={`finish-toggle${isDayLogged ? " logged" : ""}`} role="switch" aria-checked={isDayLogged} aria-label="Finish logging">
+              <div className={`finish-toggle${isDayLogged ? " logged" : ""}`} role="switch" aria-checked={isDayLogged} aria-label="Finish logging" onClick={handleFinishToggle}>
                 <span className="finish-toggle-indicator" />
-                <button type="button" aria-label="Mark day unfinished" onClick={reopenDayLogging} />
-                <button type="button" aria-label="Finish logging" onClick={markDayComplete} />
+                <button type="button" aria-label="Mark day unfinished" />
+                <button type="button" aria-label="Finish logging" />
               </div>
             </div>
           </section>
@@ -3053,8 +3058,8 @@ if (appView === "egg-oracle") {
       )}
 
       {isExportPanelOpen && (
-        <div className="floating-overlay" role="presentation">
-          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="export-day-title">
+        <div className="floating-overlay" role="presentation" onClick={() => setIsExportPanelOpen(false)}>
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="export-day-title" onClick={(e) => e.stopPropagation()}>
             <h2 id="export-day-title">Export Day</h2>
             <p>Creates food-log-{selectedDate}.json for the selected day only.</p>
             {!import.meta.env.VITE_GOOGLE_CLIENT_ID && (
@@ -3069,7 +3074,6 @@ if (appView === "egg-oracle") {
               </label>
             )}
             {exportStatus && <p className="scan-status">{exportStatus}</p>}
-            {driveImportStatus && <p className="scan-status">{driveImportStatus}</p>}
             {exportDriveLink && (
               <a className="drive-export-link" href={exportDriveLink} target="_blank" rel="noreferrer">
                 Open in Google Drive
@@ -3077,20 +3081,42 @@ if (appView === "egg-oracle") {
             )}
             <div className="floating-actions">
               <button type="button" className="primary-button" onClick={downloadDayExport} disabled={isUploadingToDrive}>
-                Download JSON
+                Local Download
               </button>
               <button type="button" onClick={uploadDayExportToDrive} disabled={isUploadingToDrive}>
-                {isUploadingToDrive ? "Uploading..." : "Upload Drive"}
+                {isUploadingToDrive ? "Uploading..." : "Export to Drive"}
               </button>
             </div>
-            <button type="button" onClick={openDriveImport} disabled={isUploadingToDrive || isLoadingDriveImport}>
-              {isLoadingDriveImport ? "Loading Drive..." : "Import Drive JSON"}
-            </button>
-            <button type="button" onClick={shareDayExport} disabled={isUploadingToDrive}>
-              Share Sheet
-            </button>
-            <button type="button" className="secondary-button" onClick={() => setIsExportPanelOpen(false)} disabled={isUploadingToDrive}>
+            <button type="button" className="secondary-button" onClick={() => setIsExportPanelOpen(false)}>
               Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isImportDayOpen && (
+        <div className="floating-overlay" role="presentation" onClick={() => setIsImportDayOpen(false)}>
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="import-day-title" onClick={(e) => e.stopPropagation()}>
+            <h2 id="import-day-title">Import Day</h2>
+            <p>Load a food log from a saved JSON file.</p>
+            <div className="floating-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => { setIsImportDayOpen(false); openDriveImport(); }}
+                disabled={isLoadingDriveImport}
+              >
+                {isLoadingDriveImport ? "Loading..." : "Import from Drive"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIsImportDayOpen(false); foodLogImportInputRef.current?.click(); }}
+              >
+                Import from File
+              </button>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => setIsImportDayOpen(false)}>
+              Cancel
             </button>
           </div>
         </div>
