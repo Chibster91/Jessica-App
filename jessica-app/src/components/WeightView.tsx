@@ -220,7 +220,7 @@ export function WeightView({
     const handleEditWeightEntry = (entry: WeightEntry) => {
       startEditWeightEntry(entry);
       setIsWeightFormOpen(true);
-      setActiveWeightTab("history");
+      setActiveWeightTab("current");
     };
     const formatDelta = (delta: number | null) => {
       if (delta === null) return `0.0 ${displayUnit}`;
@@ -236,7 +236,7 @@ export function WeightView({
     const getSegmentClass = (index: number, delta: number | null) => {
       if (delta === null || delta === 0) return index < 2 ? "amber" : "";
       if (delta > 0) return index === 0 ? "red" : "";
-      return index < Math.min(5, Math.max(1, Math.round(Math.abs(delta)))) ? "green" : "";
+      return "green";
     };
     const renderWeightForm = () => (
       <section className="w-panel weight-entry-panel" {...tapProbeProps("weight-entry-panel")}>
@@ -297,21 +297,10 @@ export function WeightView({
 
     return (
       <main className="app">
-        <div className="w-screen-head">
-          <h1>Weight</h1>
-          <span className="sub">
-            {activeWeightTab === "current"
-              ? currentWeightEntry
-                ? formatShortDate(currentWeightEntry.date)
-                : "No entries"
-              : activeWeightTab === "graph"
-                ? "Trend"
-                : "All entries"}
-          </span>
-        </div>
+        <div className="w-screen-head"></div>
 
         <div className="w-subtabs" role="tablist" aria-label="Weight views">
-          {(["current", "graph", "history"] as const).map((tab) => (
+          {(["current", "graph"] as const).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -320,7 +309,7 @@ export function WeightView({
               role="tab"
               aria-selected={activeWeightTab === tab}
             >
-              {tab === "current" ? "Current" : tab === "graph" ? "Graph" : "History"}
+              {tab === "current" ? "Details" : "Graph"}
             </button>
           ))}
         </div>
@@ -401,7 +390,41 @@ export function WeightView({
             </section>
 
             <button type="button" className="w-cta" onClick={openWeightForm}>Enter Weight</button>
+            <h2 className="w-section-title">History</h2>
             {isWeightFormOpen && renderWeightForm()}
+            <section className="w-panel w-history-panel">
+              {sortedWeightEntriesNewest.length === 0 && <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>}
+              <div className="w-hist-list">
+                {sortedWeightEntriesNewest.map((entry) => {
+                  const delta = getHistoryDelta(entry);
+                  const entryDate = new Date(`${entry.date}T12:00:00`);
+                  return (
+                    <div className="w-hist-row" key={entry.id}>
+                      <div className="w-hist-weight">
+                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small>{displayUnit}</small></span>
+                        <span className={`delta${delta !== null && delta > 0 ? " gain" : delta !== null && delta < 0 ? " loss" : ""}`}>{formatDelta(delta)}</span>
+                      </div>
+                      <div className="w-segs">{Array.from({ length: 3 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
+                      <div className="w-hist-date">
+                        <div className="w-hist-date-top">
+                          <span className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</span>
+                          <span className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</span>
+                        </div>
+                        <div className="year">{entryDate.getFullYear()}</div>
+                      </div>
+                      <div className="w-hist-time">
+                        <span className="dow">{entryDate.toLocaleDateString("en-US", { weekday: "long" })}</span>
+                        <span className="clock">{entry.note || ""}</span>
+                        <span className="w-hist-actions">
+                          <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
+                          <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
           </>
         )}
 
@@ -512,15 +535,17 @@ export function WeightView({
                         <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small>{displayUnit}</small></span>
                         <span className={`delta${delta !== null && delta > 0 ? " gain" : delta !== null && delta < 0 ? " loss" : ""}`}>{formatDelta(delta)}</span>
                       </div>
-                      <div className="w-segs">{Array.from({ length: 5 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
+                      <div className="w-segs">{Array.from({ length: 3 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
                       <div className="w-hist-date">
-                        <div className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</div>
-                        <div className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</div>
+                        <div className="w-hist-date-top">
+                          <span className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</span>
+                          <span className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</span>
+                        </div>
                         <div className="year">{entryDate.getFullYear()}</div>
                       </div>
                       <div className="w-hist-time">
                         <span className="dow">{entryDate.toLocaleDateString("en-US", { weekday: "long" })}</span>
-                        <span className="clock">{entry.note || "No note"}</span>
+                        <span className="clock">{entry.note || ""}</span>
                         <span className="w-hist-actions">
                           <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
                           <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
