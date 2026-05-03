@@ -114,6 +114,8 @@ function App() {
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
   const foodLogImportInputRef = useRef<HTMLInputElement | null>(null);
   const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
+  const longPressRef = useRef<{ logId: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const suppressNextClickRef = useRef<string | null>(null);
   const [appView, setAppView] = useState<AppView>(() => (getSavedProfile() ? "home" : "profile"));
   const [selectedDate, setSelectedDate] = useState(today);
   const [log, setLog] = useState<LogItem[]>(() => getSavedLog(today));
@@ -2196,7 +2198,52 @@ if (appView === "egg-oracle") {
                         )}
 
                         {mealItems.map((item) => (
-                          <div className="log-food-row" key={item.logId}>
+                          <button
+                            type="button"
+                            className="log-food-row"
+                            key={item.logId}
+                            aria-label={`Edit ${getFoodDisplayName(item)}`}
+                            onClick={() => {
+                              if (suppressNextClickRef.current === item.logId) {
+                                suppressNextClickRef.current = null;
+                                return;
+                              }
+                              openEditFoodItem(item);
+                            }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setItemToRemove(item);
+                            }}
+                            onPointerDown={() => {
+                              if (longPressRef.current) clearTimeout(longPressRef.current.timer);
+                              longPressRef.current = {
+                                logId: item.logId,
+                                timer: setTimeout(() => {
+                                  longPressRef.current = null;
+                                  suppressNextClickRef.current = item.logId;
+                                  setItemToRemove(item);
+                                }, 500),
+                              };
+                            }}
+                            onPointerUp={() => {
+                              if (longPressRef.current) {
+                                clearTimeout(longPressRef.current.timer);
+                                longPressRef.current = null;
+                              }
+                            }}
+                            onPointerLeave={() => {
+                              if (longPressRef.current) {
+                                clearTimeout(longPressRef.current.timer);
+                                longPressRef.current = null;
+                              }
+                            }}
+                            onPointerCancel={() => {
+                              if (longPressRef.current) {
+                                clearTimeout(longPressRef.current.timer);
+                                longPressRef.current = null;
+                              }
+                            }}
+                          >
                             <div className="log-food-icon" aria-hidden="true">
                               <img src={getFoodIconUrl(item)} alt="" />
                             </div>
@@ -2208,13 +2255,7 @@ if (appView === "egg-oracle") {
                               <strong>{getItemCalories(item)}</strong>
                               <span>cal</span>
                             </div>
-                            <button type="button" className="log-food-edit" onClick={() => openEditFoodItem(item)} aria-label={`Edit ${getFoodDisplayName(item)}`}>
-                              ✎
-                            </button>
-                            <button type="button" className="log-food-remove" onClick={() => setItemToRemove(item)}>
-                              ×
-                            </button>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     )}

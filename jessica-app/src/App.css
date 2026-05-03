@@ -68,11 +68,6 @@ input, button, textarea {
   gap: 0.35rem;
 }
 
-.food-card-source {
-  font-size: 0.78rem;
-  color: var(--fg-muted, #8b8fa8);
-}
-
 .food-card-title {
   display: flex;
   align-items: center;
@@ -3475,7 +3470,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: 5px 30px;
 }
 .dash-week-nav span,
 .dash-week-label {
@@ -4208,13 +4203,30 @@ button {
 }
 .log-food-row {
   display: grid;
-  grid-template-columns: 32px 1fr auto 24px 24px;
+  grid-template-columns: 24px 1fr auto;
   align-items: center;
   gap: 10px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px 10px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  box-sizing: border-box;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.log-food-row:hover {
+  border-color: var(--fg-2, #5a5e7a);
+}
+.log-food-row:active {
+  opacity: 0.75;
+}
+.log-food-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .log-food-icon {
   width: 32px;
@@ -4234,10 +4246,11 @@ button {
   min-width: 0;
 }
 .log-food-main strong {
-  font-size: 0.88rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: var(--fg);
   overflow-wrap: anywhere;
+  line-height: 1.3;
 }
 .log-food-main span {
   font-size: 0.7rem;
@@ -4251,30 +4264,17 @@ button {
 }
 .log-food-calories strong {
   font-family: var(--mono);
-  font-size: 0.9rem;
+  font-size: 1.25rem;
   color: var(--fg);
   line-height: 1;
+  text-align: center;
 }
 .log-food-calories span {
   display: block;
-  font-size: 0.6rem;
+  font-size: .8rem;
   color: var(--fg-2);
+  line-height: 1.1;
 }
-.log-food-edit,
-.log-food-remove {
-  background: none;
-  border: 0;
-  color: var(--fg-2);
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .empty-meal {
   color: var(--fg-2);
   font-size: 0.85rem;
