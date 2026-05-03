@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Jessica — Layout proposal (Profile)</title>
+<link rel="stylesheet" href="colors_and_type.css" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+  body { background: #0c0d10; }
+  .preview-stack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; padding: 18px; max-width: 1280px; margin: 0 auto; }
+  .preview-frame { background: var(--bg); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
+  .preview-frame h4 { margin: 0; padding: 10px 14px; font-size: 0.78rem; color: var(--fg-2); letter-spacing: 0.1em; text-transform: uppercase; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .preview-frame h4 small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--fg-2); font-size: 0.7rem; }
+  .preview-frame .body { padding: 14px; display: grid; gap: 12px; }
+  @media (max-width: 1100px) { .preview-stack { grid-template-columns: 1fr; max-width: 500px; } }
+
+  /* shared chrome */
+  .screen-head { display: flex; align-items: baseline; justify-content: space-between; padding: 0 4px; }
+  .screen-head h1 { font-size: 1.6rem; font-weight: 500; margin: 0; }
+  .screen-head .sub { color: var(--fg-2); font-size: 0.78rem; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-2xl); padding: 14px 16px; }
+  .panel-eyebrow {
+    color: var(--accent);
+    font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin: 0 0 10px;
+  }
+
+  /* identity hero */
+  .pf-hero { display: flex; align-items: center; gap: 14px; }
+  .pf-avatar {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent);
+    display: grid; place-items: center;
+    font-size: 1.6rem; font-weight: 700;
+    border: 1px solid var(--accent-border);
+  }
+  .pf-id { display: grid; gap: 2px; }
+  .pf-id .name { font-size: 1.2rem; font-weight: 700; }
+  .pf-id .meta { color: var(--fg-2); font-size: 0.82rem; }
+  .pf-edit-btn {
+    margin-left: auto;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--fg); font: inherit; font-weight: 600; font-size: 0.8rem;
+    padding: 8px 12px; border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .pf-edit-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* read-only KV rows */
+  .pf-kv-list { list-style: none; padding: 0; margin: 0; }
+  .pf-kv {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.92rem;
+  }
+  .pf-kv:first-child { border-top: 0; }
+  .pf-kv .k { color: var(--fg-2); }
+  .pf-kv .v { font-weight: 600; font-family: var(--mono); font-size: 0.92rem; text-align: right; }
+  .pf-kv .v small { color: var(--fg-2); font-weight: 500; margin-left: 3px; }
+  .pf-kv .v.calc { color: var(--accent); }
+  .pf-kv-empty { color: var(--fg-2); font-style: italic; padding: 24px 0; text-align: center; font-size: 0.9rem; }
+
+  /* derived stats grid for the read-only view */
+  .pf-derived-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    margin-bottom: 12px;
+  }
+  .pf-derived {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); padding: 10px; text-align: center;
+  }
+  .pf-derived .lbl { color: var(--fg-2); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .pf-derived .val { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
+  .pf-derived .val small { font-size: 0.55em; color: var(--fg-2); font-weight: 500; margin-left: 2px; }
+
+  /* macro target row */
+  .pf-macros-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  }
+  .pf-macro {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); padding: 10px; text-align: center;
+    border-top: 3px solid var(--c, var(--accent));
+  }
+  .pf-macro .lbl { color: var(--fg-2); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+  .pf-macro .val { font-size: 1.1rem; font-weight: 700; }
+  .pf-macro .val small { font-size: 0.6em; color: var(--fg-2); font-weight: 500; margin-left: 2px; }
+
+  /* danger row */
+  .pf-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  .pf-row:first-child { border-top: 0; }
+  .pf-row .chev { color: var(--fg-2); }
+  .pf-row.danger { color: var(--danger-soft); }
+  .pf-row.danger .chev { color: var(--danger-soft); }
+
+  /* empty-state CTA */
+  .pf-empty-cta {
+    text-align: center;
+    padding: 28px 20px;
+  }
+  .pf-empty-cta .glyph {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--accent-bg); color: var(--accent);
+    display: grid; place-items: center; margin: 0 auto 14px;
+    font-size: 1.6rem; font-weight: 600;
+    border: 1px solid var(--accent-border);
+  }
+  .pf-empty-cta h3 { margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; }
+  .pf-empty-cta p { margin: 0 0 16px; color: var(--fg-2); font-size: 0.85rem; }
+  .pf-cta {
+    background: var(--accent); border: 0; color: #fff;
+    font: inherit; font-weight: 700; font-size: 0.95rem;
+    padding: 12px 18px; border-radius: var(--radius-md);
+    width: 100%; cursor: pointer;
+  }
+  .pf-cta-ghost {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--fg); font: inherit; font-weight: 600; font-size: 0.9rem;
+    padding: 10px 14px; border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+
+  /* ============ WIZARD ============ */
+  .wz-progress {
+    display: flex; gap: 4px; padding: 0 4px;
+  }
+  .wz-progress span {
+    flex: 1; height: 4px; border-radius: 2px;
+    background: var(--border);
+  }
+  .wz-progress span.done { background: var(--accent); }
+  .wz-progress span.cur { background: var(--accent); }
+  .wz-step-meta {
+    display: flex; justify-content: space-between; align-items: baseline;
+    color: var(--fg-2); font-size: 0.72rem; padding: 0 4px;
+  }
+  .wz-step-meta strong { color: var(--accent); font-weight: 700; letter-spacing: 0.06em; }
+
+  .wz-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-2xl);
+    padding: 18px; display: grid; gap: 14px;
+  }
+  .wz-card h2 { margin: 0; font-size: 1.15rem; font-weight: 600; }
+  .wz-card .helper { color: var(--fg-2); font-size: 0.85rem; line-height: 1.5; }
+
+  .wz-field { display: grid; gap: 6px; }
+  .wz-field label { font-size: 0.78rem; color: var(--fg-2); font-weight: 600; }
+  .wz-input, .wz-select {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--fg); font: inherit; font-size: 0.95rem;
+    padding: 11px 12px; border-radius: var(--radius-md);
+    width: 100%;
+    -webkit-appearance: none; appearance: none;
+  }
+  .wz-input:focus, .wz-select:focus { outline: 0; border-color: var(--accent); }
+  .wz-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* segmented option group (used for sex / activity / goal / pace) */
+  .wz-seg {
+    display: grid; gap: 6px;
+  }
+  .wz-seg.cols-2 { grid-template-columns: 1fr 1fr; }
+  .wz-seg.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .wz-seg.stack { grid-template-columns: 1fr; }
+  .wz-opt {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--fg); font: inherit;
+    padding: 11px 12px; border-radius: var(--radius-md);
+    cursor: pointer; text-align: left;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .wz-opt strong { font-size: 0.9rem; font-weight: 600; }
+  .wz-opt span { font-size: 0.74rem; color: var(--fg-2); }
+  .wz-opt.is-active { border-color: var(--accent); background: var(--accent-bg); }
+  .wz-opt.is-active strong { color: var(--accent); }
+
+  /* preview / calc readout in last step */
+  .wz-calc-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .wz-calc {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-xl); padding: 10px 12px;
+  }
+  .wz-calc .lbl { color: var(--fg-2); font-size: 0.7rem; font-weight: 600; }
+  .wz-calc .val { font-size: 1.15rem; font-weight: 700; margin-top: 2px; }
+  .wz-calc .val small { font-size: 0.6em; color: var(--fg-2); font-weight: 500; margin-left: 3px; }
+  .wz-calc.accent { border-color: var(--accent-border); background: var(--accent-bg); }
+  .wz-calc.accent .val { color: var(--accent); }
+
+  .wz-actions {
+    display: flex; gap: 8px; padding-top: 4px;
+  }
+  .wz-back, .wz-next, .wz-save {
+    flex: 1;
+    font: inherit; font-weight: 700; font-size: 0.9rem;
+    padding: 12px; border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .wz-back {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--fg);
+  }
+  .wz-next, .wz-save {
+    background: var(--accent); border: 0; color: #fff;
+  }
+
+  /* ============ DELETE CONFIRM ============ */
+  .stage-backdrop {
+    background: linear-gradient(180deg, rgba(0,0,0,0.4), rgba(0,0,0,0.55));
+    padding: 14px;
+  }
+  .modal-shell {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: rgba(0,0,0,0.28) 0 10px 24px;
+  }
+  .dlg-body { padding: 22px 18px 18px; text-align: center; display: grid; gap: 10px; }
+  .dlg-glyph {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: rgba(248, 113, 113, 0.14);
+    color: var(--danger-warm);
+    display: grid; place-items: center; margin: 0 auto 4px;
+    font-size: 1.4rem; font-weight: 700;
+    border: 1px solid var(--danger-border);
+  }
+  .dlg-body h2 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+  .dlg-body p { color: var(--fg-2); font-size: 0.88rem; line-height: 1.55; margin: 0; }
+  .dlg-confirm-input {
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--fg); font: inherit; font-family: var(--mono); font-size: 0.9rem;
+    padding: 10px 12px; border-radius: var(--radius-md);
+    text-align: center;
+    margin-top: 6px;
+  }
+  .dlg-confirm-input:focus { outline: 0; border-color: var(--danger-warm); }
+
+  .dlg-summary {
+    text-align: left;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    color: var(--fg-2); font-size: 0.8rem; line-height: 1.6;
+  }
+  .dlg-summary strong { color: var(--fg); }
+
+  .dlg-foot {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    padding: 12px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .dlg-cancel, .dlg-delete {
+    font: inherit; font-weight: 700; font-size: 0.9rem;
+    padding: 12px; border-radius: var(--radius-md);
+    cursor: pointer;
+  }
+  .dlg-cancel {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--fg);
+  }
+  .dlg-delete {
+    background: var(--danger-bg); border: 1px solid var(--danger-border);
+    color: var(--danger-fg);
+  }
+  .dlg-delete[disabled] { opacity: 0.55; cursor: not-allowed; }
+
+  /* mini bottom nav */
+  .nav-stub { display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--border); background: var(--bg); margin: 4px -14px -14px; }
+  .nav-stub button { background: none; border: 0; color: var(--fg-2); font: inherit; font-size: 0.6rem; padding: 8px 4px; display: grid; gap: 2px; justify-items: center; cursor: pointer; }
+  .nav-stub button .g { font-size: 1rem; line-height: 1; }
+  .nav-stub button.is-active { color: var(--accent); }
+
+  /* notes */
+  .preamble { max-width: 1280px; margin: 0 auto; padding: 24px 18px 8px; }
+  .preamble h1 { font-size: 1.6rem; margin: 0 0 6px; font-weight: 500; }
+  .preamble p { color: var(--fg-2); font-size: 0.92rem; max-width: 760px; line-height: 1.55; }
+  .notes { max-width: 1280px; margin: 0 auto; padding: 0 18px 24px; color: var(--fg-2); font-size: 0.85rem; line-height: 1.55; }
+  .notes h2 { color: var(--fg); font-size: 1.1rem; font-weight: 600; margin: 24px 0 8px; }
+  .notes ul { margin: 0; padding-left: 1.2rem; }
+  .notes code { font-size: 0.82rem; }
+</style>
+</head>
+<body>
+
+<div class="preamble">
+  <h1>Profile — read-only state, wizard, delete confirmation</h1>
+  <p>
+    No accounts — everything lives in <code>localStorage</code>. The default Profile screen
+    shows the user's data read-only with an <strong>Edit Profile</strong> button that launches
+    a multi-step wizard. <strong>Delete all data</strong> sits in a danger row with a typed
+    confirmation modal so a stray tap can't wipe months of logs.
+  </p>
+</div>
+
+<div class="preview-stack">
+
+  <!-- ============== READ-ONLY DEFAULT ============== -->
+  <div class="preview-frame">
+    <h4>Profile <small>read-only default</small></h4>
+    <div class="body">
+
+      <div class="screen-head">
+        <h1>Profile</h1>
+        <span class="sub">Stored on this device</span>
+      </div>
+
+      <section class="panel">
+        <div class="pf-hero">
+          <div class="pf-avatar" aria-hidden>J</div>
+          <div class="pf-id">
+            <div class="name">Jessica</div>
+            <div class="meta">34 · Female · 5′6″</div>
+          </div>
+          <button class="pf-edit-btn">Edit</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <p class="panel-eyebrow">Targets</p>
+        <div class="pf-derived-grid">
+          <div class="pf-derived">
+            <div class="lbl">BMR</div>
+            <div class="val">1,512<small>kcal</small></div>
+          </div>
+          <div class="pf-derived">
+            <div class="lbl">TDEE</div>
+            <div class="val">2,343<small>kcal</small></div>
+          </div>
+          <div class="pf-derived">
+            <div class="lbl">Target</div>
+            <div class="val">1,843<small>kcal</small></div>
+          </div>
+        </div>
+        <div class="pf-macros-row">
+          <div class="pf-macro" style="--c: var(--macro-protein)">
+            <div class="lbl">Protein</div>
+            <div class="val">140<small>g</small></div>
+          </div>
+          <div class="pf-macro" style="--c: var(--macro-carbs)">
+            <div class="lbl">Carbs</div>
+            <div class="val">200<small>g</small></div>
+          </div>
+          <div class="pf-macro" style="--c: var(--macro-fat)">
+            <div class="lbl">Fat</div>
+            <div class="val">61<small>g</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <p class="panel-eyebrow">Body</p>
+        <ul class="pf-kv-list">
+          <li class="pf-kv"><span class="k">Current weight</span><span class="v">229.0<small>lb</small></span></li>
+          <li class="pf-kv"><span class="k">Goal weight</span><span class="v">220.0<small>lb</small></span></li>
+          <li class="pf-kv"><span class="k">Goal date</span><span class="v">May 10, 2026</span></li>
+          <li class="pf-kv"><span class="k">Activity level</span><span class="v">Moderate</span></li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <p class="panel-eyebrow">Plan</p>
+        <ul class="pf-kv-list">
+          <li class="pf-kv"><span class="k">Goal</span><span class="v">Lose</span></li>
+          <li class="pf-kv"><span class="k">Pace</span><span class="v">Moderate <small>−1.0 lb/wk</small></span></li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <p class="panel-eyebrow">Data</p>
+        <ul class="pf-kv-list" style="margin: 0;">
+          <li class="pf-row"><span>Export all data (JSON)</span><span class="chev">›</span></li>
+          <li class="pf-row"><span>Import JSON</span><span class="chev">›</span></li>
+          <li class="pf-row"><span>Connect Google Drive</span><span class="chev">›</span></li>
+          <li class="pf-row danger"><span>Delete all data</span><span class="chev">›</span></li>
+        </ul>
+      </section>
+
+      <nav class="nav-stub" aria-hidden>
+        <button><span class="g">⌂</span><span>Home</span></button>
+        <button><span class="g">↕</span><span>Weight</span></button>
+        <button><span class="g">≡</span><span>Log</span></button>
+        <button><span class="g">⊞</span><span>Library</span></button>
+        <button class="is-active"><span class="g">◉</span><span>Profile</span></button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- ============== WIZARD ============== -->
+  <div class="preview-frame">
+    <h4>Edit Profile wizard <small>step 4 of 5 shown</small></h4>
+    <div class="body">
+
+      <div class="screen-head">
+        <h1>Edit Profile</h1>
+        <span class="sub">Step 4 of 5</span>
+      </div>
+
+      <div class="wz-progress">
+        <span class="done"></span><span class="done"></span><span class="done"></span><span class="cur"></span><span></span>
+      </div>
+      <div class="wz-step-meta">
+        <span><strong>Plan</strong> · Goal & pace</span>
+        <span>Skip</span>
+      </div>
+
+      <section class="wz-card">
+        <h2>Set your weight goal</h2>
+        <p class="helper">We'll use your activity level and pace to calculate a daily calorie target. You can change this any time.</p>
+
+        <div class="wz-field">
+          <label>Goal</label>
+          <div class="wz-seg cols-3">
+            <button class="wz-opt"><strong>Lose</strong><span>−lb</span></button>
+            <button class="wz-opt is-active"><strong>Maintain</strong><span>±0</span></button>
+            <button class="wz-opt"><strong>Gain</strong><span>+lb</span></button>
+          </div>
+        </div>
+
+        <div class="wz-field">
+          <label>Desired pace</label>
+          <div class="wz-seg cols-3">
+            <button class="wz-opt"><strong>Slow</strong><span>−0.5 lb/wk</span></button>
+            <button class="wz-opt is-active"><strong>Moderate</strong><span>−1.0 lb/wk</span></button>
+            <button class="wz-opt"><strong>Aggressive</strong><span>−2.0 lb/wk</span></button>
+          </div>
+        </div>
+
+        <div class="wz-field">
+          <label>Goal weight</label>
+          <div class="wz-row-2">
+            <input class="wz-input" value="220.0" type="text" />
+            <select class="wz-select">
+              <option>lb</option><option>kg</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="wz-field">
+          <label>Goal date</label>
+          <input class="wz-input" value="May 10, 2026" />
+        </div>
+      </section>
+
+      <section class="wz-card">
+        <h2>Live calculation</h2>
+        <div class="wz-calc-grid">
+          <div class="wz-calc">
+            <div class="lbl">BMR</div>
+            <div class="val">1,512<small>kcal</small></div>
+          </div>
+          <div class="wz-calc">
+            <div class="lbl">TDEE</div>
+            <div class="val">2,343<small>kcal</small></div>
+          </div>
+          <div class="wz-calc accent" style="grid-column: 1 / -1;">
+            <div class="lbl">Recommended target</div>
+            <div class="val">1,843 <small>kcal/day</small></div>
+          </div>
+          <div class="wz-calc"><div class="lbl">Protein</div><div class="val">140<small>g</small></div></div>
+          <div class="wz-calc"><div class="lbl">Carbs</div><div class="val">200<small>g</small></div></div>
+          <div class="wz-calc" style="grid-column: 1 / -1;"><div class="lbl">Fat</div><div class="val">61<small>g</small></div></div>
+        </div>
+      </section>
+
+      <div class="wz-actions">
+        <button class="wz-back">Back</button>
+        <button class="wz-next">Next</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============== DELETE CONFIRM ============== -->
+  <div class="preview-frame">
+    <h4>Delete all data <small>confirm modal</small></h4>
+    <div class="stage-backdrop">
+
+      <!-- dimmed read-only profile peeking through -->
+      <div style="opacity: 0.35; filter: blur(0.5px); margin-bottom: -200px; pointer-events: none;">
+        <section class="panel" style="margin-bottom: 10px;">
+          <div class="pf-hero">
+            <div class="pf-avatar" aria-hidden>J</div>
+            <div class="pf-id">
+              <div class="name">Jessica</div>
+              <div class="meta">34 · Female · 5′6″</div>
+            </div>
+          </div>
+        </section>
+        <section class="panel" style="margin-bottom: 10px;">
+          <p class="panel-eyebrow">Targets</p>
+          <div class="pf-derived-grid">
+            <div class="pf-derived"><div class="lbl">BMR</div><div class="val">1,512</div></div>
+            <div class="pf-derived"><div class="lbl">TDEE</div><div class="val">2,343</div></div>
+            <div class="pf-derived"><div class="lbl">Target</div><div class="val">1,843</div></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-shell" style="position: relative; z-index: 1; margin-top: 90px;">
+        <div class="dlg-body">
+          <div class="dlg-glyph" aria-hidden>!</div>
+          <h2>Delete all data?</h2>
+          <p>This wipes everything Jessica has stored on this device. This cannot be undone.</p>
+
+          <div class="dlg-summary">
+            <div><strong>418</strong> log days · <strong>62</strong> weight entries</div>
+            <div><strong>12</strong> custom foods · <strong>4</strong> recipes</div>
+            <div>Profile, goals, streak history</div>
+          </div>
+
+          <p style="margin-top: 4px; font-size: 0.82rem;">Type <strong style="color: var(--fg); font-family: var(--mono);">DELETE</strong> to confirm.</p>
+          <input class="dlg-confirm-input" placeholder="DELETE" />
+        </div>
+        <div class="dlg-foot">
+          <button class="dlg-cancel">Cancel</button>
+          <button class="dlg-delete" disabled>Delete everything</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <h2>Design notes</h2>
+  <ul>
+    <li><strong>No-account framing.</strong> The screen header subtitle says "Stored on this device" — no sign-in copy anywhere. Avatar is a single initial (or a placeholder glyph) drawn from the user's name in <code>localStorage</code>.</li>
+    <li><strong>Read-only KV rows.</strong> Hairline-separated, key in <code>--fg-2</code>, value in mono so numbers right-align cleanly. Same row pattern as Library/Profile rows already in the kit.</li>
+    <li><strong>Targets card.</strong> BMR / TDEE / Recommended calorie target sit in the same stat-card style used on the Weight Current screen, then macros below in protein/carbs/fat colors. Lifts straight from the existing macro palette.</li>
+    <li><strong>Wizard.</strong> Five steps:
+      <ol style="margin: 4px 0 0 16px; padding: 0;">
+        <li>Identity — Name, Age, Sex</li>
+        <li>Body — Height, Current weight</li>
+        <li>Activity — Sedentary / Light / Moderate / Very active / Athlete</li>
+        <li>Plan — Goal (lose/maintain/gain), Pace (slow/moderate/aggressive), Goal weight, Goal date <em>(shown)</em></li>
+        <li>Review — Live BMR / TDEE / Target / Macro split, with toggleable macro split</li>
+      </ol>
+      Progress bar at the top, primary purple Next, ghost Back. Live calculation block updates as you change inputs.
+    </li>
+    <li><strong>Segmented option groups.</strong> Same pill-card pattern across Sex / Activity / Goal / Pace — each option shows its label plus a one-line definition (e.g. "−1.0 lb/wk") so users don't have to guess what "moderate" means.</li>
+    <li><strong>Delete-all confirmation.</strong> Three guards:
+      <ol style="margin: 4px 0 0 16px; padding: 0;">
+        <li>Modal must be opened intentionally (it sits inside Profile → Data, not on a button).</li>
+        <li>A summary block tells the user exactly what will be erased (counts pulled from <code>localStorage</code>).</li>
+        <li>The user must type <code>DELETE</code> in mono before the red destructive button enables.</li>
+      </ol>
+      The destructive button uses <code>--danger-bg</code>/<code>--danger-fg</code> from the system, not invented red.
+    </li>
+  </ul>
+</div>
+
+</body>
+</html>

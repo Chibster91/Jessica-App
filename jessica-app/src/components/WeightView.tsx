@@ -522,6 +522,39 @@ export function WeightView({
                 </div>
               )}
             </section>
+            <section className="w-panel w-history-panel">
+              {sortedWeightEntriesNewest.length === 0 && <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>}
+              <div className="w-hist-list">
+                {sortedWeightEntriesNewest.map((entry) => {
+                  const delta = getHistoryDelta(entry);
+                  const entryDate = new Date(`${entry.date}T12:00:00`);
+                  return (
+                    <div className="w-hist-row" key={entry.id}>
+                      <div className="w-hist-weight">
+                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small>{displayUnit}</small></span>
+                        <span className={`delta${delta !== null && delta > 0 ? " gain" : delta !== null && delta < 0 ? " loss" : ""}`}>{formatDelta(delta)}</span>
+                      </div>
+                      <div className="w-segs">{Array.from({ length: 3 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
+                      <div className="w-hist-date">
+                        <div className="w-hist-date-top">
+                          <span className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</span>
+                          <span className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</span>
+                        </div>
+                        <div className="year">{entryDate.getFullYear()}</div>
+                      </div>
+                      <div className="w-hist-time">
+                        <span className="dow">{entryDate.toLocaleDateString("en-US", { weekday: "long" })}</span>
+                        <span className="clock">{entry.note || ""}</span>
+                        <span className="w-hist-actions">
+                          <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
+                          <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
             <button type="button" className="w-cta" onClick={openWeightForm}>Enter Weight</button>
           </>

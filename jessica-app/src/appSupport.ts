@@ -455,7 +455,6 @@ const profilePaceOptions = [
 ] as const;
 const profileWizardSteps = [
   "Basics",
-  "Body",
   "Activity",
   "Plan",
   "Macros",

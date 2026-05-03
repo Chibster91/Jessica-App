@@ -1262,12 +1262,30 @@ input:disabled {
 }
 
 .profile-wizard-card {
-  min-height: 28rem;
+   min-height: 0;
+  height: auto;
+  overflow: visible;
+}
+
+.wizard-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.wizard-actions,
+.profile-wizard-actions,
+.profile-actions {
+  position: static;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
 }
 
 .wizard-card {
   display: grid;
-  gap: 1rem;
+  gap: 0.7rem;
 }
 
 .wizard-hint {
@@ -1311,8 +1329,14 @@ input:disabled {
 
 .profile-form-grid {
   display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.wz-name-age-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 3fr 1fr;
 }
 
 .profile-form-grid.three {
@@ -1954,7 +1978,7 @@ input:disabled {
 .wz-progress-bars {
   display: flex;
   gap: 4px;
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .wz-bar {
@@ -2006,7 +2030,7 @@ input:disabled {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.75rem;
-  margin: 0.1rem 0 0;
+  margin: 0.05rem 0 0;
 }
 
 .wz-title {
@@ -2027,7 +2051,7 @@ input:disabled {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 0.65rem 0 0.1rem;
+  margin: 0.45rem 0 0.1rem;
 }
 
 .wz-section-name {
@@ -2059,7 +2083,13 @@ input:disabled {
 }
 
 .wz-field-block {
-  margin-bottom: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.wz-goal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .wz-field-lbl {
@@ -2130,7 +2160,7 @@ input:disabled {
 /* Live calculation tile grid */
 .wz-live-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 8px;
 }
 
@@ -2144,11 +2174,11 @@ input:disabled {
 .wz-live-accent {
   background: var(--accent-bg);
   border-color: var(--accent-border);
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .wz-live-fat {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .wz-live-label {
@@ -2195,45 +2225,17 @@ input:disabled {
 }
 
 /* Sticky wizard footer */
+/* Wizard footer */
 .wz-footer {
-  bottom: calc(5rem + env(safe-area-inset-bottom));
+  background: transparent;
+  border-top: 0;
   display: grid;
   gap: 0.75rem;
   grid-template-columns: 1fr 1fr;
-  padding: 0.75rem 0;
-  position: sticky;
-  z-index: 10;
-}
-
-.wz-footer button:only-child {
-  grid-column: 1 / -1;
-}
-
-.wz-back-btn {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--fg);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 600;
-  padding: 0.85rem;
-}
-
-.wz-next-btn {
-  background: var(--accent);
-  border: 0;
-  border-radius: 12px;
-  color: #171921;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 700;
-  padding: 0.85rem;
-}
-
-.wz-next-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  padding: 0.75rem 0 0;
+  position: static;
+  z-index: auto;
+  margin-top: 1rem;
 }
 
 .goals-form {
@@ -4801,4 +4803,34 @@ button {
 
 .eo-calendar-panel {
   padding: 0.5rem 0.65rem 0.65rem;
+}
+
+/* Step 3 goal/date compact row */
+.wz-field-block:has(.goals-input-row) {
+  display: inline-block;
+  width: calc(55% - 5px);
+  vertical-align: top;
+  margin-right: 10px;
+}
+
+.wz-field-block:has(.wz-readonly-input) {
+  display: inline-block;
+  width: calc(45% - 5px);
+  vertical-align: top;
+}
+
+.goals-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.goals-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.goals-input-row span {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }

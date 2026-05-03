@@ -106,9 +106,6 @@ export function FoodLibraryView({
 }: FoodLibraryViewProps) {
   return (
     <main className="app">
-            <div className="top-bar">
-              <h1>Food Library</h1>
-            </div>
     
             <section className="panel library-layout">
               <div className="library-main">

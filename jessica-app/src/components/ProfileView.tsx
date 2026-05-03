@@ -25,7 +25,6 @@ import {
   type Profile,
   type ProfileCalculation,
   type ProfileForm,
-  type ProfileUnits,
   type Sex
 } from "../appSupport";
 
@@ -80,11 +79,10 @@ function computeGoalDate(profile: Profile): string | null {
 }
 
 const stepSubtitles: Record<number, string> = {
-  0: "Name, age & height",
-  1: "Current weight",
-  2: "Activity level",
-  3: "Goal & pace",
-  4: "Macro targets",
+  0: "Name, age, height & weight",
+  1: "Activity level",
+  2: "Goal & pace",
+  3: "Macro targets",
 };
 
 const goalOptions: { goal: GoalType; label: string; sub: string }[] = [
@@ -153,22 +151,19 @@ export function ProfileView({
   const macroPresetOptions: MacroPreset[] = ["balanced", "high_protein", "custom"];
   const requiredStepError =
     profileWizardStep === 0
-      ? profileErrors.age || profileErrors.height
-      : profileWizardStep === 1
-        ? profileErrors.weight
+      ? profileErrors.age || profileErrors.height || profileErrors.weight
+      : profileWizardStep === 2
+        ? profileErrors.goalWeight
         : profileWizardStep === 3
-          ? profileErrors.goalWeight
-          : profileWizardStep === 4
-            ? profileErrors.macros
-            : "";
+          ? profileErrors.macros
+          : "";
   const canMoveNext =
     !requiredStepError &&
-    (profileWizardStep !== 4 || !profileHasBlockingErrors);
+    (profileWizardStep !== 3 || !profileHasBlockingErrors);
   const planGoalDate = (() => {
     if (profileForm.goal === "maintain") return null;
-    const isMetric = profileForm.units === "metric";
-    const wKg = isMetric ? Number(profileForm.weight) : Number(profileForm.weight) / poundsPerKilogram;
-    const gKg = isMetric ? Number(profileForm.goalWeight) : Number(profileForm.goalWeight) / poundsPerKilogram;
+    const wKg = Number(profileForm.weight) / poundsPerKilogram;
+    const gKg = Number(profileForm.goalWeight) / poundsPerKilogram;
     const rate = Number(profileForm.weeklyRateKg) || 0;
     if (!gKg || rate <= 0) return null;
     if (profileForm.goal === "lose" && wKg <= gKg) return null;
@@ -224,10 +219,6 @@ export function ProfileView({
     return (
       <main className="app">
         <div className="top-bar">
-          <div>
-            <h1>Profile</h1>
-            <p className="week-range">Stored on this device</p>
-          </div>
         </div>
 
         {profileSaveStatus && <p className="profile-toast">{profileSaveStatus}</p>}
@@ -432,10 +423,6 @@ export function ProfileView({
   // ─── WIZARD VIEW ───────────────────────────────────────────────
   return (
     <main className="app">
-      <div className="wz-topbar">
-        <span className="wz-topbar-label">EDIT PROFILE WIZARD</span>
-        <span className="wz-topbar-step">step {profileWizardStep + 1} of {profileWizardSteps.length} shown</span>
-      </div>
       <div className="wz-header">
         <h1 className="wz-title">{isSetupMode ? "Set Up Profile" : "Edit Profile"}</h1>
         <span className="wz-step-badge">Step {profileWizardStep + 1} of {profileWizardSteps.length}</span>
@@ -455,7 +442,7 @@ export function ProfileView({
         <span className="wz-section-name">
           {currentStepName}{stepSubtitles[profileWizardStep] ? ` · ${stepSubtitles[profileWizardStep]}` : ""}
         </span>
-        {profileWizardStep === 3 && (
+        {profileWizardStep === 2 && (
           <button type="button" className="wz-skip-btn" onClick={() => moveProfileStep(1)}>
             Skip
           </button>
@@ -466,30 +453,31 @@ export function ProfileView({
       {profileWizardStep === 0 && (
         <section className="panel">
           <div className="wizard-card profile-form-grid">
-            <label>
-              Display Name
-              <input
-                type="text"
-                maxLength={40}
-                value={profileForm.name}
-                onChange={(e) => updateProfileForm({ name: e.target.value })}
-                placeholder="Optional"
-              />
-              {profileErrors.name && <span className="profile-field-error">{profileErrors.name}</span>}
-            </label>
-
-            <label>
-              Age
-              <input
-                type="number"
-                min="13"
-                max="100"
-                step="1"
-                value={profileForm.age}
-                onChange={(e) => updateProfileForm({ age: e.target.value })}
-              />
-              {profileErrors.age && <span className="profile-field-error">{profileErrors.age}</span>}
-            </label>
+            <div className="wz-name-age-row">
+              <label>
+                Display Name
+                <input
+                  type="text"
+                  maxLength={40}
+                  value={profileForm.name}
+                  onChange={(e) => updateProfileForm({ name: e.target.value })}
+                  placeholder="Optional"
+                />
+                {profileErrors.name && <span className="profile-field-error">{profileErrors.name}</span>}
+              </label>
+              <label>
+                Age
+                <input
+                  type="number"
+                  min="13"
+                  max="100"
+                  step="1"
+                  value={profileForm.age}
+                  onChange={(e) => updateProfileForm({ age: e.target.value })}
+                />
+                {profileErrors.age && <span className="profile-field-error">{profileErrors.age}</span>}
+              </label>
+            </div>
 
             <div className="profile-field">
               <span>Biological Sex</span>
@@ -507,81 +495,44 @@ export function ProfileView({
               </div>
             </div>
 
-            <div className="profile-field">
-              <span>Units</span>
-              <div className="segmented-control">
-                {(["imperial", "metric"] as ProfileUnits[]).map((units) => (
-                  <button
-                    key={units}
-                    type="button"
-                    className={profileForm.units === units ? "selected" : ""}
-                    onClick={() => updateProfileForm({ units })}
-                  >
-                    {units === "imperial" ? "Imperial" : "Metric"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <label>
               Height
-              {profileForm.units === "metric" ? (
-                <div className="goals-input-row">
-                  <input
-                    type="number"
-                    min="100"
-                    max="250"
-                    step="0.1"
-                    value={profileForm.heightCm}
-                    onChange={(e) => updateProfileForm({ heightCm: e.target.value })}
-                  />
-                  <span>cm</span>
-                </div>
-              ) : (
-                <div className="height-input-row">
-                  <input
-                    aria-label="Height feet"
-                    type="number"
-                    min="3"
-                    max="8"
-                    step="1"
-                    value={profileForm.heightFeet}
-                    onChange={(e) => updateProfileForm({ heightFeet: e.target.value })}
-                  />
-                  <input
-                    aria-label="Height inches"
-                    type="number"
-                    min="0"
-                    max="11"
-                    step="0.1"
-                    value={profileForm.heightInches}
-                    onChange={(e) => updateProfileForm({ heightInches: e.target.value })}
-                  />
-                  <span>ft / in</span>
-                </div>
-              )}
+              <div className="height-input-row">
+                <input
+                  aria-label="Height feet"
+                  type="number"
+                  min="3"
+                  max="8"
+                  step="1"
+                  value={profileForm.heightFeet}
+                  onChange={(e) => updateProfileForm({ heightFeet: e.target.value })}
+                />
+                <input
+                  aria-label="Height inches"
+                  type="number"
+                  min="0"
+                  max="11"
+                  step="0.1"
+                  value={profileForm.heightInches}
+                  onChange={(e) => updateProfileForm({ heightInches: e.target.value })}
+                />
+                <span>ft / in</span>
+              </div>
               {profileErrors.height && <span className="profile-field-error">{profileErrors.height}</span>}
             </label>
-          </div>
-        </section>
-      )}
 
-      {/* Step 1: Body */}
-      {profileWizardStep === 1 && (
-        <section className="panel">
-          <div className="wizard-card profile-form-grid">
             <label>
               Current Weight
               <div className="goals-input-row">
                 <input
                   type="number"
-                  min={profileForm.units === "metric" ? "30" : "66"}
-                  max={profileForm.units === "metric" ? "300" : "661"}
+                  min="66"
+                  max="661"
                   step="0.1"
                   value={profileForm.weight}
                   onChange={(e) => updateProfileForm({ weight: e.target.value })}
                 />
-                <span>{profileForm.units === "metric" ? "kg" : "lb"}</span>
+                <span>lb</span>
               </div>
               {profileErrors.weight && <span className="profile-field-error">{profileErrors.weight}</span>}
             </label>
@@ -589,8 +540,8 @@ export function ProfileView({
         </section>
       )}
 
-      {/* Step 2: Activity */}
-      {profileWizardStep === 2 && (
+      {/* Step 1: Activity */}
+      {profileWizardStep === 1 && (
         <section className="panel">
           <div className="wizard-card">
             <p className="wizard-hint">How active are you on a typical week?</p>
@@ -611,12 +562,10 @@ export function ProfileView({
         </section>
       )}
 
-      {/* Step 3: Plan */}
-      {profileWizardStep === 3 && (
+      {/* Step 2: Plan */}
+      {profileWizardStep === 2 && (
         <>
           <section className="panel">
-            <p className="wz-card-title">Set your weight goal</p>
-
             <div className="wz-field-block">
               <p className="wz-field-lbl">Goal</p>
               <div className="wz-3btn">
@@ -659,13 +608,13 @@ export function ProfileView({
                 <div className="goals-input-row">
                   <input
                     type="number"
-                    min={profileForm.units === "metric" ? "30" : "66"}
-                    max={profileForm.units === "metric" ? "300" : "661"}
+                    min="66"
+                    max="661"
                     step="0.1"
                     value={profileForm.goalWeight}
                     onChange={(e) => updateProfileForm({ goalWeight: e.target.value })}
                   />
-                  <span>{profileForm.units === "metric" ? "kg" : "lb"}</span>
+                  <span>lb</span>
                 </div>
                 {profileErrors.goalWeight && <span className="profile-field-error">{profileErrors.goalWeight}</span>}
               </label>
@@ -695,7 +644,7 @@ export function ProfileView({
                   <div className="wz-live-val">{profileCalculation.tdee.toLocaleString()}<small>kcal</small></div>
                 </div>
                 <div className="wz-live-tile wz-live-accent">
-                  <div className="wz-live-label">Recommended target</div>
+                  <div className="wz-live-label">Recommended</div>
                   <div className="wz-live-val">{profileCalculation.activeCalories.toLocaleString()}<small>kcal/day</small></div>
                 </div>
                 <div className="wz-live-tile">
@@ -719,8 +668,8 @@ export function ProfileView({
         </>
       )}
 
-      {/* Step 4: Macros */}
-      {profileWizardStep === 4 && (
+      {/* Step 3: Macros */}
+      {profileWizardStep === 3 && (
         <section className="panel">
           <div className="wizard-card profile-macro-section">
             <div className="profile-option-grid">
