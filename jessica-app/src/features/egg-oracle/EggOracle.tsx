@@ -617,20 +617,9 @@ type CalendarPageProps = {
 
 function CalendarPage({ data, monthDate, setMonthDate, onOpenDay }: CalendarPageProps) {
   const days = useMemo(() => buildMonthDays(monthDate), [monthDate]);
-  const cycle = findCycleForDate(data, new Date());
-
-  const fertileLabel = `${formatDateLong(cycle.fertileStart)} – ${formatDateLong(cycle.fertileEnd)}${cycle.fertileStartSource === "mucus" ? " (extended by mucus)" : ""}`;
-  const ovLabel = `${formatDateLong(cycle.ovulationDate)}${cycle.ovulationSource !== "calendar" ? " (from LH)" : ""}`;
 
   return (
     <div className="eo-page">
-      <section className="panel eo-hero">
-        <p className="panel-eyebrow">Current estimates</p>
-        <div className="eo-hero-row"><span className="eo-hero-lbl">Next period</span><span className="eo-hero-val">{formatDateLong(cycle.nextStart)}</span></div>
-        <div className="eo-hero-row"><span className="eo-hero-lbl">Fertile window</span><span className="eo-hero-val">{fertileLabel}</span></div>
-        <div className="eo-hero-row"><span className="eo-hero-lbl">Ovulation</span><span className="eo-hero-val">{ovLabel}</span></div>
-      </section>
-
       <section className="panel eo-calendar-panel">
         <div className="eo-cal-nav">
           <button type="button" className="eo-cal-arrow" onClick={() => setMonthDate((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1))} aria-label="Previous month">‹</button>
@@ -669,7 +658,6 @@ type StatsPageProps = {
 
 function StatsPage({ data }: StatsPageProps) {
   const stats = getCycleStats(data);
-  const cycle = findCycleForDate(data, new Date());
 
   const statCards: [string, string | number][] = [
     ["Average cycle", `${stats.averageCycleLength} days`],
@@ -685,19 +673,6 @@ function StatsPage({ data }: StatsPageProps) {
 
   return (
     <div className="eo-page">
-      <section className="panel eo-hero">
-        <p className="panel-eyebrow">Current estimates</p>
-        <div className="eo-hero-row"><span className="eo-hero-lbl">Next period</span><span className="eo-hero-val">{formatDateLong(cycle.nextStart)}</span></div>
-        <div className="eo-hero-row">
-          <span className="eo-hero-lbl">Fertile window</span>
-          <span className="eo-hero-val">{formatDateLong(cycle.fertileStart)} – {formatDateLong(cycle.fertileEnd)}</span>
-        </div>
-        <div className="eo-hero-row">
-          <span className="eo-hero-lbl">Ovulation</span>
-          <span className="eo-hero-val">{formatDateLong(cycle.ovulationDate)}{cycle.ovulationSource !== "calendar" ? ` (LH ${formatDate(cycle.opkDate)})` : ""}</span>
-        </div>
-      </section>
-
       <section className="panel">
         <p className="panel-eyebrow">Cycle stats</p>
         <div className="eo-stat-grid">
@@ -903,21 +878,33 @@ export default function EggOracle({ bottomNav }: EggOracleProps) {
   useEffect(() => setData(loadData()), []);
   useEffect(() => saveData(data), [data]);
 
+  const cycle = findCycleForDate(data, new Date());
+  const fertileVal = `${formatDate(cycle.fertileStart)} – ${formatDate(cycle.fertileEnd)}`;
+  const ovVal = formatDate(cycle.ovulationDate);
+
   return (
     <main className="app eo-app">
       <div className="top-bar">
         <div>
-          <h1>Cycle</h1>
-          <p className="week-range">Egg Oracle</p>
         </div>
-        <button
-          type="button"
-          className="primary-button"
-          style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
-          onClick={() => setSelectedISO(toISO(new Date()))}
-        >
-          + Today
-        </button>
+      </div>
+
+      <div className="eo-estimates-block">
+        <p className="panel-eyebrow eo-estimates-eyebrow">Current estimates</p>
+        <div className="eo-estimates-cards">
+          <div className="eo-est-card">
+            <div className="eo-est-lbl">Next period</div>
+            <div className="eo-est-val">{formatDate(cycle.nextStart)}</div>
+          </div>
+          <div className="eo-est-card">
+            <div className="eo-est-lbl">Fertile window</div>
+            <div className="eo-est-val">{fertileVal}</div>
+          </div>
+          <div className="eo-est-card">
+            <div className="eo-est-lbl">Ovulation</div>
+            <div className="eo-est-val">{ovVal}</div>
+          </div>
+        </div>
       </div>
 
       <div className="tab-row eo-tabs">

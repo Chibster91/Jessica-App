@@ -2659,11 +2659,20 @@ input:disabled {
   border-top: 0;
 }
 
-.w-hist-weight,
-.w-hist-date {
+.w-hist-weight {
   display: grid;
   gap: 2px;
   transform: translateY(15px);
+  text-align: center;
+  justify-items: center;
+}
+
+.w-hist-date {
+  display: grid;
+  gap: 2px;
+  transform: translateY(9px);
+  text-align: center;
+  justify-items: center;
 }
 
 .w-hist-weight .val {
@@ -4377,37 +4386,47 @@ button {
   gap: 0;
 }
 
-/* Hero summary card */
-.eo-hero {
-  border-color: var(--accent-border);
+/* Estimates block */
+.eo-estimates-block {
+  padding: 0.4rem 0 0.1rem;
 }
 
-.eo-hero-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid var(--border);
+.eo-estimates-eyebrow {
+  margin-bottom: 0.45rem;
 }
 
-.eo-hero-row:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+.eo-estimates-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
-.eo-hero-lbl {
+.eo-est-card {
+  background: var(--surface);
+  border: 1px solid var(--accent-border, var(--border));
+  border-radius: 11px;
+  padding: 8px 8px 9px;
+  display: grid;
+  gap: 3px;
+  text-align: center;
+}
+
+.eo-est-lbl {
   color: var(--fg-2);
-  font-size: 0.78rem;
-  font-weight: 500;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.eo-hero-val {
+.eo-est-val {
   color: var(--fg);
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-align: right;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 /* Calendar */
@@ -4748,10 +4767,6 @@ button {
 
 .eo-page .panel {
   margin: 0.4rem 0;
-}
-
-.eo-hero {
-  padding: 0.1rem 1rem;
 }
 
 .eo-calendar-panel {
