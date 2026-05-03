@@ -220,6 +220,7 @@ function App() {
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
   const [isLoadingDriveImport, setIsLoadingDriveImport] = useState(false);
   const [isImportDayOpen, setIsImportDayOpen] = useState(false);
+  const [isLogMenuOpen, setIsLogMenuOpen] = useState(false);
 
   useEffect(() => {
     setStorageJson(`log-${selectedDate}`, log);
@@ -2054,32 +2055,13 @@ if (appView === "egg-oracle") {
                 ›
               </button>
             </div>
-            <div className="log-file-actions">
-              <button
-                type="button"
-                className="log-import-button"
-                onClick={() => setIsImportDayOpen(true)}
-              >
-                Import Day
-              </button>
-              <input
-                ref={foodLogImportInputRef}
-                type="file"
-                accept="application/json,.json"
-                style={{ display: "none" }}
-                onChange={(event) => readFoodLogImport(event.target.files?.[0])}
-              />
-              <button
-                type="button"
-                className="log-export-button"
-                onClick={() => {
-                  setExportStatus("");
-                  setIsExportPanelOpen(true);
-                }}
-              >
-                Export Day
-              </button>
-            </div>
+            <input
+              ref={foodLogImportInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: "none" }}
+              onChange={(event) => readFoodLogImport(event.target.files?.[0])}
+            />
             {importStatus && <p className="import-inline-status">{importStatus}</p>}
             {importErrors.length > 0 && importDrafts.length === 0 && (
               <div className="import-inline-errors" role="alert">
@@ -2090,6 +2072,33 @@ if (appView === "egg-oracle") {
             )}
 
             <section className="log-summary-card">
+              <button
+                type="button"
+                className="log-menu-button"
+                aria-label="Log options"
+                onClick={() => setIsLogMenuOpen((v) => !v)}
+              >
+                ⋯
+              </button>
+              {isLogMenuOpen && (
+                <>
+                  <div className="log-menu-backdrop" onClick={() => setIsLogMenuOpen(false)} />
+                  <div className="log-menu-dropdown">
+                    <button
+                      type="button"
+                      onClick={() => { setIsLogMenuOpen(false); setIsImportDayOpen(true); }}
+                    >
+                      Import
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setIsLogMenuOpen(false); setExportStatus(""); setIsExportPanelOpen(true); }}
+                    >
+                      Export
+                    </button>
+                  </div>
+                </>
+              )}
               <div className="log-calorie-stat">
                 <span>Logged</span>
                 <strong>{netCalories.toLocaleString()}</strong>
