@@ -83,6 +83,7 @@ import {
   createClientId,
   getConfiguredGoogleClientId,
   searchUsdaFoodsWithSynonyms,
+  fetchUsdaFoodDetail,
   type Food,
   type RecipeIngredient,
   type Recipe,
@@ -557,10 +558,7 @@ function App() {
 
     try {
       setIsLoadingDetail(true);
-      const res = await fetch(
-        `https://jessica-worker.snack-bunker.workers.dev/detail?id=${encodeURIComponent(food.id)}`
-      );
-      const detail = (await res.json()) as FoodDetail;
+      const detail = await fetchUsdaFoodDetail(food.id);
       const portions = getPortionOptions(detail, food.name);
 
       setSelectedFoodDetail(detail);

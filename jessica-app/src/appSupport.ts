@@ -48,13 +48,31 @@ type FoodNutrient = {
 };
 
 type FoodDetail = {
+  id?: number;
+  name?: string;
+  brand?: string | null;
+  category?: string | null;
   dataType?: string | null;
-  servingSize?: number | string | null;
+  publicationDate?: string | null;
+  ingredients?: string | null;
+  gtinUpc?: string | null;
+  servingSize?: string | null;
+  servingSizeValue?: number | null;
   servingSizeUnit?: string | null;
+  householdServingFullText?: string | null;
   labelNutrients?: {
-    calories?: {
-      value?: number | null;
-    } | null;
+    fat?: { value?: number | null } | null;
+    saturatedFat?: { value?: number | null } | null;
+    transFat?: { value?: number | null } | null;
+    cholesterol?: { value?: number | null } | null;
+    sodium?: { value?: number | null } | null;
+    carbohydrates?: { value?: number | null } | null;
+    fiber?: { value?: number | null } | null;
+    sugars?: { value?: number | null } | null;
+    protein?: { value?: number | null } | null;
+    calcium?: { value?: number | null } | null;
+    iron?: { value?: number | null } | null;
+    calories?: { value?: number | null } | null;
   } | null;
   foodPortions?: FoodPortion[];
   foodNutrients?: FoodNutrient[];
@@ -64,6 +82,7 @@ type FoodDetail = {
     carbs?: number;
     fat?: number;
     fiber?: number;
+    sugars?: number;
     sodium?: number;
   };
 };
@@ -1670,12 +1689,22 @@ function getBrandDisplayName(brand: string | null | undefined) {
   return brand ? formatDisplayName(brand) : "Generic";
 }
 
+const WORKER_BASE_URL = "https://jessica-worker.snack-bunker.workers.dev";
+
 async function fetchUsdaFoods(query: string) {
   const res = await fetch(
-    `https://jessica-worker.snack-bunker.workers.dev/?query=${encodeURIComponent(query)}`
+    `${WORKER_BASE_URL}/?query=${encodeURIComponent(query)}`
   );
 
   return (await res.json()) as Food[];
+}
+
+async function fetchUsdaFoodDetail(foodId: number): Promise<FoodDetail> {
+  const res = await fetch(
+    `${WORKER_BASE_URL}/detail?id=${encodeURIComponent(foodId)}`
+  );
+
+  return res.json() as Promise<FoodDetail>;
 }
 
 async function searchUsdaFoodsWithSynonyms(query: string) {
@@ -2105,4 +2134,4 @@ function getConfiguredGoogleClientId() {
 }
 
 export type { Food, RecipeIngredient, Recipe, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, WeightImportEntry, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, OAuthPendingAction, MealCategory, LogItem, SavedLogItem };
-export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, fetchUsdaFoods, searchUsdaFoodsWithSynonyms };
+export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms };

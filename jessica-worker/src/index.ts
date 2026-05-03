@@ -1,3 +1,5 @@
+import type { FdcFoodDetail, FdcFoodNutrient, FdcSearchResponse, FdcSearchResultFood } from "./fdc-types";
+
 const DETAIL_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SEARCH_DETAIL_ENRICH_LIMIT = 8;
 const SEARCH_RESULT_LIMIT = 15;
@@ -15,14 +17,30 @@ const UNIT_LABELS: Record<string, string> = {
 
 type DetailCacheEntry = {
   expiresAt: number;
-  food: any;
+  food: FdcFoodDetail;
 };
 
 type SearchRequest = {
   query: string;
   brandOwner?: string;
   brandedOnly?: boolean;
-  requireAllWords?: boolean;
+};
+
+/** Shape returned by the worker's search endpoint (GET /). */
+export type WorkerFood = {
+  id: number;
+  name: string;
+  brand: string | null;
+  category: string | null;
+  ingredients: string | null;
+  dataType: string | undefined;
+  servingSize: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber?: number;
+  sodium?: number;
 };
 
 const detailCache = new Map<string, DetailCacheEntry>();
@@ -59,23 +77,21 @@ export default {
     }
     // Filter raw USDA results before any scoring or mapping
     const dataFoods = resultSets
-      .flatMap((data) => data.foods || [])
-      .filter((food: any) => !isExperimentalFood(food));
+      .flatMap((data: FdcSearchResponse) => data.foods ?? [])
+      .filter((food: FdcSearchResultFood) => !isExperimentalFood(food));
 
-    const seen = new Set();
+    const seen = new Set<number | string>();
 
-    const foods = dataFoods
-      .map((food: any) => {
-        const servingSize = getServingSizeText(food) ?? "100 g";
-
+    const foods: WorkerFood[] = dataFoods
+      .map((food: FdcSearchResultFood) => {
         return {
           id: food.fdcId,
           name: food.description,
-          brand: food.brandName || food.brandOwner || null,
-          category: food.foodCategory || null,
-          ingredients: food.ingredients || null,
+          brand: food.brandOwner ?? null,
+          category: food.foodCategory ?? null,
+          ingredients: food.ingredients ?? null,
           dataType: food.dataType,
-          servingSize,
+          servingSize: "100 g",
           calories: getCaloriesValue(food),
           protein: Math.max(0, getProteinValue(food)),
           carbs: Math.max(0, getCarbsValue(food)),
@@ -83,9 +99,9 @@ export default {
         };
       })
       // Defensive: exclude experimental entries and zero-calorie records that slipped through
-      .filter((food: any) => !isExperimentalFood(food) && food.calories > 0)
-      .sort((a: any, b: any) => rankSearchResult(b, query) - rankSearchResult(a, query))
-      .filter((food: any) => {
+      .filter((food: WorkerFood) => !isExperimentalFood(food) && food.calories > 0)
+      .sort((a: WorkerFood, b: WorkerFood) => rankSearchResult(b, query) - rankSearchResult(a, query))
+      .filter((food: WorkerFood) => {
         const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
         if (seen.has(key)) return false;
         seen.add(key);
@@ -97,15 +113,11 @@ export default {
   },
 };
 
-async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<any> {
+async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<FdcSearchResponse> {
   const searchUrl = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
   searchUrl.searchParams.set("query", request.query);
   searchUrl.searchParams.set("pageSize", String(USDA_SEARCH_PAGE_SIZE));
   searchUrl.searchParams.set("api_key", apiKey);
-
-  if (request.requireAllWords) {
-    searchUrl.searchParams.set("requireAllWords", "true");
-  }
 
   if (request.brandedOnly) {
     searchUrl.searchParams.set("dataType", "Branded");
@@ -120,7 +132,7 @@ async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<
     throw await toUsdaRequestError(r);
   }
 
-  return r.json();
+  return r.json() as Promise<FdcSearchResponse>;
 }
 
 async function handleDetail(url: URL, env: any): Promise<Response> {
@@ -138,7 +150,7 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
     return missingUsdaApiKey();
   }
 
-  let food: any;
+  let food: FdcFoodDetail;
   try {
     food = await fetchUsdaFoodDetail(id, apiKey);
   } catch (error) {
@@ -160,8 +172,8 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
   return json({
     id: food.fdcId,
     name: food.description,
-    brand: food.brandName || food.brandOwner || null,
-    category: food.foodCategory?.description || food.foodCategory || null,
+    brand: food.brandOwner ?? null,
+    category: typeof food.foodCategory === "object" ? (food.foodCategory?.description ?? null) : (food.foodCategory ?? null),
     dataType: food.dataType,
     publicationDate: food.publicationDate || null,
     ingredients: food.ingredients || null,
@@ -189,10 +201,10 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
   });
 }
 
-async function enrichBrandedSearchResults(foods: any[], apiKey: string): Promise<any[]> {
+async function enrichBrandedSearchResults(foods: WorkerFood[], apiKey: string): Promise<WorkerFood[]> {
   let enrichedCount = 0;
 
-  const enrichedFoods = await Promise.all(
+  return Promise.all(
     foods.map(async (food) => {
       if (!isPackagedFood(food) || enrichedCount >= SEARCH_DETAIL_ENRICH_LIMIT) {
         return food;
@@ -223,11 +235,9 @@ async function enrichBrandedSearchResults(foods: any[], apiKey: string): Promise
       }
     })
   );
-
-  return enrichedFoods;
 }
 
-async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<any> {
+async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<FdcFoodDetail> {
   const cached = detailCache.get(id);
   if (cached && cached.expiresAt > Date.now()) {
     return cached.food;
@@ -243,7 +253,7 @@ async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<any> {
     throw await toUsdaRequestError(r);
   }
 
-  const food: any = await r.json();
+  const food = await r.json() as FdcFoodDetail;
   detailCache.set(id, {
     expiresAt: Date.now() + DETAIL_CACHE_TTL_MS,
     food,
@@ -252,8 +262,11 @@ async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<any> {
   return food;
 }
 
-function isPackagedFood(food: any): boolean {
-  return normalizeSearchText(food.dataType) === "branded" || Boolean(food.brand);
+type FoodWithNutrients = Pick<FdcFoodDetail, "servingSize" | "servingSizeUnit" | "labelNutrients" | "foodNutrients"> &
+  Pick<FdcSearchResultFood, "foodNutrients"> & { dataType?: string; brand?: string | null };
+
+function isPackagedFood(food: WorkerFood): boolean {
+  return normalizeSearchText(food.dataType ?? "") === "branded" || Boolean(food.brand);
 }
 
 function isHumanServingUnit(unit: unknown): boolean {
@@ -262,7 +275,7 @@ function isHumanServingUnit(unit: unknown): boolean {
   return upper !== "RACC" && upper !== "PORTION";
 }
 
-function getServingSizeText(food: any): string | null {
+function getServingSizeText(food: Pick<FdcFoodDetail, "servingSize" | "servingSizeUnit">): string | null {
   const unit = normalizeServingUnit(food.servingSizeUnit);
 
   return food.servingSize && isHumanServingUnit(unit)
@@ -277,8 +290,8 @@ function normalizeServingUnit(unit: unknown): string | null {
   return UNIT_LABELS[trimmedUnit.toUpperCase()] ?? trimmedUnit.toLowerCase();
 }
 
-function normalizeFoodPortions(portions: any[]): any[] {
-  return portions.map((portion) => ({
+function normalizeFoodPortions(portions: FdcFoodDetail["foodPortions"]): FdcFoodDetail["foodPortions"] {
+  return (portions ?? []).map((portion) => ({
     ...portion,
     measureUnit: portion.measureUnit
       ? {
@@ -297,7 +310,7 @@ const ENERGY_NAMES = [
   "Energy (Atwater Specific Factors)",
 ];
 
-function getCaloriesValue(food: any): number {
+function getCaloriesValue(food: FoodWithNutrients): number {
   const labelCalories = getLabelCaloriesValue(food);
   if (labelCalories !== null) return labelCalories;
 
@@ -316,45 +329,43 @@ function getCaloriesValue(food: any): number {
   return 0;
 }
 
-function getLabelCaloriesValue(food: any): number | null {
+function getLabelCaloriesValue(food: FoodWithNutrients): number | null {
   const labelCalories = getLabelNutrientValue(food, "calories");
-  return labelCalories !== null
-    ? Math.round(labelCalories)
-    : null;
+  return labelCalories !== null ? Math.round(labelCalories) : null;
 }
 
-function getProteinValue(food: any): number {
+function getProteinValue(food: FoodWithNutrients): number {
   return getLabelNutrientValue(food, "protein") ?? getNutrientValue(food, "Protein");
 }
 
-function getCarbsValue(food: any): number {
+function getCarbsValue(food: FoodWithNutrients): number {
   return getLabelNutrientValue(food, "carbohydrates") ?? getNutrientValue(food, "Carbohydrate, by difference");
 }
 
-function getFatValue(food: any): number {
+function getFatValue(food: FoodWithNutrients): number {
   return getLabelNutrientValue(food, "fat") ?? getNutrientValue(food, "Total lipid (fat)");
 }
 
-function getFiberValue(food: any): number {
+function getFiberValue(food: FoodWithNutrients): number {
   return getLabelNutrientValue(food, "fiber") ?? getNutrientValue(food, "Fiber, total dietary");
 }
 
-function getSodiumValue(food: any): number {
+function getSodiumValue(food: FoodWithNutrients): number {
   return getLabelNutrientValue(food, "sodium") ?? getNutrientValue(food, "Sodium, Na");
 }
 
-function getLabelNutrientValue(food: any, key: string): number | null {
+function getLabelNutrientValue(food: FoodWithNutrients, key: keyof NonNullable<FdcFoodDetail["labelNutrients"]>): number | null {
   const value = food.labelNutrients?.[key]?.value;
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function getNutrientValue(food: any, name: string | string[], unit?: string): number {
+function getNutrientValue(food: FoodWithNutrients, name: string | string[], unit?: string): number {
   const names = Array.isArray(name) ? name : [name];
-  const nutrient = food.foodNutrients?.find((n: any) => {
-    const nutrientName = n.nutrientName || n.nutrient?.name;
-    const unitName = n.unitName || n.nutrient?.unitName;
-
-    return names.includes(nutrientName) && (!unit || unitName?.toUpperCase() === unit);
+  const nutrients = food.foodNutrients as Array<FdcFoodNutrient & { nutrientName?: string; value?: number; unitName?: string }> | undefined;
+  const nutrient = nutrients?.find((n) => {
+    const nutrientName = n.nutrientName ?? n.nutrient?.name;
+    const unitName = n.unitName ?? n.nutrient?.unitName;
+    return names.includes(nutrientName ?? "") && (!unit || unitName?.toUpperCase() === unit);
   });
 
   return nutrient?.value ?? nutrient?.amount ?? 0;
@@ -364,10 +375,9 @@ function expandSearchRequests(query: string): SearchRequest[] {
   const normalizedQuery = normalizeSearchText(query);
   const queryWithoutPunctuation = normalizeSearchForMatching(query);
   const brandMatch = getKnownBrandMatch(normalizedQuery);
-  const multiWord = getSearchWords(queryWithoutPunctuation).length > 1;
   const requests: SearchRequest[] = [
-    { query, requireAllWords: multiWord },
-    { query, brandedOnly: true, requireAllWords: multiWord },
+    { query },
+    { query, brandedOnly: true },
   ];
 
   if (brandMatch) {
@@ -439,12 +449,12 @@ function dedupeSearchRequests(requests: SearchRequest[]): SearchRequest[] {
   });
 }
 
-function rankSearchResult(food: any, query: string): number {
+function rankSearchResult(food: WorkerFood, query: string): number {
   const queryText = normalizeSearchForMatching(query);
   const queryWords = getSearchWords(queryText);
   const name = normalizeSearchForMatching(food.name);
-  const brand = normalizeSearchForMatching(food.brand);
-  const category = normalizeSearchForMatching(food.category);
+  const brand = normalizeSearchForMatching(food.brand ?? "");
+  const category = normalizeSearchForMatching(food.category ?? "");
   const searchableText = `${name} ${brand} ${category}`.trim();
   const dataType = normalizeSearchForMatching(food.dataType);
   const matchedNameWords = queryWords.filter((word) => hasSearchWord(name, word));
@@ -479,13 +489,11 @@ function rankSearchResult(food: any, query: string): number {
   return score;
 }
 
-function isExperimentalFood(food: any): boolean {
+function isExperimentalFood(food: FdcSearchResultFood | WorkerFood): boolean {
   const candidates = [
     food.dataType,
-    food.data_type,
-    food.foodDataType,
-    food.foodCategory,
-    food.category,
+    (food as FdcSearchResultFood).foodCategory,
+    (food as WorkerFood).category,
   ];
   return candidates.some((v) => {
     const t = normalizeSearchText(v ?? "");
@@ -521,19 +529,6 @@ function getUsdaApiKey(env: any): string | null {
 
 function missingUsdaApiKey(): Response {
   return json({ error: "USDA_API_KEY is not configured." }, 500);
-}
-
-async function usdaError(response: Response): Promise<Response> {
-  const error = await toUsdaRequestError(response);
-
-  return json(
-    {
-      error: error.message,
-      status: error.status,
-      detail: error.detail,
-    },
-    response.status
-  );
 }
 
 async function toUsdaRequestError(response: Response): Promise<Error & { status: number; detail: string }> {
