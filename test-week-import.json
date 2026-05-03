@@ -1,0 +1,600 @@
+[
+  {
+    "date": "2026-04-27",
+    "weightEntry": { "weight": 172.4 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Oatmeal with Berries",
+            "serving": "1 cup cooked",
+            "calories": "310",
+            "protein": "10",
+            "carbs": "56",
+            "fat": "6",
+            "notes": "Topped with blueberries and a drizzle of honey"
+          },
+          {
+            "name": "Black Coffee",
+            "serving": "12 oz",
+            "calories": "5",
+            "protein": "0",
+            "carbs": "1",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Grilled Chicken Salad",
+            "serving": "1 large bowl",
+            "calories": "450",
+            "protein": "40",
+            "carbs": "18",
+            "fat": "22",
+            "notes": "Romaine, cucumber, cherry tomatoes, olive oil dressing"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "Apple with Peanut Butter",
+            "serving": "1 medium apple + 2 tbsp PB",
+            "calories": "215",
+            "protein": "6",
+            "carbs": "30",
+            "fat": "11"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Grilled Salmon",
+            "serving": "6 oz fillet",
+            "calories": "320",
+            "protein": "42",
+            "carbs": "0",
+            "fat": "16"
+          },
+          {
+            "name": "Roasted Broccoli",
+            "serving": "1.5 cups",
+            "calories": "90",
+            "protein": "6",
+            "carbs": "12",
+            "fat": "4"
+          },
+          {
+            "name": "Brown Rice",
+            "serving": "3/4 cup cooked",
+            "calories": "165",
+            "protein": "4",
+            "carbs": "34",
+            "fat": "1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-28",
+    "weightEntry": { "weight": 171.8 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Greek Yogurt with Granola",
+            "serving": "1 cup yogurt + 1/3 cup granola",
+            "calories": "385",
+            "protein": "22",
+            "carbs": "48",
+            "fat": "10",
+            "notes": "Plain 2% Greek yogurt"
+          },
+          {
+            "name": "Orange Juice",
+            "serving": "8 oz",
+            "calories": "110",
+            "protein": "2",
+            "carbs": "26",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Turkey and Avocado Sandwich",
+            "serving": "1 sandwich",
+            "calories": "490",
+            "protein": "32",
+            "carbs": "42",
+            "fat": "18",
+            "notes": "Whole wheat bread, 4 oz turkey, half avocado, mustard"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "Mixed Nuts",
+            "serving": "1 oz",
+            "calories": "175",
+            "protein": "5",
+            "carbs": "7",
+            "fat": "16"
+          },
+          {
+            "name": "Banana",
+            "serving": "1 medium",
+            "calories": "105",
+            "protein": "1",
+            "carbs": "27",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Chicken Stir Fry",
+            "serving": "1.5 cups",
+            "calories": "420",
+            "protein": "36",
+            "carbs": "28",
+            "fat": "16",
+            "notes": "Bell peppers, snap peas, garlic-ginger sauce"
+          },
+          {
+            "name": "Jasmine Rice",
+            "serving": "1 cup cooked",
+            "calories": "205",
+            "protein": "4",
+            "carbs": "45",
+            "fat": "0"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-29",
+    "weightEntry": { "weight": 172.1 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Scrambled Eggs",
+            "serving": "3 large eggs",
+            "calories": "210",
+            "protein": "18",
+            "carbs": "2",
+            "fat": "14"
+          },
+          {
+            "name": "Whole Wheat Toast",
+            "serving": "2 slices",
+            "calories": "160",
+            "protein": "8",
+            "carbs": "28",
+            "fat": "3"
+          },
+          {
+            "name": "Coffee with Oat Milk",
+            "serving": "12 oz",
+            "calories": "50",
+            "protein": "1",
+            "carbs": "8",
+            "fat": "1"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Tuna Wrap",
+            "serving": "1 large wrap",
+            "calories": "445",
+            "protein": "38",
+            "carbs": "36",
+            "fat": "14",
+            "notes": "Albacore tuna, light mayo, celery, spinach, whole wheat tortilla"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "Protein Bar",
+            "serving": "1 bar",
+            "calories": "200",
+            "protein": "20",
+            "carbs": "22",
+            "fat": "7",
+            "source": "Quest"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Beef Tacos",
+            "serving": "3 tacos",
+            "calories": "555",
+            "protein": "32",
+            "carbs": "48",
+            "fat": "22",
+            "notes": "Corn tortillas, lean ground beef, salsa, shredded cheese, lime crema"
+          },
+          {
+            "name": "Black Beans",
+            "serving": "1/2 cup",
+            "calories": "115",
+            "protein": "7",
+            "carbs": "20",
+            "fat": "1"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-30",
+    "weightEntry": { "weight": 171.5 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Avocado Toast",
+            "serving": "2 slices with half avocado",
+            "calories": "360",
+            "protein": "11",
+            "carbs": "38",
+            "fat": "18",
+            "notes": "Everything bagel seasoning, red pepper flakes"
+          },
+          {
+            "name": "Fried Egg",
+            "serving": "1 large",
+            "calories": "90",
+            "protein": "6",
+            "carbs": "0",
+            "fat": "7"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Quinoa Power Bowl",
+            "serving": "1 large bowl",
+            "calories": "525",
+            "protein": "24",
+            "carbs": "64",
+            "fat": "18",
+            "notes": "Quinoa, roasted sweet potato, chickpeas, tahini dressing, arugula"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "Cottage Cheese with Pineapple",
+            "serving": "1/2 cup cottage cheese + 1/4 cup pineapple",
+            "calories": "145",
+            "protein": "14",
+            "carbs": "16",
+            "fat": "2"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Baked Chicken Thighs",
+            "serving": "2 thighs (skinless)",
+            "calories": "340",
+            "protein": "46",
+            "carbs": "0",
+            "fat": "16",
+            "notes": "Lemon herb marinade"
+          },
+          {
+            "name": "Roasted Sweet Potato",
+            "serving": "1 medium",
+            "calories": "115",
+            "protein": "2",
+            "carbs": "27",
+            "fat": "0"
+          },
+          {
+            "name": "Sauteed Spinach",
+            "serving": "2 cups cooked",
+            "calories": "80",
+            "protein": "5",
+            "carbs": "6",
+            "fat": "4",
+            "notes": "Garlic and olive oil"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-01",
+    "weightEntry": { "weight": 171.2 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Smoothie Bowl",
+            "serving": "1 bowl",
+            "calories": "330",
+            "protein": "14",
+            "carbs": "58",
+            "fat": "6",
+            "notes": "Frozen acai, banana, almond milk, topped with granola and kiwi"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Chicken Burrito Bowl",
+            "serving": "1 bowl",
+            "calories": "585",
+            "protein": "42",
+            "carbs": "60",
+            "fat": "18",
+            "notes": "Grilled chicken, brown rice, black beans, pico, guacamole"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "Rice Cakes with Hummus",
+            "serving": "2 rice cakes + 3 tbsp hummus",
+            "calories": "155",
+            "protein": "5",
+            "carbs": "24",
+            "fat": "5"
+          },
+          {
+            "name": "Clementine",
+            "serving": "2 clementines",
+            "calories": "70",
+            "protein": "1",
+            "carbs": "18",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Shrimp Fried Rice",
+            "serving": "2 cups",
+            "calories": "545",
+            "protein": "30",
+            "carbs": "68",
+            "fat": "15",
+            "notes": "Large shrimp, egg, peas, carrots, low-sodium soy sauce, sesame oil"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-02",
+    "weightEntry": { "weight": 170.9 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Whole Grain Cereal",
+            "serving": "1.5 cups",
+            "calories": "210",
+            "protein": "6",
+            "carbs": "46",
+            "fat": "2",
+            "source": "Kashi Go"
+          },
+          {
+            "name": "Skim Milk",
+            "serving": "1 cup",
+            "calories": "85",
+            "protein": "8",
+            "carbs": "12",
+            "fat": "0"
+          },
+          {
+            "name": "Blueberries",
+            "serving": "1/2 cup",
+            "calories": "42",
+            "protein": "1",
+            "carbs": "11",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Lentil Vegetable Soup",
+            "serving": "2 cups",
+            "calories": "380",
+            "protein": "20",
+            "carbs": "58",
+            "fat": "6",
+            "notes": "Homemade with carrots, celery, kale"
+          },
+          {
+            "name": "Sourdough Bread",
+            "serving": "1 slice",
+            "calories": "120",
+            "protein": "4",
+            "carbs": "22",
+            "fat": "1"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "String Cheese",
+            "serving": "2 sticks",
+            "calories": "160",
+            "protein": "14",
+            "carbs": "2",
+            "fat": "10"
+          },
+          {
+            "name": "Grapes",
+            "serving": "1 cup",
+            "calories": "104",
+            "protein": "1",
+            "carbs": "27",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Turkey Meatballs",
+            "serving": "5 meatballs",
+            "calories": "300",
+            "protein": "32",
+            "carbs": "12",
+            "fat": "14",
+            "notes": "Lean turkey, parmesan, herbs"
+          },
+          {
+            "name": "Zucchini Noodles",
+            "serving": "2 cups",
+            "calories": "40",
+            "protein": "3",
+            "carbs": "7",
+            "fat": "1"
+          },
+          {
+            "name": "Marinara Sauce",
+            "serving": "1/2 cup",
+            "calories": "70",
+            "protein": "2",
+            "carbs": "12",
+            "fat": "2",
+            "source": "Rao's"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-03",
+    "weightEntry": { "weight": 170.6 },
+    "meals": [
+      {
+        "name": "Breakfast",
+        "items": [
+          {
+            "name": "Banana Protein Pancakes",
+            "serving": "4 pancakes",
+            "calories": "380",
+            "protein": "26",
+            "carbs": "42",
+            "fat": "10",
+            "notes": "Banana, eggs, oats, protein powder"
+          },
+          {
+            "name": "Fresh Strawberries",
+            "serving": "1 cup",
+            "calories": "50",
+            "protein": "1",
+            "carbs": "12",
+            "fat": "0"
+          }
+        ]
+      },
+      {
+        "name": "Lunch",
+        "items": [
+          {
+            "name": "Caesar Salad with Grilled Chicken",
+            "serving": "1 large plate",
+            "calories": "495",
+            "protein": "38",
+            "carbs": "20",
+            "fat": "28",
+            "notes": "Romaine, parmesan, whole wheat croutons, light Caesar dressing"
+          }
+        ]
+      },
+      {
+        "name": "Snacks",
+        "items": [
+          {
+            "name": "Edamame",
+            "serving": "1 cup shelled",
+            "calories": "190",
+            "protein": "17",
+            "carbs": "14",
+            "fat": "8",
+            "notes": "Lightly salted"
+          }
+        ]
+      },
+      {
+        "name": "Dinner",
+        "items": [
+          {
+            "name": "Pasta with Turkey Bolognese",
+            "serving": "1.5 cups pasta + sauce",
+            "calories": "580",
+            "protein": "36",
+            "carbs": "72",
+            "fat": "14",
+            "notes": "Penne, lean ground turkey, San Marzano tomatoes, fresh basil"
+          },
+          {
+            "name": "Side Salad",
+            "serving": "1 small",
+            "calories": "65",
+            "protein": "2",
+            "carbs": "8",
+            "fat": "3",
+            "notes": "Mixed greens, balsamic vinaigrette"
+          }
+        ]
+      }
+    ]
+  }
+]

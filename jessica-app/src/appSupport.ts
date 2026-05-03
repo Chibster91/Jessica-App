@@ -234,8 +234,14 @@ type FoodLogImportDraft = {
   source: string;
 };
 
+type WeightImportEntry = {
+  id: string;
+  date: string;
+  weightLb: number;
+};
+
 type FoodLogImportResult =
-  | { ok: true; items: FoodLogImportDraft[] }
+  | { ok: true; items: FoodLogImportDraft[]; weightEntries: WeightImportEntry[]; isMultiDay: boolean }
   | { ok: false; errors: string[] };
 
 type ScannedNutritionFields = Partial<
@@ -306,10 +312,19 @@ type GoogleDriveFileListResponse = {
   files?: GoogleDriveFile[];
 };
 
+type OAuthPendingAction = {
+  action: "export" | "import-list" | "import-file";
+  clientId: string;
+  fileId?: string;
+  fileName?: string;
+  timestamp: number;
+};
+
 const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 const poundsPerKilogram = 2.2046226218;
 const debugLogKey = "jessicaDebugLog";
 const googleDriveClientIdKey = "googleDriveClientId";
+const oauthPendingActionKey = "oauthPendingAction";
 const googleDriveScope = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly";
 const googleIdentityScriptUrl = "https://accounts.google.com/gsi/client";
 const iconBaseUrl = `${import.meta.env.BASE_URL}Icons/`;
@@ -702,64 +717,86 @@ function buildImportDraft(date: string, meal: string, item: unknown): FoodLogImp
 }
 
 function parseFoodLogImportJson(json: unknown): FoodLogImportResult {
-  if (!isRecord(json)) {
-    return { ok: false, errors: ["Import file must be a JSON object."] };
+  if (!isRecord(json) && !Array.isArray(json)) {
+    return { ok: false, errors: ["Import file must be a JSON object or array of day objects."] };
   }
 
-  const date = readStringField(json, ["date"]);
+  const isMulti = Array.isArray(json);
+  const days: unknown[] = isMulti ? json : [json];
   const items: FoodLogImportDraft[] = [];
+  const weightEntries: WeightImportEntry[] = [];
   const errors: string[] = [];
 
-  if (!date) {
-    errors.push("Top-level date is required.");
-  } else if (!isValidLogDate(date)) {
-    errors.push("Top-level date must be YYYY-MM-DD.");
-  }
+  days.forEach((day, dayIndex) => {
+    const prefix = isMulti ? `Day ${dayIndex + 1}: ` : "";
 
-  if (Array.isArray(json.meals)) {
-    json.meals.forEach((mealValue, mealIndex) => {
-      if (!isRecord(mealValue)) {
-        errors.push(`Meal ${mealIndex + 1}: meal must be an object.`);
-        return;
-      }
-
-      const mealName = readStringField(mealValue, ["name", "meal", "mealName"]);
-      const mealItems = Array.isArray(mealValue.items)
-        ? mealValue.items
-        : Array.isArray(mealValue.foods)
-          ? mealValue.foods
-          : null;
-
-      if (!mealName) errors.push(`Meal ${mealIndex + 1}: meal name is required.`);
-      if (!mealItems) {
-        errors.push(`Meal ${mealIndex + 1}: items must be an array.`);
-        return;
-      }
-
-      mealItems.forEach((food, foodIndex) => {
-        const draft = buildImportDraft(date, mealName, food);
-        if (draft) items.push(draft);
-        else errors.push(`Meal ${mealIndex + 1}, item ${foodIndex + 1}: item must be an object.`);
-      });
-    });
-  } else {
-    const mealName = readStringField(json, ["meal", "mealName"]);
-    if (!mealName) errors.push("Meal name is required.");
-    if (!Array.isArray(json.items)) {
-      errors.push("Items must be an array.");
-    } else {
-      json.items.forEach((food, index) => {
-        const draft = buildImportDraft(date, mealName, food);
-        if (draft) items.push(draft);
-        else errors.push(`Item ${index + 1}: item must be an object.`);
-      });
+    if (!isRecord(day)) {
+      errors.push(isMulti ? `Day ${dayIndex + 1} must be a JSON object.` : "Import file must be a JSON object.");
+      return;
     }
-  }
 
-  if (items.length === 0) errors.push("Import file must include at least one item.");
+    const date = readStringField(day, ["date"]);
+    if (!date) {
+      errors.push(`${prefix}date is required.`);
+    } else if (!isValidLogDate(date)) {
+      errors.push(`${prefix}date must be YYYY-MM-DD.`);
+    }
+
+    if (isRecord(day.weightEntry)) {
+      const w = Number(day.weightEntry.weight);
+      if (!date || !isValidLogDate(date)) {
+        // date error already pushed above
+      } else if (!Number.isFinite(w) || w <= 0) {
+        errors.push(`${prefix}weightEntry.weight must be a positive number (in lbs).`);
+      } else {
+        weightEntries.push({ id: createClientId(), date, weightLb: w });
+      }
+    }
+
+    if (Array.isArray(day.meals)) {
+      day.meals.forEach((mealValue, mealIndex) => {
+        if (!isRecord(mealValue)) {
+          errors.push(`${prefix}Meal ${mealIndex + 1}: must be an object.`);
+          return;
+        }
+        const mealName = readStringField(mealValue, ["name", "meal", "mealName"]);
+        const mealItems = Array.isArray(mealValue.items)
+          ? mealValue.items
+          : Array.isArray(mealValue.foods)
+            ? mealValue.foods
+            : null;
+        if (!mealName) errors.push(`${prefix}Meal ${mealIndex + 1}: name is required.`);
+        if (!mealItems) {
+          errors.push(`${prefix}Meal ${mealIndex + 1}: items must be an array.`);
+          return;
+        }
+        mealItems.forEach((food, foodIndex) => {
+          const draft = buildImportDraft(date, mealName, food);
+          if (draft) items.push(draft);
+          else errors.push(`${prefix}Meal ${mealIndex + 1}, item ${foodIndex + 1}: must be an object.`);
+        });
+      });
+    } else if ("items" in day || "meal" in day || "mealName" in day) {
+      const mealName = readStringField(day, ["meal", "mealName"]);
+      if (!mealName) errors.push(`${prefix}meal name is required.`);
+      if (!Array.isArray(day.items)) {
+        errors.push(`${prefix}items must be an array.`);
+      } else {
+        day.items.forEach((food, index) => {
+          const draft = buildImportDraft(date, mealName, food);
+          if (draft) items.push(draft);
+          else errors.push(`${prefix}Item ${index + 1}: must be an object.`);
+        });
+      }
+    }
+  });
+
+  if (items.length === 0 && weightEntries.length === 0) {
+    errors.push("Import file must include at least one food item or weight entry.");
+  }
   items.forEach((item, index) => errors.push(...validateImportDraft(item, index)));
 
-  return errors.length > 0 ? { ok: false, errors } : { ok: true, items };
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, items, weightEntries, isMultiDay: isMulti };
 }
 
 function normalizeMealName(meal: string) {
@@ -1114,8 +1151,8 @@ function profileToGoals(profile: Profile): Goals {
       heightFeet: "",
       heightInches: "",
       heightUnit: "cm",
-      weight: String(profile.weightKg),
-      weightUnit: "kg",
+      weight: profile.units === "imperial" ? String(kgToLb(profile.weightKg)) : String(profile.weightKg),
+      weightUnit: profile.units === "imperial" ? "lb" as WeightUnit : "kg" as WeightUnit,
       activityLevel: toCalculatorActivityLevel(profile.activityLevel),
       goal: profile.goal,
       rate: profile.weeklyRateKg <= 0.25 ? "mild" : profile.weeklyRateKg >= 0.75 ? "aggressive" : "moderate",
@@ -2067,5 +2104,5 @@ function getConfiguredGoogleClientId() {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem(googleDriveClientIdKey) || "";
 }
 
-export type { Food, RecipeIngredient, Recipe, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, MealCategory, LogItem, SavedLogItem };
-export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, fetchUsdaFoods, searchUsdaFoodsWithSynonyms };
+export type { Food, RecipeIngredient, Recipe, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, WeightImportEntry, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, OAuthPendingAction, MealCategory, LogItem, SavedLogItem };
+export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, fetchUsdaFoods, searchUsdaFoodsWithSynonyms };

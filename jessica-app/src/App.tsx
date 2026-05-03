@@ -7,8 +7,10 @@ import { ProfileView } from "./components/ProfileView";
 import { WeightView } from "./components/WeightView";
 import EggOracle from "./features/egg-oracle/EggOracle";
 import {
+  mealCategories,
   debugLogKey,
   googleDriveClientIdKey,
+  oauthPendingActionKey,
   googleDriveScope,
   googleIdentityScriptUrl,
   emptyCustomFoodForm,
@@ -98,21 +100,50 @@ import {
   type WeightForm,
   type CustomFoodForm,
   type FoodLogImportDraft,
+  type WeightImportEntry,
   type ScannedNutritionFields,
   type RecipeForm,
   type AmountUnit,
   type GoogleDriveUploadResponse,
   type GoogleDriveFile,
   type GoogleDriveFileListResponse,
+  type OAuthPendingAction,
   type MealCategory,
   type LogItem
 } from "./appSupport";
 import "./App.css";
 
+interface ImportDayStep {
+  date: string;
+  items: FoodLogImportDraft[];
+  weightEntry: WeightImportEntry | null;
+}
+
+function buildImportSteps(items: FoodLogImportDraft[], weightEntries: WeightImportEntry[]): ImportDayStep[] {
+  const mealsByDate = new Map<string, FoodLogImportDraft[]>();
+  for (const item of items) {
+    if (!mealsByDate.has(item.date)) mealsByDate.set(item.date, []);
+    mealsByDate.get(item.date)!.push(item);
+  }
+  const allDates = Array.from(new Set([...mealsByDate.keys(), ...weightEntries.map((e) => e.date)])).sort();
+  return allDates.map((date) => ({
+    date,
+    items: mealsByDate.get(date) ?? [],
+    weightEntry: weightEntries.find((e) => e.date === date) ?? null,
+  }));
+}
+
+function isPwaStandalone(): boolean {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true
+  );
+}
+
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
-  const foodLogImportInputRef = useRef<HTMLInputElement | null>(null);
+
   const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
   const longPressRef = useRef<{ logId: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const suppressNextClickRef = useRef<string | null>(null);
@@ -202,6 +233,12 @@ function App() {
   const [mealToSaveAsRecipe, setMealToSaveAsRecipe] = useState<MealCategory | null>(null);
   const [mealRecipeName, setMealRecipeName] = useState("");
   const [mealToDelete, setMealToDelete] = useState<MealCategory | null>(null);
+  const [contextMenuItem, setContextMenuItem] = useState<LogItem | null>(null);
+  const [contextMenuY, setContextMenuY] = useState(0);
+  const [moveToMealItem, setMoveToMealItem] = useState<LogItem | null>(null);
+  const [moveToDayItem, setMoveToDayItem] = useState<LogItem | null>(null);
+  const [moveToDayDate, setMoveToDayDate] = useState("");
+  const [moveToDayStep, setMoveToDayStep] = useState<"date" | "meal">("date");
   const [itemToEdit, setItemToEdit] = useState<LogItem | null>(null);
   const [editItemQuantity, setEditItemQuantity] = useState("1");
   const [editItemServingSize, setEditItemServingSize] = useState("");
@@ -210,11 +247,17 @@ function App() {
   const [exportStatus, setExportStatus] = useState("");
   const [exportDriveLink, setExportDriveLink] = useState("");
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
+  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(null);
   const [googleDriveClientId, setGoogleDriveClientId] = useState(() => getConfiguredGoogleClientId());
   const [importDrafts, setImportDrafts] = useState<FoodLogImportDraft[]>([]);
+  const [importWeightEntries, setImportWeightEntries] = useState<WeightImportEntry[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importStatus, setImportStatus] = useState("");
   const [importFileName, setImportFileName] = useState("");
+  const [importSteps, setImportSteps] = useState<ImportDayStep[]>([]);
+  const [importStepIndex, setImportStepIndex] = useState(0);
+  const [importStepResults, setImportStepResults] = useState({ confirmed: 0, skipped: 0 });
+  const [importConfirmedDates, setImportConfirmedDates] = useState<string[]>([]);
   const [driveImportFiles, setDriveImportFiles] = useState<GoogleDriveFile[]>([]);
   const [driveImportStatus, setDriveImportStatus] = useState("");
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
@@ -330,6 +373,25 @@ function App() {
 
   useEffect(() => { saveCompletedDays(completedDays); }, [completedDays]);
   useEffect(() => { saveTopFoods(topFoods); }, [topFoods]);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash.includes("access_token=")) return;
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get("access_token");
+    if (!token) return;
+    window.history.replaceState(null, "", window.location.origin + window.location.pathname + window.location.search);
+    setDriveAccessToken(token);
+    const pendingRaw = localStorage.getItem(oauthPendingActionKey);
+    localStorage.removeItem(oauthPendingActionKey);
+    if (!pendingRaw) return;
+    try {
+      const pending = JSON.parse(pendingRaw) as OAuthPendingAction;
+      if (Date.now() - pending.timestamp > 10 * 60 * 1000) return;
+      setGoogleDriveClientId(pending.clientId);
+      resumePendingOAuthAction(pending, token);
+    } catch {}
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeSelectedDate(date: string) {
     setSelectedDate(date);
@@ -794,6 +856,20 @@ function App() {
     setItemToRemove(null);
   }
 
+  function moveItemToMeal(item: LogItem, targetCategory: MealCategory) {
+    setLog(log.map((i) => (i.logId === item.logId ? { ...i, category: targetCategory } : i)));
+    setMoveToMealItem(null);
+  }
+
+  function moveItemToDifferentDay(item: LogItem, targetDate: string, targetCategory: MealCategory) {
+    setLog(log.filter((i) => i.logId !== item.logId));
+    const targetLog = getSavedLog(targetDate);
+    setStorageJson(`log-${targetDate}`, [...targetLog, { ...item, category: targetCategory, logId: createClientId() }]);
+    setMoveToDayItem(null);
+    setMoveToDayDate("");
+    setMoveToDayStep("date");
+  }
+
   function openEditFoodItem(item: LogItem) {
     setItemToEdit(item);
     setEditItemQuantity(String(item.quantity));
@@ -871,9 +947,15 @@ function App() {
     } catch (error) {
       setImportDrafts([]);
       setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
-    } finally {
-      if (foodLogImportInputRef.current) foodLogImportInputRef.current.value = "";
     }
+  }
+
+  function openImportFilePicker() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = () => readFoodLogImport(input.files?.[0]);
+    input.click();
   }
 
   function loadFoodLogImportText(text: string, fileName: string) {
@@ -891,7 +973,15 @@ function App() {
       }
 
       setImportErrors([]);
-      setImportDrafts(result.items);
+      if (result.isMultiDay) {
+        setImportSteps(buildImportSteps(result.items, result.weightEntries));
+        setImportStepIndex(0);
+        setImportStepResults({ confirmed: 0, skipped: 0 });
+        setImportConfirmedDates([]);
+      } else {
+        setImportDrafts(result.items);
+        setImportWeightEntries(result.weightEntries);
+      }
     } catch (error) {
       setImportDrafts([]);
       setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
@@ -910,10 +1000,113 @@ function App() {
     setImportErrors([]);
   }
 
+  function removeImportWeightEntry(id: string) {
+    setImportWeightEntries((current) => current.filter((entry) => entry.id !== id));
+    setImportErrors([]);
+  }
+
   function closeImportPreview() {
     setImportDrafts([]);
+    setImportWeightEntries([]);
     setImportErrors([]);
     setImportFileName("");
+  }
+
+  function clearImportStepper() {
+    setImportSteps([]);
+    setImportStepIndex(0);
+    setImportStepResults({ confirmed: 0, skipped: 0 });
+    setImportConfirmedDates([]);
+    setImportFileName("");
+    setImportErrors([]);
+  }
+
+  function confirmImportStep() {
+    const step = importSteps[importStepIndex];
+    if (!step) return;
+
+    if (step.items.length > 0) {
+      const importedFoods = step.items.map((item, index) => {
+        const food: Food = {
+          id: -(Date.now() + index + 1),
+          name: item.name.trim(),
+          brand: null,
+          source: item.source.trim() || undefined,
+          servingSize: item.serving.trim(),
+          calories: Math.round(parseDecimalInput(item.calories)),
+          protein: parseDecimalInput(item.protein || "0"),
+          carbs: parseDecimalInput(item.carbs || "0"),
+          fat: parseDecimalInput(item.fat || "0"),
+          notes: item.notes.trim() || undefined,
+        };
+        return { meal: normalizeMealName(item.meal), food };
+      });
+
+      const existingLog = step.date === selectedDate ? log : getSavedLog(step.date);
+      const nextLog: LogItem[] = [
+        ...existingLog,
+        ...importedFoods.map(({ food, meal }) => ({
+          ...food,
+          logId: createClientId(),
+          category: meal,
+          quantity: 1 as const,
+        })),
+      ];
+      setStorageJson(`log-${step.date}`, nextLog);
+      if (step.date === selectedDate) setLog(nextLog);
+
+      setCustomFoods((current) => [...importedFoods.map((e) => e.food), ...current]);
+      setTopFoods((current) => {
+        const counts = new Map(current.map((f) => [f.name, f.count]));
+        importedFoods.forEach((e) => counts.set(e.food.name, (counts.get(e.food.name) ?? 0) + 1));
+        return Array.from(counts, ([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+      });
+    }
+
+    if (step.weightEntry) {
+      setWeightEntries((current) => [
+        ...current,
+        { id: createClientId(), date: step.weightEntry!.date, weight: step.weightEntry!.weightLb, unit: "lb" as const },
+      ]);
+    }
+
+    setImportStepResults((prev) => ({ ...prev, confirmed: prev.confirmed + 1 }));
+    setImportConfirmedDates((prev) => [...prev, step.date]);
+    setImportStepIndex((prev) => prev + 1);
+  }
+
+  function skipImportStep() {
+    setImportStepResults((prev) => ({ ...prev, skipped: prev.skipped + 1 }));
+    setImportStepIndex((prev) => prev + 1);
+  }
+
+  function cancelImportStepper() {
+    const { confirmed } = importStepResults;
+    if (confirmed > 0) {
+      const firstDate = importConfirmedDates[0];
+      if (firstDate) {
+        setSelectedDate(firstDate);
+        setLog(getSavedLog(firstDate));
+      }
+      setImportStatus(`Imported ${confirmed} of ${importSteps.length} day${importSteps.length === 1 ? "" : "s"}.`);
+    }
+    clearImportStepper();
+  }
+
+  function closeImportSummary() {
+    const firstDate = importConfirmedDates[0];
+    if (firstDate) {
+      setSelectedDate(firstDate);
+      setLog(getSavedLog(firstDate));
+    }
+    const { confirmed, skipped } = importStepResults;
+    const parts: string[] = [];
+    if (confirmed > 0) parts.push(`${confirmed} day${confirmed === 1 ? "" : "s"} imported`);
+    if (skipped > 0) parts.push(`${skipped} skipped`);
+    if (parts.length > 0) setImportStatus(parts.join(", ") + ".");
+    clearImportStepper();
   }
 
   function confirmFoodLogImport() {
@@ -980,7 +1173,20 @@ function App() {
       setLog(nextLogsByDate.get(firstDate) ?? getSavedLog(firstDate));
     }
 
-    setImportStatus(`Imported ${importedFoods.length} food${importedFoods.length === 1 ? "" : "s"}.`);
+    if (importWeightEntries.length > 0) {
+      const newWeightEntries: WeightEntry[] = importWeightEntries.map((entry) => ({
+        id: createClientId(),
+        date: entry.date,
+        weight: entry.weightLb,
+        unit: "lb" as const,
+      }));
+      setWeightEntries((current) => [...current, ...newWeightEntries]);
+    }
+
+    const parts: string[] = [];
+    if (importedFoods.length > 0) parts.push(`${importedFoods.length} food${importedFoods.length === 1 ? "" : "s"}`);
+    if (importWeightEntries.length > 0) parts.push(`${importWeightEntries.length} weight entr${importWeightEntries.length === 1 ? "y" : "ies"}`);
+    setImportStatus(`Imported ${parts.join(" and ")}.`);
     closeImportPreview();
   }
 
@@ -1132,9 +1338,28 @@ function App() {
     });
   }
 
-  async function getGoogleDriveAccessToken(clientId: string) {
-    await loadGoogleIdentityScript();
+  async function getGoogleDriveAccessToken(
+    clientId: string,
+    pendingAction?: Pick<OAuthPendingAction, "action" | "fileId" | "fileName">
+  ): Promise<string> {
+    if (driveAccessToken) return driveAccessToken;
 
+    if (isPwaStandalone()) {
+      if (!pendingAction) throw new Error("PWA OAuth requires a pending action.");
+      const pending: OAuthPendingAction = { ...pendingAction, clientId, timestamp: Date.now() };
+      localStorage.setItem(oauthPendingActionKey, JSON.stringify(pending));
+      const redirectUri = window.location.origin + window.location.pathname;
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: "token",
+        scope: googleDriveScope,
+      });
+      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+      return new Promise(() => {}); // page is navigating away
+    }
+
+    await loadGoogleIdentityScript();
     const oauth2 = window.google?.accounts?.oauth2;
     if (!oauth2) throw new Error("Google Identity Services is unavailable.");
 
@@ -1147,11 +1372,9 @@ function App() {
             reject(new Error(response.error_description || response.error || "Google sign-in failed."));
             return;
           }
-
           resolve(response.access_token);
         },
       });
-
       tokenClient.requestAccessToken({ prompt: "consent" });
     });
   }
@@ -1194,26 +1417,10 @@ function App() {
     }
   }
 
-  async function openDriveImport() {
-    if (isLoadingDriveImport) return;
-
-    const clientId = googleDriveClientId.trim();
-    setExportDriveLink("");
-    setDriveImportFiles([]);
-
-    if (!clientId) {
-      setExportStatus("Add your Google OAuth Client ID first.");
-      return;
-    }
-
-    localStorage.setItem(googleDriveClientIdKey, clientId);
-    setDriveImportStatus("Opening Google authorization...");
+  async function _doOpenDriveImport(token: string) {
     setIsLoadingDriveImport(true);
-
+    setDriveImportStatus("Loading JSON files from Google Drive...");
     try {
-      const accessToken = await getGoogleDriveAccessToken(clientId);
-      setDriveImportStatus("Loading JSON files from Google Drive...");
-
       const params = new URLSearchParams({
         pageSize: "20",
         orderBy: "modifiedTime desc",
@@ -1222,15 +1429,9 @@ function App() {
         q: "(mimeType='application/json' or name contains '.json') and trashed=false",
       });
       const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        throw new Error(await getGoogleDriveRequestError(response, "file list"));
-      }
-
+      if (!response.ok) throw new Error(await getGoogleDriveRequestError(response, "file list"));
       const result = (await response.json()) as GoogleDriveFileListResponse;
       const files = result.files ?? [];
       setDriveImportFiles(files);
@@ -1243,31 +1444,15 @@ function App() {
     }
   }
 
-  async function importGoogleDriveFile(file: GoogleDriveFile) {
-    if (isLoadingDriveImport) return;
-
-    const clientId = googleDriveClientId.trim();
-    if (!clientId) {
-      setDriveImportStatus("Add your Google OAuth Client ID first.");
-      return;
-    }
-
+  async function _doImportDriveFile(token: string, fileId: string, fileName: string) {
     setIsLoadingDriveImport(true);
-    setDriveImportStatus(`Loading ${file.name}...`);
-
+    setDriveImportStatus(`Loading ${fileName}...`);
     try {
-      const accessToken = await getGoogleDriveAccessToken(clientId);
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        throw new Error(await getGoogleDriveRequestError(response, "file download"));
-      }
-
-      loadFoodLogImportText(await response.text(), file.name);
+      if (!response.ok) throw new Error(await getGoogleDriveRequestError(response, "file download"));
+      loadFoodLogImportText(await response.text(), fileName);
       setDriveImportStatus("");
       setIsDriveImportOpen(false);
       setIsExportPanelOpen(false);
@@ -1278,28 +1463,12 @@ function App() {
     }
   }
 
-  async function uploadDayExportToDrive() {
-    if (isUploadingToDrive) return;
-
-    const clientId = googleDriveClientId.trim();
-    setExportDriveLink("");
-
-    if (!clientId) {
-      setExportStatus("Add your Google OAuth Client ID first.");
-      return;
-    }
-
-    localStorage.setItem(googleDriveClientIdKey, clientId);
-    setExportStatus("Opening Google authorization...");
+  async function _doUploadToDrive(token: string) {
     setIsUploadingToDrive(true);
-
+    setExportStatus("Uploading to Google Drive...");
     try {
-      const accessToken = await getGoogleDriveAccessToken(clientId);
       const file = getDayExportFile();
-      const metadata = {
-        name: file.name,
-        mimeType: "application/json",
-      };
+      const metadata = { name: file.name, mimeType: "application/json" };
       const boundary = `jessica_${createClientId().replace(/[^a-zA-Z0-9]/g, "")}`;
       const body = new Blob(
         [
@@ -1315,28 +1484,90 @@ function App() {
         ],
         { type: `multipart/related; boundary=${boundary}` }
       );
-
-      setExportStatus("Uploading to Google Drive...");
-
-      const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": `multipart/related; boundary=${boundary}`,
-        },
-        body,
-      });
-
-      if (!response.ok) {
-        throw new Error(await getGoogleDriveUploadError(response));
-      }
-
+      const response = await fetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": `multipart/related; boundary=${boundary}`,
+          },
+          body,
+        }
+      );
+      if (!response.ok) throw new Error(await getGoogleDriveUploadError(response));
       const uploaded = (await response.json()) as GoogleDriveUploadResponse;
       setExportDriveLink(uploaded.webViewLink ?? "");
       setExportStatus(`Uploaded ${uploaded.name ?? file.name} to Google Drive.`);
     } catch (error) {
       setExportStatus(error instanceof Error ? error.message : "Google Drive upload failed.");
     } finally {
+      setIsUploadingToDrive(false);
+    }
+  }
+
+  async function resumePendingOAuthAction(pending: OAuthPendingAction, token: string) {
+    switch (pending.action) {
+      case "import-list":
+        setExportDriveLink("");
+        setDriveImportFiles([]);
+        await _doOpenDriveImport(token);
+        break;
+      case "import-file":
+        if (pending.fileId && pending.fileName) {
+          await _doImportDriveFile(token, pending.fileId, pending.fileName);
+        }
+        break;
+      case "export":
+        setExportDriveLink("");
+        setIsExportPanelOpen(true);
+        await _doUploadToDrive(token);
+        break;
+    }
+  }
+
+  async function openDriveImport() {
+    if (isLoadingDriveImport) return;
+    const clientId = googleDriveClientId.trim();
+    setExportDriveLink("");
+    setDriveImportFiles([]);
+    if (!clientId) { setExportStatus("Add your Google OAuth Client ID first."); return; }
+    localStorage.setItem(googleDriveClientIdKey, clientId);
+    setDriveImportStatus("Authorizing with Google...");
+    try {
+      const token = await getGoogleDriveAccessToken(clientId, { action: "import-list" });
+      await _doOpenDriveImport(token);
+    } catch (error) {
+      setDriveImportStatus(error instanceof Error ? error.message : "Google Drive import failed.");
+      setIsLoadingDriveImport(false);
+    }
+  }
+
+  async function importGoogleDriveFile(file: GoogleDriveFile) {
+    if (isLoadingDriveImport) return;
+    const clientId = googleDriveClientId.trim();
+    if (!clientId) { setDriveImportStatus("Add your Google OAuth Client ID first."); return; }
+    try {
+      const token = await getGoogleDriveAccessToken(clientId, { action: "import-file", fileId: file.id, fileName: file.name });
+      await _doImportDriveFile(token, file.id, file.name);
+    } catch (error) {
+      setDriveImportStatus(error instanceof Error ? error.message : "Could not import that Google Drive file.");
+      setIsLoadingDriveImport(false);
+    }
+  }
+
+  async function uploadDayExportToDrive() {
+    if (isUploadingToDrive) return;
+    const clientId = googleDriveClientId.trim();
+    setExportDriveLink("");
+    if (!clientId) { setExportStatus("Add your Google OAuth Client ID first."); return; }
+    localStorage.setItem(googleDriveClientIdKey, clientId);
+    setExportStatus("Authorizing with Google...");
+    try {
+      const token = await getGoogleDriveAccessToken(clientId, { action: "export" });
+      await _doUploadToDrive(token);
+    } catch (error) {
+      setExportStatus(error instanceof Error ? error.message : "Google Drive upload failed.");
       setIsUploadingToDrive(false);
     }
   }
@@ -1907,7 +2138,7 @@ if (appView === "egg-oracle") {
         cancelProfileChanges={cancelProfileChanges}
         saveProfile={saveProfile}
         onOpenExport={exportAllData}
-        onOpenImport={() => foodLogImportInputRef.current?.click()}
+        onOpenImport={openImportFilePicker}
         onConnectDrive={openDriveImport}
         onDeleteAllData={clearAllData}
       />
@@ -2033,13 +2264,7 @@ if (appView === "egg-oracle") {
                 ›
               </button>
             </div>
-            <input
-              ref={foodLogImportInputRef}
-              type="file"
-              accept="application/json,.json"
-              style={{ display: "none" }}
-              onChange={(event) => readFoodLogImport(event.target.files?.[0])}
-            />
+
             {importStatus && <p className="import-inline-status">{importStatus}</p>}
             {importErrors.length > 0 && importDrafts.length === 0 && (
               <div className="import-inline-errors" role="alert">
@@ -2204,16 +2429,19 @@ if (appView === "egg-oracle") {
                             }}
                             onContextMenu={(e) => {
                               e.preventDefault();
-                              setItemToRemove(item);
+                              setContextMenuItem(item);
+                              setContextMenuY(e.clientY);
                             }}
-                            onPointerDown={() => {
+                            onPointerDown={(e) => {
                               if (longPressRef.current) clearTimeout(longPressRef.current.timer);
+                              const y = e.clientY;
                               longPressRef.current = {
                                 logId: item.logId,
                                 timer: setTimeout(() => {
                                   longPressRef.current = null;
                                   suppressNextClickRef.current = item.logId;
-                                  setItemToRemove(item);
+                                  setContextMenuItem(item);
+                                  setContextMenuY(y);
                                 }, 500),
                               };
                             }}
@@ -2914,13 +3142,97 @@ if (appView === "egg-oracle") {
         </div>
       )}
 
-      {importDrafts.length > 0 && (
+      {importSteps.length > 0 && importStepIndex < importSteps.length && (() => {
+        const step = importSteps[importStepIndex];
+        const mealGroups = step.items.reduce<{ meal: string; items: FoodLogImportDraft[] }[]>((acc, item) => {
+          const group = acc.find((g) => g.meal === item.meal);
+          if (group) group.items.push(item);
+          else acc.push({ meal: item.meal, items: [item] });
+          return acc;
+        }, []);
+        const progressPct = (importStepIndex / importSteps.length) * 100;
+        return (
+          <div className="floating-overlay import-preview-overlay" role="presentation">
+            <div className="floating-popover import-step-popover" role="dialog" aria-modal="true" aria-labelledby="import-step-title">
+              <div className="import-preview-header">
+                <div>
+                  <h2 id="import-step-title">Import Food Log</h2>
+                  <p className="import-step-progress-label">Day {importStepIndex + 1} of {importSteps.length}</p>
+                </div>
+                <button type="button" onClick={cancelImportStepper} aria-label="Close import">×</button>
+              </div>
+
+              <div className="import-step-progress-bar" aria-hidden="true">
+                <div className="import-step-progress-fill" style={{ width: `${progressPct}%` }} />
+              </div>
+
+              <div className="import-step-date-row">
+                <strong>{formatEntryDate(step.date)}</strong>
+                {step.weightEntry && (
+                  <span className="import-step-weight-badge">⚖ {step.weightEntry.weightLb} lb</span>
+                )}
+              </div>
+
+              {step.items.length > 0 ? (
+                <div className="import-step-meals">
+                  {mealGroups.map(({ meal, items: mealItems }) => (
+                    <div key={meal} className="import-step-meal-group">
+                      <p className="import-step-meal-name">{meal}</p>
+                      {mealItems.map((item) => (
+                        <div key={item.id} className="import-step-food-row">
+                          <span className="import-step-food-name">{item.name}</span>
+                          <span className="import-step-food-serving">{item.serving}</span>
+                          <span className="import-step-food-cal">{item.calories} cal</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="import-step-empty">No food items — weight only.</p>
+              )}
+
+              <div className="floating-actions">
+                <button type="button" className="primary-button" onClick={confirmImportStep}>
+                  Confirm Day
+                </button>
+                <button type="button" className="secondary-button" style={{ marginTop: 0 }} onClick={skipImportStep}>
+                  Skip Day
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {importSteps.length > 0 && importStepIndex >= importSteps.length && (
+        <div className="floating-overlay" role="presentation">
+          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="import-summary-title">
+            <h2 id="import-summary-title">Import Complete</h2>
+            <p>
+              {importStepResults.confirmed > 0
+                ? `${importStepResults.confirmed} day${importStepResults.confirmed === 1 ? "" : "s"} imported`
+                : "No days imported"}
+              {importStepResults.skipped > 0 && `, ${importStepResults.skipped} skipped`}.
+            </p>
+            <button type="button" className="primary-button" onClick={closeImportSummary}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(importDrafts.length > 0 || importWeightEntries.length > 0) && (
         <div className="floating-overlay import-preview-overlay" role="presentation">
           <div className="floating-popover import-preview-popover" role="dialog" aria-modal="true" aria-labelledby="import-preview-title">
             <div className="import-preview-header">
               <div>
                 <h2 id="import-preview-title">Import Food Log</h2>
-                <p>{importFileName || "JSON import"} · {importDrafts.length} item{importDrafts.length === 1 ? "" : "s"}</p>
+                <p>
+                  {importFileName || "JSON import"}
+                  {importDrafts.length > 0 && ` · ${importDrafts.length} food item${importDrafts.length === 1 ? "" : "s"}`}
+                  {importWeightEntries.length > 0 && ` · ${importWeightEntries.length} weight entr${importWeightEntries.length === 1 ? "y" : "ies"}`}
+                </p>
               </div>
               <button type="button" onClick={closeImportPreview} aria-label="Close import preview">
                 ×
@@ -3026,6 +3338,20 @@ if (appView === "egg-oracle") {
                   </button>
                 </div>
               ))}
+              {importWeightEntries.length > 0 && (
+                <div className="import-weight-section">
+                  <h3>Weight Entries</h3>
+                  {importWeightEntries.map((entry) => (
+                    <div className="import-weight-row" key={entry.id}>
+                      <span className="import-weight-date">{entry.date}</span>
+                      <span className="import-weight-value">{entry.weightLb} lb</span>
+                      <button type="button" className="danger-button" onClick={() => removeImportWeightEntry(entry.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="floating-actions">
@@ -3093,7 +3419,7 @@ if (appView === "egg-oracle") {
               </button>
               <button
                 type="button"
-                onClick={() => { setIsImportDayOpen(false); foodLogImportInputRef.current?.click(); }}
+                onClick={() => { setIsImportDayOpen(false); openImportFilePicker(); }}
               >
                 Import from File
               </button>
@@ -3243,6 +3569,142 @@ if (appView === "egg-oracle") {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {contextMenuItem && (
+        <div
+          className="food-ctx-overlay"
+          role="presentation"
+          onClick={() => setContextMenuItem(null)}
+        >
+          <div
+            className="food-ctx-menu"
+            style={{ top: Math.max(8, Math.min(contextMenuY - 10, window.innerHeight - 170)) }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setMoveToMealItem(contextMenuItem);
+                setContextMenuItem(null);
+              }}
+            >
+              Move to Different Meal
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMoveToDayItem(contextMenuItem);
+                setMoveToDayDate(selectedDate);
+                setMoveToDayStep("date");
+                setContextMenuItem(null);
+              }}
+            >
+              Move to Different Day
+            </button>
+            <button
+              type="button"
+              className="danger-menu-item"
+              onClick={() => {
+                setItemToRemove(contextMenuItem);
+                setContextMenuItem(null);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {moveToMealItem && (
+        <div
+          className="floating-overlay"
+          role="presentation"
+          onClick={() => setMoveToMealItem(null)}
+        >
+          <div
+            className="floating-popover"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2>Move to Meal</h2>
+            <p>Move <strong>{getFoodDisplayName(moveToMealItem)}</strong> to:</p>
+            <div className="food-ctx-meal-options">
+              {visibleMealCategories
+                .filter((cat) => cat !== moveToMealItem.category)
+                .map((cat) => (
+                  <button key={cat} type="button" onClick={() => moveItemToMeal(moveToMealItem, cat)}>
+                    {cat}
+                  </button>
+                ))}
+            </div>
+            <button type="button" className="secondary-button" onClick={() => setMoveToMealItem(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {moveToDayItem && (
+        <div
+          className="floating-overlay"
+          role="presentation"
+          onClick={() => { setMoveToDayItem(null); setMoveToDayStep("date"); }}
+        >
+          <div
+            className="floating-popover"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {moveToDayStep === "date" ? (
+              <>
+                <h2>Move to Different Day</h2>
+                <p>Choose a date for <strong>{getFoodDisplayName(moveToDayItem)}</strong></p>
+                <input
+                  type="date"
+                  className="floating-date-input"
+                  value={moveToDayDate}
+                  onChange={(e) => setMoveToDayDate(e.target.value)}
+                />
+                <div className="floating-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    disabled={!moveToDayDate}
+                    onClick={() => setMoveToDayStep("meal")}
+                  >
+                    Next
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ marginTop: 0 }}
+                    onClick={() => { setMoveToDayItem(null); setMoveToDayStep("date"); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>Choose Meal</h2>
+                <p>Add to which meal on <strong>{formatShortDate(moveToDayDate)}</strong>?</p>
+                <div className="food-ctx-meal-options">
+                  {mealCategories.map((cat) => (
+                    <button key={cat} type="button" onClick={() => moveItemToDifferentDay(moveToDayItem, moveToDayDate, cat)}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" className="secondary-button" onClick={() => setMoveToDayStep("date")}>
+                  ← Back
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
