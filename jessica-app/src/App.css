@@ -51,14 +51,44 @@ input, button, textarea {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.35rem;
+  gap: 0.12rem;
   white-space: normal;
   overflow-wrap: anywhere;
+  padding: 0.42rem 0.7rem;
 }
 
 .food-card.selected {
   border-color: #B46CFF;
   background: #262932;
+}
+
+.food-card-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.food-card-brand {
+  color: var(--fg-2, #9aa2b8);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.food-card-cal {
+  color: var(--fg-2, #9aa2b8);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.food-card-logged {
+  color: var(--fg-2, #9aa2b8);
+  font-size: 0.72rem;
 }
 
 .food-card-meta {

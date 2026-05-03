@@ -2380,15 +2380,13 @@ if (appView === "egg-oracle") {
                           <img src={getFoodIconUrl(food)} alt="" />
                           <strong>{getFoodDisplayName(food)}</strong>
                         </span>
-                        <span className="food-card-meta">
-                          {food.brand
-                            ? <span>{getBrandDisplayName(food.brand)}</span>
-                            : <span className="food-card-source">{food.dataType ?? "USDA"}</span>}
-                        </span>
-                        <span>
-                          {resultDisplay.isLoading
-                            ? "Loading serving details..."
-                            : `${resultDisplay.calories} cal per ${resultDisplay.servingSize}`}
+                        <span className="food-card-meta-row">
+                          <span className="food-card-brand">
+                            {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
+                          </span>
+                          <span className="food-card-cal">
+                            {resultDisplay.isLoading ? "Loading..." : `${resultDisplay.calories} cal per ${resultDisplay.servingSize}`}
+                          </span>
                         </span>
                       </button>
                     );
@@ -2413,11 +2411,11 @@ if (appView === "egg-oracle") {
                       <img src={getFoodIconUrl(food)} alt="" />
                       <strong>{food.name}</strong>
                     </span>
-                    <span>Brand: {getBrandDisplayName(food.brand)}</span>
-                    <span>
-                      {food.calories} cal per {food.servingSize}
+                    <span className="food-card-meta-row">
+                      <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
+                      <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
                     </span>
-                    <span>Logged {food.loggedCount} times this week</span>
+                    <span className="food-card-logged">Logged {food.loggedCount} times this week</span>
                   </button>
                 ))}
               </div>
@@ -2641,9 +2639,9 @@ if (appView === "egg-oracle") {
                           <img src={getFoodIconUrl(food)} alt="" />
                           <strong>{food.name}</strong>
                         </span>
-                        <span>Brand: {getBrandDisplayName(food.brand)}</span>
-                        <span>
-                          {food.calories} cal per {food.servingSize}
+                        <span className="food-card-meta-row">
+                          <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
+                          <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
                         </span>
                       </button>
                     ))}
@@ -2747,13 +2745,11 @@ if (appView === "egg-oracle") {
                                 <img src={getFoodIconUrl(food)} alt="" />
                                 <strong>{getFoodDisplayName(food)}</strong>
                               </span>
-                              <span className="food-card-meta">
-                                {food.brand
-                                  ? <span>{getBrandDisplayName(food.brand)}</span>
-                                  : <span className="food-card-source">{food.dataType ?? "USDA"}</span>}
-                              </span>
-                              <span>
-                                {food.calories} cal per {food.servingSize}
+                              <span className="food-card-meta-row">
+                                <span className="food-card-brand">
+                                  {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
+                                </span>
+                                <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
                               </span>
                             </button>
                           );
@@ -2847,9 +2843,9 @@ if (appView === "egg-oracle") {
                           <img src={getFoodIconUrl(recipe)} alt="" />
                           <strong>{recipe.name}</strong>
                         </span>
-                        <span>{recipe.ingredients.length} ingredients</span>
-                        <span>
-                          {recipe.calories} cal per {recipe.servingSize}
+                        <span className="food-card-meta-row">
+                          <span className="food-card-brand">{recipe.ingredients.length} ingredients</span>
+                          <span className="food-card-cal">{recipe.calories} cal per {recipe.servingSize}</span>
                         </span>
                       </button>
                     ))}

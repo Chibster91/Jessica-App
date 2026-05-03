@@ -192,14 +192,14 @@ export function FoodLibraryView({
                           <img src={getFoodIconUrl(food)} alt="" />
                           <strong>{food.name}</strong>
                         </span>
-                        <span>Brand: {getBrandDisplayName(food.brand)}</span>
-                        <span>
-                          {food.calories} cal per {food.servingSize}
+                        <span className="food-card-meta-row">
+                          <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
+                          <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
                         </span>
-                        <span>Logged {food.loggedCount ?? 0} times this week</span>
+                        <span className="food-card-logged">Logged {food.loggedCount ?? 0} times this week</span>
                       </button>
                     ))}
-    
+
                   {foodLibraryTab === "custom" && libraryCustomFoods.length === 0 && (
                     <p className="empty-meal">No custom foods match this search.</p>
                   )}
@@ -218,13 +218,13 @@ export function FoodLibraryView({
                           <img src={getFoodIconUrl(food)} alt="" />
                           <strong>{food.name}</strong>
                         </span>
-                        <span>Brand: {getBrandDisplayName(food.brand)}</span>
-                        <span>
-                          {food.calories} cal per {food.servingSize}
+                        <span className="food-card-meta-row">
+                          <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
+                          <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
                         </span>
                       </button>
                     ))}
-    
+
                   {foodLibraryTab === "recipes" && libraryRecipes.length === 0 && (
                     <p className="empty-meal">No recipes match this search.</p>
                   )}
@@ -243,9 +243,9 @@ export function FoodLibraryView({
                           <img src={getFoodIconUrl(recipe)} alt="" />
                           <strong>{recipe.name}</strong>
                         </span>
-                        <span>{recipe.ingredients.length} ingredients</span>
-                        <span>
-                          {recipe.calories} cal per {recipe.servingSize}
+                        <span className="food-card-meta-row">
+                          <span className="food-card-brand">{recipe.ingredients.length} ingredients</span>
+                          <span className="food-card-cal">{recipe.calories} cal per {recipe.servingSize}</span>
                         </span>
                       </button>
                     ))}
