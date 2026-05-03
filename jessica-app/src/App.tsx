@@ -1108,28 +1108,6 @@ function App() {
     setAppView("profile");
   }
 
-  async function shareDayExport() {
-    setExportDriveLink("");
-    const file = getDayExportFile();
-    const shareData = {
-      title: `Food Log ${selectedDate}`,
-      text: `Food log for ${selectedDate}`,
-      files: [file],
-    };
-
-    try {
-      if (navigator.canShare?.(shareData)) {
-        await navigator.share(shareData);
-        setExportStatus("Shared. Choose Google Drive from the share sheet to save it there.");
-        return;
-      }
-
-      setExportStatus("File sharing is not available in this browser. Use Download JSON instead.");
-    } catch (error) {
-      setExportStatus(error instanceof Error ? error.message : "Share canceled or failed.");
-    }
-  }
-
   function loadGoogleIdentityScript() {
     if (window.google?.accounts?.oauth2) return Promise.resolve();
 
