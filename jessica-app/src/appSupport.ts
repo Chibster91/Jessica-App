@@ -336,6 +336,8 @@ type OAuthPendingAction = {
   clientId: string;
   fileId?: string;
   fileName?: string;
+  returnView?: AppView;
+  returnDate?: string;
   timestamp: number;
 };
 

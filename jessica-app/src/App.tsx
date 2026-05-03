@@ -141,6 +141,23 @@ function isPwaStandalone(): boolean {
   );
 }
 
+/**
+ * Returns the pending OAuth action if the app is loading after a PWA OAuth redirect,
+ * otherwise null. Used in useState initializers so state is correct before the first render,
+ * avoiding both a "home" flash and stale-closure issues in Drive actions.
+ */
+function getOAuthReturnPending(): OAuthPendingAction | null {
+  if (!window.location.hash.includes("access_token=")) return null;
+  const raw = localStorage.getItem(oauthPendingActionKey);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as OAuthPendingAction;
+    return Date.now() - parsed.timestamp < 10 * 60 * 1000 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
@@ -148,9 +165,13 @@ function App() {
   const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
   const longPressRef = useRef<{ logId: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const suppressNextClickRef = useRef<string | null>(null);
-  const [appView, setAppView] = useState<AppView>(() => (getSavedProfile() ? "home" : "profile"));
-  const [selectedDate, setSelectedDate] = useState(today);
-  const [log, setLog] = useState<LogItem[]>(() => getSavedLog(today));
+  const [appView, setAppView] = useState<AppView>(() => {
+    const pending = getOAuthReturnPending();
+    if (pending?.returnView) return pending.returnView;
+    return getSavedProfile() ? "home" : "profile";
+  });
+  const [selectedDate, setSelectedDate] = useState<string>(() => getOAuthReturnPending()?.returnDate ?? today);
+  const [log, setLog] = useState<LogItem[]>(() => getSavedLog(getOAuthReturnPending()?.returnDate ?? today));
   const [pendingCategory, setPendingCategory] = useState<MealCategory | null>(null);
   const [activeAddFoodTab, setActiveAddFoodTab] = useState<AddFoodTab>("search");
   const [modalQuery, setModalQuery] = useState("");
@@ -1344,7 +1365,13 @@ function App() {
 
     if (isPwaStandalone()) {
       if (!pendingAction) throw new Error("PWA OAuth requires a pending action.");
-      const pending: OAuthPendingAction = { ...pendingAction, clientId, timestamp: Date.now() };
+      const pending: OAuthPendingAction = {
+        ...pendingAction,
+        clientId,
+        returnView: appView,
+        returnDate: selectedDate,
+        timestamp: Date.now(),
+      };
       localStorage.setItem(oauthPendingActionKey, JSON.stringify(pending));
       const redirectUri = window.location.origin + window.location.pathname;
       const params = new URLSearchParams({
