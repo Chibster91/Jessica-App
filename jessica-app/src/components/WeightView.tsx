@@ -239,60 +239,73 @@ export function WeightView({
       return "green";
     };
     const renderWeightForm = () => (
-      <section className="w-panel weight-entry-panel" {...tapProbeProps("weight-entry-panel")}>
-        <h2>{editingWeightEntryId ? "Edit Weight" : "Enter Weight"}</h2>
-        <div className="weight-form" {...tapProbeProps("weight-form")}>
-          <label>
-            Date
-            <input
-              type="date"
-              value={weightForm.date}
-              onChange={(e) => {
-                setWeightSaveError("");
-                setWeightForm({ ...weightForm, date: e.target.value });
-              }}
-            />
-          </label>
-          <label>
-            Weight ({weightUnit})
-            <input
-              type="text"
-              inputMode="decimal"
-              pattern="[0-9]*[.]?[0-9]*"
-              value={weightForm.weight}
-              onChange={(e) => {
-                setWeightSaveError("");
-                setWeightForm({ ...weightForm, weight: e.target.value });
-              }}
-            />
-          </label>
-          <label>
-            Note
-            <input
-              value={weightForm.note}
-              placeholder="Optional"
-              onChange={(e) => {
-                setWeightSaveError("");
-                setWeightForm({ ...weightForm, note: e.target.value });
-              }}
-            />
-          </label>
-          {weightSaveError && <p className="form-error">{weightSaveError}</p>}
-          <button
-            type="button"
-            className="primary-button"
-            onPointerDown={(event) => logTapProbe("weight-save-button", "pointerdown", event)}
-            onTouchStart={(event) => logTapProbe("weight-save-button", "touchstart", event)}
-            onClick={handleSaveWeight}
-            disabled={!isWeightFormValid}
-          >
-            {editingWeightEntryId ? "Update" : "Save"}
-          </button>
-          <button type="button" className="secondary-button" onClick={closeWeightForm}>
-            Cancel
-          </button>
+      <div className="floating-overlay" role="presentation" onClick={closeWeightForm}>
+        <div
+          className="floating-popover weight-form-popover"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="weight-form-title"
+          onClick={(e) => e.stopPropagation()}
+          {...tapProbeProps("weight-entry-panel")}
+        >
+          <h2 id="weight-form-title">{editingWeightEntryId ? "Edit Weight" : "Enter Weight"}</h2>
+          <div className="weight-form" {...tapProbeProps("weight-form")}>
+            <div className="weight-form-top">
+              <label>
+                Date
+                <input
+                  type="date"
+                  value={weightForm.date}
+                  onChange={(e) => {
+                    setWeightSaveError("");
+                    setWeightForm({ ...weightForm, date: e.target.value });
+                  }}
+                />
+              </label>
+              <label>
+                Weight ({weightUnit})
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*[.]?[0-9]*"
+                  value={weightForm.weight}
+                  onChange={(e) => {
+                    setWeightSaveError("");
+                    setWeightForm({ ...weightForm, weight: e.target.value });
+                  }}
+                />
+              </label>
+            </div>
+            <label>
+              Note
+              <input
+                value={weightForm.note}
+                placeholder="Optional"
+                onChange={(e) => {
+                  setWeightSaveError("");
+                  setWeightForm({ ...weightForm, note: e.target.value });
+                }}
+              />
+            </label>
+            {weightSaveError && <p className="form-error">{weightSaveError}</p>}
+            <div className="weight-form-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onPointerDown={(event) => logTapProbe("weight-save-button", "pointerdown", event)}
+                onTouchStart={(event) => logTapProbe("weight-save-button", "touchstart", event)}
+                onClick={handleSaveWeight}
+                disabled={!isWeightFormValid}
+              >
+                {editingWeightEntryId ? "Update" : "Save"}
+              </button>
+              <button type="button" className="secondary-button" onClick={closeWeightForm}>
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
-      </section>
+      </div>
     );
 
     return (
@@ -391,7 +404,6 @@ export function WeightView({
 
             <button type="button" className="w-cta" onClick={openWeightForm}>Enter Weight</button>
             <h2 className="w-section-title">History</h2>
-            {isWeightFormOpen && renderWeightForm()}
             <section className="w-panel w-history-panel">
               {sortedWeightEntriesNewest.length === 0 && <p className="empty-meal">Add your first weigh-in to start tracking progress.</p>}
               <div className="w-hist-list">
@@ -512,7 +524,6 @@ export function WeightView({
             </section>
 
             <button type="button" className="w-cta" onClick={openWeightForm}>Enter Weight</button>
-            {isWeightFormOpen && renderWeightForm()}
           </>
         )}
 
@@ -557,9 +568,10 @@ export function WeightView({
               </div>
             </section>
             <button type="button" className="w-cta" onClick={openWeightForm}>Enter Weight</button>
-            {isWeightFormOpen && renderWeightForm()}
           </>
         )}
+
+        {isWeightFormOpen && renderWeightForm()}
 
         {weightEntryToDelete && (
           <div className="floating-overlay" role="presentation">
