@@ -120,6 +120,22 @@ interface ImportDayStep {
   weightEntry: WeightImportEntry | null;
 }
 
+type ImportFoodResolution = {
+  food: Food;
+  quantity: number;
+};
+
+type ImportServingBasis = {
+  amount: number;
+  unitLabel: string;
+  servingSize: string;
+};
+
+type ImportFoodBatchResolver = {
+  byDraftId: Map<string, ImportFoodResolution>;
+  addedFoodIds: Set<number>;
+};
+
 function buildImportSteps(items: FoodLogImportDraft[], weightEntries: WeightImportEntry[]): ImportDayStep[] {
   const mealsByDate = new Map<string, FoodLogImportDraft[]>();
   for (const item of items) {
@@ -134,10 +150,263 @@ function buildImportSteps(items: FoodLogImportDraft[], weightEntries: WeightImpo
   }));
 }
 
-function makeImportFoodKey(name: string, calories: number, protein: number, carbs: number, fat: number, serving: string): string {
-  const normName = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-  const normServing = serving.toLowerCase().trim().replace(/\s+/g, " ");
-  return `${normName}|${Math.round(calories)}|${Math.round(protein * 10) / 10}|${Math.round(carbs * 10) / 10}|${Math.round(fat * 10) / 10}|${normServing}`;
+function normalizeImportKeyPart(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function roundImportMacro(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function parseImportAmount(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const mixedFraction = trimmed.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)/);
+  if (mixedFraction) {
+    const whole = Number(mixedFraction[1]);
+    const numerator = Number(mixedFraction[2]);
+    const denominator = Number(mixedFraction[3]);
+    if (Number.isFinite(whole) && Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0) {
+      return whole + numerator / denominator;
+    }
+  }
+
+  const fraction = trimmed.match(/^(\d+)\s*\/\s*(\d+)/);
+  if (fraction) {
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator > 0) {
+      return numerator / denominator;
+    }
+  }
+
+  const decimal = trimmed.match(/^(\d+(?:[.,]\d+)?)/);
+  if (!decimal) return null;
+
+  const amount = Number(decimal[1].replace(",", "."));
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function canonicalImportUnit(unit: string): string {
+  const normalized = normalizeImportKeyPart(unit);
+  const units: Record<string, string> = {
+    c: "cup",
+    cup: "cup",
+    cups: "cup",
+    tbsp: "tbsp",
+    tbsps: "tbsp",
+    tablespoon: "tbsp",
+    tablespoons: "tbsp",
+    tsp: "tsp",
+    tsps: "tsp",
+    teaspoon: "tsp",
+    teaspoons: "tsp",
+    "fl oz": "fl oz",
+    "fluid ounce": "fl oz",
+    "fluid ounces": "fl oz",
+    oz: "oz",
+    ounce: "oz",
+    ounces: "oz",
+    g: "g",
+    gram: "g",
+    grams: "g",
+    ml: "ml",
+    milliliter: "ml",
+    milliliters: "ml",
+    serving: "serving",
+    servings: "serving",
+    piece: "piece",
+    pieces: "piece",
+    slice: "slice",
+    slices: "slice",
+    container: "container",
+    containers: "container",
+    bottle: "bottle",
+    bottles: "bottle",
+    can: "can",
+    cans: "can",
+    bar: "bar",
+    bars: "bar",
+    packet: "packet",
+    packets: "packet",
+    pouch: "pouch",
+    pouches: "pouch",
+  };
+  return units[normalized] ?? normalized;
+}
+
+function parseImportServingBasis(serving: string): ImportServingBasis {
+  const amount = parseImportAmount(serving);
+  if (amount === null) {
+    const label = normalizeImportKeyPart(serving);
+    return { amount: 1, unitLabel: label, servingSize: serving.trim() };
+  }
+
+  const amountPattern = /^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)/;
+  const unitMatch = serving
+    .trim()
+    .replace(amountPattern, "")
+    .trim()
+    .match(/^(fl\s*oz|fluid\s+ounces?|tablespoons?|tbsp|teaspoons?|tsp|cups?|ounces?|oz|grams?|g|milliliters?|ml|servings?|pieces?|slices?|containers?|bottles?|cans?|bars?|packets?|pouches?)\b/i);
+  const unitLabel = canonicalImportUnit(unitMatch?.[1] ?? "");
+  if (!unitLabel) {
+    const label = normalizeImportKeyPart(serving);
+    return { amount: 1, unitLabel: label, servingSize: serving.trim() };
+  }
+
+  return { amount, unitLabel, servingSize: `1 ${unitLabel}` };
+}
+
+function canonicalizeImportFood(food: Food): Food {
+  const servingBasis = parseImportServingBasis(food.servingSize);
+  if (servingBasis.amount === 1 && food.servingSize.trim() === servingBasis.servingSize) return food;
+
+  return {
+    ...food,
+    servingSize: servingBasis.servingSize,
+    calories: Math.round(food.calories / servingBasis.amount),
+    protein: roundImportMacro(food.protein / servingBasis.amount),
+    carbs: roundImportMacro(food.carbs / servingBasis.amount),
+    fat: roundImportMacro(food.fat / servingBasis.amount),
+  };
+}
+
+function makeImportFoodKey(food: Pick<Food, "name" | "brand" | "calories" | "protein" | "carbs" | "fat" | "servingSize">): string {
+  const servingBasis = parseImportServingBasis(food.servingSize);
+  return [
+    normalizeImportKeyPart(food.name),
+    normalizeImportKeyPart(food.brand),
+    Math.round(food.calories / servingBasis.amount),
+    roundImportMacro(food.protein / servingBasis.amount),
+    roundImportMacro(food.carbs / servingBasis.amount),
+    roundImportMacro(food.fat / servingBasis.amount),
+    servingBasis.unitLabel,
+  ].join("|");
+}
+
+function getImportDraftQuantity(item: FoodLogImportDraft): number {
+  const quantity = parseDecimalInput(item.quantity || "1");
+  return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
+}
+
+function buildImportFoodFromDraft(item: FoodLogImportDraft, id: number): ImportFoodResolution {
+  const loggedQuantity = getImportDraftQuantity(item);
+  const servingBasis = parseImportServingBasis(item.serving);
+  const quantity = loggedQuantity * servingBasis.amount;
+
+  return {
+    quantity,
+    food: {
+      id,
+      name: item.name.trim(),
+      brand: item.brand.trim() || null,
+      source: item.source.trim() || undefined,
+      servingSize: servingBasis.servingSize,
+      calories: Math.round(parseDecimalInput(item.calories) / quantity),
+      protein: roundImportMacro(parseDecimalInput(item.protein || "0") / quantity),
+      carbs: roundImportMacro(parseDecimalInput(item.carbs || "0") / quantity),
+      fat: roundImportMacro(parseDecimalInput(item.fat || "0") / quantity),
+      notes: item.notes.trim() || undefined,
+    },
+  };
+}
+
+function buildImportFoodBatchResolver(items: FoodLogImportDraft[], existingCustomFoods: Food[]): ImportFoodBatchResolver {
+  const foodDedupeMap = new Map<string, Food>();
+  for (const food of existingCustomFoods) {
+    const canonicalFood = canonicalizeImportFood(food);
+    const key = makeImportFoodKey(canonicalFood);
+    if (!foodDedupeMap.has(key)) foodDedupeMap.set(key, canonicalFood);
+  }
+
+  const byDraftId = new Map<string, ImportFoodResolution>();
+  let nextFoodId = Date.now();
+
+  for (const item of items) {
+    const candidate = buildImportFoodFromDraft(item, -(nextFoodId++));
+    const key = makeImportFoodKey(candidate.food);
+    const food = foodDedupeMap.get(key);
+    if (food) {
+      byDraftId.set(item.id, { food, quantity: candidate.quantity });
+    } else {
+      foodDedupeMap.set(key, candidate.food);
+      byDraftId.set(item.id, candidate);
+    }
+  }
+
+  return { byDraftId, addedFoodIds: new Set() };
+}
+
+function getFoodQuantityRatio(fromFood: Pick<Food, "servingSize" | "calories">, toFood: Pick<Food, "servingSize" | "calories">): number {
+  const fromServing = parseImportServingBasis(fromFood.servingSize);
+  const toServing = parseImportServingBasis(toFood.servingSize);
+  if (fromServing.unitLabel && fromServing.unitLabel === toServing.unitLabel && toServing.amount > 0) {
+    return fromServing.amount / toServing.amount;
+  }
+  if (toFood.calories > 0) return fromFood.calories / toFood.calories;
+  return 1;
+}
+
+function dedupeCustomFoods(foods: Food[]): { foods: Food[]; foodRemap: Map<number, Food> } {
+  const keptByKey = new Map<string, Food>();
+  const deduped: Food[] = [];
+  const foodRemap = new Map<number, Food>();
+
+  for (const food of foods) {
+    const canonicalFood = canonicalizeImportFood(food);
+    const key = makeImportFoodKey(canonicalFood);
+    const kept = keptByKey.get(key);
+    if (kept) {
+      if (canonicalFood.id !== kept.id) foodRemap.set(canonicalFood.id, kept);
+      continue;
+    }
+    keptByKey.set(key, canonicalFood);
+    if (food !== canonicalFood) foodRemap.set(food.id, canonicalFood);
+    deduped.push(canonicalFood);
+  }
+
+  return { foods: deduped, foodRemap };
+}
+
+function remapLogFoodIds(items: LogItem[], foodRemap: Map<number, Food>): LogItem[] {
+  if (foodRemap.size === 0) return items;
+  return items.map((item) => {
+    const keptFood = foodRemap.get(item.id);
+    if (!keptFood) return item;
+
+    return {
+      ...keptFood,
+      logId: item.logId,
+      category: item.category,
+      quantity: item.quantity * getFoodQuantityRatio(item, keptFood),
+    };
+  });
+}
+
+function remapSavedLogFoodIds(foodRemap: Map<number, Food>) {
+  if (foodRemap.size === 0) return;
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith("log-")) continue;
+
+    try {
+      const saved = localStorage.getItem(key);
+      const parsed = saved ? (JSON.parse(saved) as LogItem[]) : [];
+      if (!Array.isArray(parsed)) continue;
+
+      const nextLog = remapLogFoodIds(parsed, foodRemap);
+      if (nextLog !== parsed) setStorageJson(key, nextLog);
+    } catch {
+      // Ignore malformed legacy log entries during import cleanup.
+    }
+  }
 }
 
 function isPwaStandalone(): boolean {
@@ -167,6 +436,7 @@ function getOAuthReturnPending(): OAuthPendingAction | null {
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
+  const importFoodBatchResolverRef = useRef<ImportFoodBatchResolver | null>(null);
 
   const mealCardRefs = useRef<Partial<Record<MealCategory, HTMLElement | null>>>({});
   const longPressRef = useRef<{ logId: string; timer: ReturnType<typeof setTimeout> } | null>(null);
@@ -409,16 +679,24 @@ function App() {
     const token = params.get("access_token");
     if (!token) return;
     window.history.replaceState(null, "", window.location.origin + window.location.pathname + window.location.search);
-    setDriveAccessToken(token);
     const pendingRaw = localStorage.getItem(oauthPendingActionKey);
     localStorage.removeItem(oauthPendingActionKey);
-    if (!pendingRaw) return;
-    try {
-      const pending = JSON.parse(pendingRaw) as OAuthPendingAction;
-      if (Date.now() - pending.timestamp > 10 * 60 * 1000) return;
-      setGoogleDriveClientId(pending.clientId);
-      resumePendingOAuthAction(pending, token);
-    } catch {}
+
+    queueMicrotask(() => {
+      setDriveAccessToken(token);
+      if (!pendingRaw) return;
+
+      try {
+        const pending = JSON.parse(pendingRaw) as OAuthPendingAction;
+        if (Date.now() - pending.timestamp > 10 * 60 * 1000) return;
+        setGoogleDriveClientId(pending.clientId);
+        resumePendingOAuthAction(pending, token);
+      } catch (error) {
+        appendDebugLog("oauth-pending-action-parse-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function changeSelectedDate(date: string) {
@@ -578,7 +856,7 @@ function App() {
     setAmountUnit(measuredBasis?.unit ?? "serving");
     setDetailError("");
 
-    if (hasUsableSearchNutrition(food)) {
+    if (!food.isSearchPreview && hasUsableSearchNutrition(food)) {
       setIsLoadingDetail(false);
       return;
     }
@@ -586,9 +864,14 @@ function App() {
     try {
       setIsLoadingDetail(true);
       const detail = await fetchUsdaFoodDetail(food.id);
-      const portions = getPortionOptions(detail, food.name);
+      const detailFood = getFoodForSelectedPortion(food, detail, undefined, 1);
+      const detailBasis = getMeasuredServingBasis(detailFood);
+      const portions = getPortionOptions(detail, detailFood.name);
 
+      setSelectedFood(detailFood);
       setSelectedFoodDetail(detail);
+      setPortionAmount(String(detailBasis?.amount ?? parseServingSize(detailFood.servingSize)?.amount ?? 1));
+      setAmountUnit(detailBasis?.unit ?? "serving");
       setSelectedPortionValue(portions[0]?.value ?? "");
     } catch {
       setDetailError("Could not load portion details for this food.");
@@ -733,9 +1016,20 @@ function App() {
     }
   }
 
-  function selectRecipeIngredient(food: Food) {
-    setPendingRecipeIngredient(food);
-    setPendingRecipeIngredientQuantity("1");
+  async function selectRecipeIngredient(food: Food) {
+    if (!food.isSearchPreview) {
+      setPendingRecipeIngredient(food);
+      setPendingRecipeIngredientQuantity("1");
+      return;
+    }
+
+    try {
+      const detail = await fetchUsdaFoodDetail(food.id);
+      setPendingRecipeIngredient(getFoodForSelectedPortion(food, detail, undefined, 1));
+      setPendingRecipeIngredientQuantity("1");
+    } catch {
+      setPendingRecipeIngredient(null);
+    }
   }
 
   function confirmRecipeIngredient() {
@@ -816,6 +1110,7 @@ function App() {
 
   function addSelectedFood() {
     if (!selectedFood || !pendingCategory) return;
+    if (selectedFood.isSearchPreview) return;
 
     const servings = hasUsableSearchNutrition(selectedFood) ? 1 : Number(quantity);
     const amount = Number(portionAmount);
@@ -994,10 +1289,12 @@ function App() {
       if (result.ok === false) {
         setImportDrafts([]);
         setImportErrors(result.errors);
+        importFoodBatchResolverRef.current = null;
         return;
       }
 
       setImportErrors([]);
+      importFoodBatchResolverRef.current = null;
       if (result.isMultiDay) {
         setImportSteps(buildImportSteps(result.items, result.weightEntries));
         setImportStepIndex(0);
@@ -1035,6 +1332,7 @@ function App() {
     setImportWeightEntries([]);
     setImportErrors([]);
     setImportFileName("");
+    importFoodBatchResolverRef.current = null;
   }
 
   function clearImportStepper() {
@@ -1044,6 +1342,7 @@ function App() {
     setImportConfirmedDates([]);
     setImportFileName("");
     setImportErrors([]);
+    importFoodBatchResolverRef.current = null;
   }
 
   function confirmImportStep() {
@@ -1051,36 +1350,38 @@ function App() {
     if (!step) return;
 
     if (step.items.length > 0) {
-      const importedFoods = step.items.map((item, index) => {
-        const food: Food = {
-          id: -(Date.now() + index + 1),
-          name: item.name.trim(),
-          brand: null,
-          source: item.source.trim() || undefined,
-          servingSize: item.serving.trim(),
-          calories: Math.round(parseDecimalInput(item.calories)),
-          protein: parseDecimalInput(item.protein || "0"),
-          carbs: parseDecimalInput(item.carbs || "0"),
-          fat: parseDecimalInput(item.fat || "0"),
-          notes: item.notes.trim() || undefined,
-        };
-        return { meal: normalizeMealName(item.meal), food };
+      if (!importFoodBatchResolverRef.current) {
+        importFoodBatchResolverRef.current = buildImportFoodBatchResolver(importSteps.flatMap((s) => s.items), customFoods);
+      }
+
+      const resolver = importFoodBatchResolverRef.current;
+      const importedFoods = step.items.map((item) => {
+        const resolved = resolver.byDraftId.get(item.id) ?? buildImportFoodFromDraft(item, -Date.now());
+        return { meal: normalizeMealName(item.meal), food: resolved.food, quantity: resolved.quantity };
       });
 
       const existingLog = step.date === selectedDate ? log : getSavedLog(step.date);
       const nextLog: LogItem[] = [
         ...existingLog,
-        ...importedFoods.map(({ food, meal }) => ({
+        ...importedFoods.map(({ food, meal, quantity }) => ({
           ...food,
           logId: createClientId(),
           category: meal,
-          quantity: 1 as const,
+          quantity,
         })),
       ];
-      setStorageJson(`log-${step.date}`, nextLog);
-      if (step.date === selectedDate) setLog(nextLog);
 
-      setCustomFoods((current) => [...importedFoods.map((e) => e.food), ...current]);
+      const foodsToAdd = importedFoods
+        .map((entry) => entry.food)
+        .filter((food) => !customFoods.some((existing) => existing.id === food.id) && !resolver.addedFoodIds.has(food.id));
+      foodsToAdd.forEach((food) => resolver.addedFoodIds.add(food.id));
+      const { foods: dedupedCustomFoods, foodRemap } = dedupeCustomFoods([...foodsToAdd, ...customFoods]);
+      const remappedLog = remapLogFoodIds(nextLog, foodRemap);
+      setStorageJson(`log-${step.date}`, remappedLog);
+      remapSavedLogFoodIds(foodRemap);
+      if (step.date === selectedDate) setLog(remappedLog);
+
+      setCustomFoods(dedupedCustomFoods);
       setTopFoods((current) => {
         const counts = new Map(current.map((f) => [f.name, f.count]));
         importedFoods.forEach((e) => counts.set(e.food.name, (counts.get(e.food.name) ?? 0) + 1));
@@ -1141,49 +1442,27 @@ function App() {
       return;
     }
 
-    const foodDedupeMap = new Map<string, Food>();
-    for (const food of customFoods) {
-      const key = makeImportFoodKey(food.name, food.calories, food.protein, food.carbs, food.fat, food.servingSize);
-      if (!foodDedupeMap.has(key)) foodDedupeMap.set(key, food);
-    }
-
-    const newCustomFoods: Food[] = [];
-    let nextFoodId = Date.now();
-
+    const resolver = buildImportFoodBatchResolver(importDrafts, customFoods);
     const importedFoods = importDrafts.map((item) => {
-      const calories = Math.round(parseDecimalInput(item.calories));
-      const protein = parseDecimalInput(item.protein || "0");
-      const carbs = parseDecimalInput(item.carbs || "0");
-      const fat = parseDecimalInput(item.fat || "0");
-      const name = item.name.trim();
-      const serving = item.serving.trim();
-
-      const key = makeImportFoodKey(name, calories, protein, carbs, fat, serving);
-      let food = foodDedupeMap.get(key);
-      if (!food) {
-        food = {
-          id: -(nextFoodId++),
-          name,
-          brand: null,
-          source: item.source.trim() || undefined,
-          servingSize: serving,
-          calories,
-          protein,
-          carbs,
-          fat,
-          notes: item.notes.trim() || undefined,
-        };
-        foodDedupeMap.set(key, food);
-        newCustomFoods.push(food);
-      }
+      const resolved = resolver.byDraftId.get(item.id) ?? buildImportFoodFromDraft(item, -Date.now());
 
       return {
         date: item.date,
         meal: normalizeMealName(item.meal),
-        food,
+        food: resolved.food,
+        quantity: resolved.quantity,
       };
     });
 
+    const newCustomFoods = Array.from(
+      new Map(
+        importedFoods
+          .map((entry) => entry.food)
+          .filter((food) => !customFoods.some((existing) => existing.id === food.id))
+          .map((food) => [food.id, food])
+      ).values()
+    );
+    const { foods: dedupedCustomFoods, foodRemap } = dedupeCustomFoods([...newCustomFoods, ...customFoods]);
     const nextLogsByDate = new Map<string, LogItem[]>();
     for (const entry of importedFoods) {
       const existingLog = nextLogsByDate.get(entry.date) ?? (entry.date === selectedDate ? log : getSavedLog(entry.date));
@@ -1193,16 +1472,17 @@ function App() {
           ...entry.food,
           logId: createClientId(),
           category: entry.meal,
-          quantity: 1,
+          quantity: entry.quantity,
         },
       ]);
     }
 
     for (const [date, nextLog] of nextLogsByDate) {
-      setStorageJson(`log-${date}`, nextLog);
+      setStorageJson(`log-${date}`, remapLogFoodIds(nextLog, foodRemap));
     }
+    remapSavedLogFoodIds(foodRemap);
 
-    setCustomFoods((current) => [...newCustomFoods, ...current]);
+    setCustomFoods(dedupedCustomFoods);
     setTopFoods((current) => {
       const counts = new Map(current.map((food) => [food.name, food.count]));
       importedFoods.forEach((entry) => {
@@ -1217,7 +1497,7 @@ function App() {
     const firstDate = importedFoods[0]?.date ?? selectedDate;
     if (nextLogsByDate.has(firstDate)) {
       setSelectedDate(firstDate);
-      setLog(nextLogsByDate.get(firstDate) ?? getSavedLog(firstDate));
+      setLog(remapLogFoodIds(nextLogsByDate.get(firstDate) ?? getSavedLog(firstDate), foodRemap));
     }
 
     if (importWeightEntries.length > 0) {
@@ -1322,7 +1602,12 @@ function App() {
         try {
           const val = localStorage.getItem(key);
           if (val) logs[key.slice(4)] = JSON.parse(val);
-        } catch {}
+        } catch (error) {
+          appendDebugLog("export-log-parse-skipped", {
+            key,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
     const data = {
@@ -1761,12 +2046,6 @@ function startEditWeightEntry(entry: WeightEntry) {
     }
   }
 
-  function openDebugPanel() {
-    setDebugLogText(getDebugLogText());
-    setDebugCopyStatus("");
-    setIsDebugPanelOpen(true);
-  }
-
   async function copyDebugLog() {
     const text = getDebugLogText();
     setDebugLogText(text);
@@ -2107,6 +2386,7 @@ function startEditWeightEntry(entry: WeightEntry) {
   const isWeightFormValid = parsedWeightFormValue > 0 && Number.isFinite(parsedWeightFormValue);
   const canAddSelectedFood =
     Boolean(selectedFood) &&
+    !selectedFood?.isSearchPreview &&
     !isLoadingDetail &&
     (amountUnit === "serving" || (allowedAmountUnits.includes(amountUnit) && localPortionScale !== null)) &&
     (portionOptions.length === 0 || Boolean(selectedPortion));
@@ -2128,7 +2408,6 @@ function startEditWeightEntry(entry: WeightEntry) {
         setAppView(view);
       }}
       onOpenLibrary={openFoodLibrary}
-      onOpenDebugPanel={openDebugPanel}
       isDebugPanelOpen={isDebugPanelOpen}
       debugLogText={debugLogText}
       debugCopyStatus={debugCopyStatus}
@@ -2644,7 +2923,11 @@ if (appView === "egg-oracle") {
                             {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
                           </span>
                           <span className="food-card-cal">
-                            {resultDisplay.isLoading ? "Loading..." : `${resultDisplay.calories} cal per ${resultDisplay.servingSize}`}
+                            {resultDisplay.isLoading
+                              ? "Loading..."
+                              : food.isSearchPreview && selectedFood?.id !== food.id
+                                ? resultDisplay.servingSize
+                                : `${resultDisplay.calories} cal per ${resultDisplay.servingSize}`}
                           </span>
                         </span>
                       </button>
@@ -3008,7 +3291,9 @@ if (appView === "egg-oracle") {
                                 <span className="food-card-brand">
                                   {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
                                 </span>
-                                <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
+                                <span className="food-card-cal">
+                                  {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
+                                </span>
                               </span>
                             </button>
                           );
@@ -3187,6 +3472,16 @@ if (appView === "egg-oracle") {
               <button className="primary-button" type="button" onClick={addSelectedFood} disabled={!canAddSelectedFood}>
                 Add Food
               </button>
+              {selectedFood.id > 0 && (
+                <a
+                  className="secondary-button"
+                  href={`https://fdc.nal.usda.gov/food-details/${selectedFood.id}/nutrients`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  View on USDA
+                </a>
+              )}
               <button className="secondary-button" type="button" onClick={() => setSelectedFood(null)}>
                 Cancel
               </button>
@@ -3326,10 +3621,28 @@ if (appView === "egg-oracle") {
                     />
                   </label>
                   <label>
+                    Brand
+                    <input
+                      value={item.brand}
+                      onChange={(event) => updateImportDraft(item.id, { brand: event.target.value })}
+                    />
+                  </label>
+                  <label>
                     Serving
                     <input
                       value={item.serving}
                       onChange={(event) => updateImportDraft(item.id, { serving: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Servings
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={item.quantity}
+                      onChange={(event) => updateImportDraft(item.id, { quantity: event.target.value })}
                     />
                   </label>
                   <label>

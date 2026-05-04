@@ -870,12 +870,11 @@ type EggOracleProps = {
 };
 
 export default function EggOracle({ bottomNav }: EggOracleProps) {
-  const [data, setData] = useState<EggOracleData>(defaultData);
+  const [data, setData] = useState<EggOracleData>(() => loadData());
   const [tab, setTab] = useState<"calendar" | "stats" | "settings">("calendar");
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedISO, setSelectedISO] = useState<string | null>(null);
 
-  useEffect(() => setData(loadData()), []);
   useEffect(() => saveData(data), [data]);
 
   const cycle = findCycleForDate(data, new Date());

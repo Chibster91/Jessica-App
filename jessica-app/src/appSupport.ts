@@ -14,6 +14,7 @@ type Food = {
   sugar?: number;
   sodium?: number;
   notes?: string;
+  isSearchPreview?: boolean;
 };
 
 type RecipeIngredient = {
@@ -244,7 +245,9 @@ type FoodLogImportDraft = {
   date: string;
   meal: string;
   name: string;
+  brand: string;
   serving: string;
+  quantity: string;
   calories: string;
   protein: string;
   carbs: string;
@@ -703,11 +706,13 @@ function validateImportDraft(item: FoodLogImportDraft, index: number) {
   const protein = parseDecimalInput(item.protein || "0");
   const carbs = parseDecimalInput(item.carbs || "0");
   const fat = parseDecimalInput(item.fat || "0");
+  const quantity = parseDecimalInput(item.quantity || "1");
 
   if (!isValidLogDate(item.date)) errors.push(`${row}: date must be YYYY-MM-DD.`);
   if (!item.meal.trim()) errors.push(`${row}: meal is required.`);
   if (!item.name.trim()) errors.push(`${row}: name is required.`);
   if (!item.serving.trim()) errors.push(`${row}: serving is required.`);
+  if (!Number.isFinite(quantity) || quantity <= 0) errors.push(`${row}: servings must be a positive number when provided.`);
   if (!Number.isFinite(calories) || calories < 0) errors.push(`${row}: calories must be a non-negative number.`);
   if (![protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)) {
     errors.push(`${row}: protein, carbs, and fat must be non-negative numbers when provided.`);
@@ -727,7 +732,9 @@ function buildImportDraft(date: string, meal: string, item: unknown): FoodLogImp
     date,
     meal,
     name: readStringField(item, ["name", "food", "foodName"]),
+    brand: readStringField(item, ["brand", "brandName"]),
     serving,
+    quantity: readStringField(item, ["servings", "quantity", "servingCount"]) || "1",
     calories: readStringField(item, ["calories", "kcal"]),
     protein: readOptionalNumberField({ ...macros, ...item }, ["protein"]),
     carbs: readOptionalNumberField({ ...macros, ...item }, ["carbs", "carbohydrates"]),
@@ -1389,6 +1396,8 @@ function getServingSizeBasis(detail: FoodDetail | null, food: Food) {
 }
 
 function hasUsableSearchNutrition(food: Food) {
+  if (food.isSearchPreview) return false;
+
   const basis = getMeasuredServingBasis(food);
   return Boolean(basis && isGramUnit(basis.unit) && food.calories > 0);
 }
@@ -1415,6 +1424,7 @@ function scaleFoodNutrition(food: Food, factor: number, servingSize: string): Fo
 function foodFromDetailNutrition(food: Food, detail: FoodDetail, servingSize: string): Food {
   return {
     ...food,
+    isSearchPreview: false,
     servingSize,
     calories: Math.round(detail.nutrients?.calories ?? food.calories),
     protein: detail.nutrients?.protein ?? food.protein,
@@ -1467,14 +1477,14 @@ function getFoodForSelectedPortion(
 }
 
 function getCaloriesPerServing(food: Food, detail: FoodDetail | null, portion?: PortionOption) {
+  const labelCalories = getLabelCaloriesPerServing(detail);
+  if (labelCalories !== null) return labelCalories;
+
   const caloriesPer100Units = getEnergyCaloriesPer100Units(detail);
 
   if (portion && caloriesPer100Units !== null) {
     return Math.round((caloriesPer100Units * portion.gramWeight) / 100);
   }
-
-  const labelCalories = getLabelCaloriesPerServing(detail);
-  if (labelCalories !== null) return labelCalories;
 
   const basis = getServingSizeBasis(detail, food);
   if (
@@ -1496,6 +1506,14 @@ function getModalResultCalories(
   isLoadingDetail: boolean
 ) {
   if (selectedFood?.id !== food.id) {
+    if (food.isSearchPreview) {
+      return {
+        calories: 0,
+        servingSize: "select to load nutrition",
+        isLoading: false,
+      };
+    }
+
     return {
       calories: food.calories,
       servingSize: food.servingSize,
@@ -1637,7 +1655,14 @@ function rankSearchResults(foods: Food[], query: string) {
   return [...foods].sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query));
 }
 
+function allowsGenericFoodNameSimplification(food: Food) {
+  const dataType = normalizeSearchText(food.dataType ?? "");
+  return dataType === "foundation" || dataType === "sr legacy";
+}
+
 function detectMilkType(food: Food) {
+  if (!allowsGenericFoodNameSimplification(food)) return null;
+
   const rawText = `${food.name} ${food.brand ?? ""} ${food.category ?? ""}`.toLowerCase();
   const name = normalizeSearchText(food.name);
   const brand = normalizeSearchText(food.brand ?? "");
@@ -1666,17 +1691,38 @@ function detectMilkType(food: Food) {
   return null;
 }
 
+function removeDuplicateDisplayNameSuffix(name: string) {
+  const parts = name.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return name;
+
+  const firstPart = parts[0];
+  const keptParts = [firstPart];
+  const firstWords = new Set(normalizeSearchText(firstPart).split(/\s+/).filter(Boolean));
+
+  for (const part of parts.slice(1)) {
+    const partWords = normalizeSearchText(part).split(/\s+/).filter(Boolean);
+    const isDuplicateQualifier =
+      partWords.length > 0 &&
+      partWords.every((word) => firstWords.has(word)) &&
+      normalizeSearchText(firstPart).startsWith(partWords.join(" "));
+
+    if (!isDuplicateQualifier) keptParts.push(part);
+  }
+
+  return keptParts.join(", ");
+}
+
 function formatDisplayName(name: string) {
   const trimmedName = name.trim();
   const hasLetters = /[a-z]/i.test(trimmedName);
   const isAllCaps = hasLetters && trimmedName === trimmedName.toUpperCase();
 
-  if (!isAllCaps) return trimmedName;
+  if (!isAllCaps) return removeDuplicateDisplayNameSuffix(trimmedName);
 
-  return trimmedName
+  return removeDuplicateDisplayNameSuffix(trimmedName
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
-    .replace(/\bUsda\b/g, "USDA");
+    .replace(/\bUsda\b/g, "USDA"));
 }
 
 function getFoodDisplayName(food: Food) {
@@ -1692,6 +1738,7 @@ function getBrandDisplayName(brand: string | null | undefined) {
 }
 
 const WORKER_BASE_URL = "https://jessica-worker.snack-bunker.workers.dev";
+const foodDetailCache = new Map<number, FoodDetail>();
 
 async function fetchUsdaFoods(query: string) {
   const res = await fetch(
@@ -1702,11 +1749,16 @@ async function fetchUsdaFoods(query: string) {
 }
 
 async function fetchUsdaFoodDetail(foodId: number): Promise<FoodDetail> {
+  const cached = foodDetailCache.get(foodId);
+  if (cached) return cached;
+
   const res = await fetch(
     `${WORKER_BASE_URL}/detail?id=${encodeURIComponent(foodId)}`
   );
 
-  return res.json() as Promise<FoodDetail>;
+  const detail = await res.json() as FoodDetail;
+  foodDetailCache.set(foodId, detail);
+  return detail;
 }
 
 async function searchUsdaFoodsWithSynonyms(query: string) {

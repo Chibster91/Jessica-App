@@ -46,7 +46,7 @@ type FoodLibraryViewProps = {
   searchRecipeIngredientFoods: () => void;
   recipeIngredientOptions: Food[];
   pendingRecipeIngredient: Food | null;
-  selectRecipeIngredient: (food: Food) => void;
+  selectRecipeIngredient: (food: Food) => void | Promise<void>;
   isSearchingRecipeIngredients: boolean;
   pendingRecipeIngredientQuantity: string;
   setPendingRecipeIngredientQuantity: Dispatch<SetStateAction<string>>;
@@ -544,7 +544,7 @@ export function FoodLibraryView({
                           >
                             <strong>{getFoodDisplayName(food)}</strong>
                             <span>
-                              {food.calories} cal per {food.servingSize}
+                              {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
                             </span>
                           </button>
                         ))}

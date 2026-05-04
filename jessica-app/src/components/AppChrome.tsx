@@ -4,7 +4,6 @@ type AppChromeProps = {
   appView: AppView;
   onNavigate: (view: AppView) => void;
   onOpenLibrary: () => void;
-  onOpenDebugPanel: () => void;
   isDebugPanelOpen: boolean;
   debugLogText: string;
   debugCopyStatus: string;
@@ -22,7 +21,6 @@ export function AppChrome({
   appView,
   onNavigate,
   onOpenLibrary,
-  onOpenDebugPanel: _onOpenDebugPanel,
   isDebugPanelOpen,
   debugLogText,
   debugCopyStatus,

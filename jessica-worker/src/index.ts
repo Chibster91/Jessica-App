@@ -1,7 +1,6 @@
 import type { FdcFoodDetail, FdcFoodNutrient, FdcSearchResponse, FdcSearchResultFood } from "./fdc-types";
 
 const DETAIL_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
-const SEARCH_DETAIL_ENRICH_LIMIT = 8;
 const SEARCH_RESULT_LIMIT = 15;
 const USDA_SEARCH_PAGE_SIZE = 50;
 const UNIT_LABELS: Record<string, string> = {
@@ -41,6 +40,7 @@ export type WorkerFood = {
   fat: number;
   fiber?: number;
   sodium?: number;
+  isSearchPreview?: boolean;
 };
 
 const detailCache = new Map<string, DetailCacheEntry>();
@@ -91,15 +91,15 @@ export default {
           category: food.foodCategory ?? null,
           ingredients: food.ingredients ?? null,
           dataType: food.dataType,
-          servingSize: "100 g",
-          calories: getCaloriesValue(food),
-          protein: Math.max(0, getProteinValue(food)),
-          carbs: Math.max(0, getCarbsValue(food)),
-          fat: Math.max(0, getFatValue(food)),
+          servingSize: "Details required",
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          isSearchPreview: true,
         };
       })
-      // Defensive: exclude experimental entries and zero-calorie records that slipped through
-      .filter((food: WorkerFood) => !isExperimentalFood(food) && food.calories > 0)
+      .filter((food: WorkerFood) => !isExperimentalFood(food))
       .sort((a: WorkerFood, b: WorkerFood) => rankSearchResult(b, query) - rankSearchResult(a, query))
       .filter((food: WorkerFood) => {
         const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
@@ -109,7 +109,7 @@ export default {
       })
       .slice(0, SEARCH_RESULT_LIMIT);
 
-    return json(await enrichBrandedSearchResults(foods, apiKey));
+    return json(foods);
   },
 };
 
@@ -167,7 +167,7 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
 
     throw error;
   }
-  const servingSize = getServingSizeText(food);
+  const servingSize = getServingSizeText(food) ?? getHouseholdServingText(food) ?? "100 g";
 
   return json({
     id: food.fdcId,
@@ -198,43 +198,8 @@ async function handleDetail(url: URL, env: any): Promise<Response> {
       sodium: getSodiumValue(food),
     },
     foodNutrients: food.foodNutrients || [],
+    isSearchPreview: false,
   });
-}
-
-async function enrichBrandedSearchResults(foods: WorkerFood[], apiKey: string): Promise<WorkerFood[]> {
-  let enrichedCount = 0;
-
-  return Promise.all(
-    foods.map(async (food) => {
-      if (!isPackagedFood(food) || enrichedCount >= SEARCH_DETAIL_ENRICH_LIMIT) {
-        return food;
-      }
-
-      enrichedCount += 1;
-
-      try {
-        const detail = await fetchUsdaFoodDetail(String(food.id), apiKey);
-        const labelCalories = getLabelCaloriesValue(detail);
-
-        if (labelCalories === null) {
-          return food;
-        }
-
-        return {
-          ...food,
-          servingSize: getServingSizeText(detail) ?? food.servingSize,
-          calories: labelCalories,
-          protein: getProteinValue(detail),
-          carbs: getCarbsValue(detail),
-          fat: getFatValue(detail),
-          fiber: getFiberValue(detail),
-          sodium: getSodiumValue(detail),
-        };
-      } catch {
-        return food;
-      }
-    })
-  );
 }
 
 async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<FdcFoodDetail> {
@@ -265,10 +230,6 @@ async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<FdcFoodD
 type FoodWithNutrients = Pick<FdcFoodDetail, "servingSize" | "servingSizeUnit" | "labelNutrients" | "foodNutrients"> &
   Pick<FdcSearchResultFood, "foodNutrients"> & { dataType?: string; brand?: string | null };
 
-function isPackagedFood(food: WorkerFood): boolean {
-  return normalizeSearchText(food.dataType ?? "") === "branded" || Boolean(food.brand);
-}
-
 function isHumanServingUnit(unit: unknown): boolean {
   if (typeof unit !== "string" || !unit.trim()) return false;
   const upper = unit.trim().toUpperCase();
@@ -280,6 +241,12 @@ function getServingSizeText(food: Pick<FdcFoodDetail, "servingSize" | "servingSi
 
   return food.servingSize && isHumanServingUnit(unit)
     ? `${food.servingSize} ${unit}`
+    : null;
+}
+
+function getHouseholdServingText(food: Pick<FdcFoodDetail, "householdServingFullText">): string | null {
+  return typeof food.householdServingFullText === "string" && food.householdServingFullText.trim()
+    ? food.householdServingFullText.trim()
     : null;
 }
 
@@ -311,22 +278,12 @@ const ENERGY_NAMES = [
 ];
 
 function getCaloriesValue(food: FoodWithNutrients): number {
-  const labelCalories = getLabelCaloriesValue(food);
-  if (labelCalories !== null) return labelCalories;
-
-  const kcal = getNutrientValue(food, ENERGY_NAMES, "KCAL");
-  if (kcal > 0) return Math.round(kcal);
-
-  // Foundation/SR Legacy foods sometimes omit energy from truncated search results —
-  // estimate from macros using Atwater general factors as a fallback.
-  const protein = Math.max(0, getProteinValue(food));
-  const carbs = Math.max(0, getCarbsValue(food));
-  const fat = Math.max(0, getFatValue(food));
-  if (protein > 0 || carbs > 0 || fat > 0) {
-    return Math.round(protein * 4 + carbs * 4 + fat * 9);
+  if (isBrandedFoodData(food)) {
+    const labelCalories = getLabelCaloriesValue(food);
+    if (labelCalories !== null) return labelCalories;
   }
 
-  return 0;
+  return Math.round(getNutrientValue(food, ENERGY_NAMES, "KCAL"));
 }
 
 function getLabelCaloriesValue(food: FoodWithNutrients): number | null {
@@ -335,23 +292,37 @@ function getLabelCaloriesValue(food: FoodWithNutrients): number | null {
 }
 
 function getProteinValue(food: FoodWithNutrients): number {
-  return getLabelNutrientValue(food, "protein") ?? getNutrientValue(food, "Protein");
+  return getPreferredNutrientValue(food, "protein", "Protein");
 }
 
 function getCarbsValue(food: FoodWithNutrients): number {
-  return getLabelNutrientValue(food, "carbohydrates") ?? getNutrientValue(food, "Carbohydrate, by difference");
+  return getPreferredNutrientValue(food, "carbohydrates", "Carbohydrate, by difference");
 }
 
 function getFatValue(food: FoodWithNutrients): number {
-  return getLabelNutrientValue(food, "fat") ?? getNutrientValue(food, "Total lipid (fat)");
+  return getPreferredNutrientValue(food, "fat", "Total lipid (fat)");
 }
 
 function getFiberValue(food: FoodWithNutrients): number {
-  return getLabelNutrientValue(food, "fiber") ?? getNutrientValue(food, "Fiber, total dietary");
+  return getPreferredNutrientValue(food, "fiber", "Fiber, total dietary");
 }
 
 function getSodiumValue(food: FoodWithNutrients): number {
-  return getLabelNutrientValue(food, "sodium") ?? getNutrientValue(food, "Sodium, Na");
+  return getPreferredNutrientValue(food, "sodium", "Sodium, Na");
+}
+
+function isBrandedFoodData(food: FoodWithNutrients): boolean {
+  return normalizeSearchForMatching(food.dataType) === "branded" || Boolean(food.labelNutrients);
+}
+
+function getPreferredNutrientValue(
+  food: FoodWithNutrients,
+  labelKey: keyof NonNullable<FdcFoodDetail["labelNutrients"]>,
+  nutrientName: string | string[]
+): number {
+  return isBrandedFoodData(food)
+    ? getLabelNutrientValue(food, labelKey) ?? getNutrientValue(food, nutrientName)
+    : getNutrientValue(food, nutrientName);
 }
 
 function getLabelNutrientValue(food: FoodWithNutrients, key: keyof NonNullable<FdcFoodDetail["labelNutrients"]>): number | null {
