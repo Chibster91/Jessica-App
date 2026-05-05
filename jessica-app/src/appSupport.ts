@@ -3,6 +3,7 @@ type Food = {
   name: string;
   brand: string | null;
   category?: string | null;
+  measurementType?: "solid" | "liquid" | "spoonable";
   dataType?: string | null;
   source?: string;
   servingSize: string;
@@ -15,6 +16,11 @@ type Food = {
   sodium?: number;
   notes?: string;
   isSearchPreview?: boolean;
+  amount?: number;
+  amountUnit?: AmountUnit;
+  portionLabel?: string;
+  portionScale?: number;
+  servingLabel?: string;
 };
 
 type RecipeIngredient = {
@@ -280,7 +286,14 @@ type RecipeForm = {
   notes: string;
 };
 
-type AmountUnit = "serving" | "g" | "ml" | "oz";
+type AmountUnit =
+  | "serving"
+  | "g"
+  | "oz"
+  | "ml"
+  | "cup"
+  | "tbsp"
+  | "tsp";
 type MeasuredAmountUnit = Exclude<AmountUnit, "serving">;
 
 type DebugLogEntry = {
@@ -399,6 +412,45 @@ const foodIconRules: [string, string][] = [
   ["bun", "bread.svg"],
   ["roll", "bread.svg"],
   ["bagel", "bread.svg"],
+  // Nuts, seeds & nut butters — must come BEFORE "egg" to avoid category-name false match
+  ["almond", "generic-meat.svg"],
+  ["almonds", "generic-meat.svg"],
+  ["walnut", "generic-meat.svg"],
+  ["walnuts", "generic-meat.svg"],
+  ["pecan", "generic-meat.svg"],
+  ["pecans", "generic-meat.svg"],
+  ["cashew", "generic-meat.svg"],
+  ["cashews", "generic-meat.svg"],
+  ["pistachio", "generic-meat.svg"],
+  ["pistachios", "generic-meat.svg"],
+  ["peanut", "generic-meat.svg"],
+  ["peanuts", "generic-meat.svg"],
+  ["hazelnut", "generic-meat.svg"],
+  ["hazelnuts", "generic-meat.svg"],
+  ["macadamia", "generic-meat.svg"],
+  ["sunflower seed", "generic-meat.svg"],
+  ["sunflower seeds", "generic-meat.svg"],
+  ["pumpkin seed", "generic-meat.svg"],
+  ["pumpkin seeds", "generic-meat.svg"],
+  ["chia seed", "generic-meat.svg"],
+  ["chia seeds", "generic-meat.svg"],
+  ["flaxseed", "generic-meat.svg"],
+  ["flaxseeds", "generic-meat.svg"],
+  ["sesame seed", "generic-meat.svg"],
+  ["sesame seeds", "generic-meat.svg"],
+  ["nut butter", "generic-meat.svg"],
+  // Grains & starches
+  ["rice", "bread.svg"],
+  ["oat", "bread.svg"],
+  ["quinoa", "bread.svg"],
+  ["barley", "bread.svg"],
+  ["wheat", "bread.svg"],
+  ["pasta", "bread.svg"],
+  ["noodle", "bread.svg"],
+  ["tortilla", "bread.svg"],
+  ["cracker", "bread.svg"],
+  ["cereal", "bread.svg"],
+  // Eggs — matched on name only (category "Nuts & Seeds & Eggs" would false-match otherwise)
   ["egg", "egg.svg"],
   ["eggs", "egg.svg"],
   ["milk", "milk.svg"],
@@ -552,6 +604,96 @@ type LogItem = Food & { logId: string; category: MealCategory; quantity: number 
 
 type SavedLogItem = Food & { logId: string; category?: MealCategory; quantity?: number };
 
+function formatServingDisplayAmount(amount: number | null | undefined) {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return "";
+
+  return Number.isInteger(amount) ? String(amount) : String(Number(amount.toFixed(2)));
+}
+
+function getFoodServingDisplay(
+  food: Pick<Food, "servingSize" | "amount" | "amountUnit" | "portionLabel" | "servingLabel"> & { quantity?: number }
+) {
+  const servingLabel = food.servingLabel?.trim();
+  if (servingLabel) return servingLabel;
+
+  const amount = food.amount;
+  const amountText = formatServingDisplayAmount(amount);
+  const amountUnit = food.amountUnit;
+  const portionLabel = food.portionLabel?.trim();
+
+  if (amountText && amountUnit && amountUnit !== "serving") {
+    return `${amountText} ${amountUnit}`;
+  }
+
+  if (portionLabel) {
+    if (!amountText || amount === 1) return portionLabel;
+    return `${amountText} x ${portionLabel}`;
+  }
+
+  if (amountText && amountUnit === "serving") {
+    return `${amountText} serving${amount === 1 ? "" : "s"}`;
+  }
+
+  if (food.servingSize.trim()) {
+    const quantity = food.quantity ?? 1;
+    return quantity === 1 ? food.servingSize : `${food.servingSize} x ${formatServingDisplayAmount(quantity)}`;
+  }
+
+  return "100g";
+}
+
+function getFoodSearchServingDisplay(
+  food: Pick<Food, "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "servingLabel">,
+  servingSize = food.servingSize
+) {
+  const explicitDisplay = getFoodServingDisplay({ ...food, servingSize });
+  const normalizedServing = servingSize.trim().toLowerCase().replace(/\s+/g, "");
+
+  if (explicitDisplay !== servingSize && explicitDisplay !== "100g") return explicitDisplay;
+
+  if (food.dataType === "local" && normalizedServing === "100g") {
+    switch (food.measurementType) {
+      case "liquid":
+        return "cup";
+      case "spoonable":
+        return "tbsp";
+      default:
+        break;
+    }
+  }
+
+  return servingSize.trim() || "100g";
+}
+
+function getFoodSearchCalorieDisplay(
+  food: Pick<
+    Food,
+    "calories" | "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "portionScale" | "servingLabel"
+  >,
+  calories = food.calories,
+  servingSize = food.servingSize
+) {
+  const serving = getFoodSearchServingDisplay(food, servingSize);
+  const amountUnit = serving === "cup" || serving === "tbsp" || serving === "tsp" ? serving : food.amountUnit;
+
+  if (food.portionScale !== undefined && Number.isFinite(food.portionScale)) {
+    return { calories: Math.round(food.calories * food.portionScale), serving };
+  }
+
+  if (amountUnit && amountUnit !== "serving") {
+    const amount = food.amount && Number.isFinite(food.amount) ? food.amount : 1;
+    const basis = getMeasuredServingBasis(food);
+    const basisAmount = basis ? convertAmountToBasisUnit(amount, amountUnit, basis.unit) : null;
+    const scale = basisAmount !== null ? getScaleFromServingBasis(food, basisAmount) : null;
+
+    if (scale !== null) {
+      return { calories: Math.round(food.calories * scale), serving };
+    }
+  }
+
+  return { calories, serving };
+}
+
 function appendDebugLog(event: string, detail?: unknown) {
   const entry: DebugLogEntry = {
     time: new Date().toISOString(),
@@ -663,13 +805,34 @@ function matchesFoodIconKeyword(text: string, keyword: string) {
 }
 
 function getFoodIconUrl(food: Pick<Food, "name" | "brand" | "category" | "dataType">) {
-  const searchableText = [food.name, food.brand, food.category, food.dataType]
+  // Build search texts. We intentionally search name+brand FIRST and separately from
+  // category, to avoid the category string "Nuts & Seeds & Eggs" triggering the egg icon
+  // on almonds or pumpkin seeds.
+  const nameAndBrand = [food.name, food.brand]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
-  const match = foodIconRules.find(([keyword]) => matchesFoodIconKeyword(searchableText, keyword));
+  const categoryText = [food.category, food.dataType]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 
-  return `${iconBaseUrl}${match?.[1] ?? "Meal.svg"}`;
+  // Priority 1: exact name/brand match (catches "Eggs, whole", "Almond", etc.)
+  const matchByName = foodIconRules.find(([kw]) => matchesFoodIconKeyword(nameAndBrand, kw));
+  if (matchByName) return `${iconBaseUrl}${matchByName[1]}`;
+
+  // Priority 2: category match — but ONLY for broad/generic category keywords,
+  // not specific food names that could appear as false positives in category strings.
+  // We skip "egg"/"eggs" here so the category "Nuts & Seeds & Eggs" doesn't win.
+  const categoryOnlyKeywords = new Set([
+    "vegetable", "vegetables", "veggie", "veggies",
+    "fruit", "meat", "meal", "dairy", "seafood",
+  ]);
+  const matchByCategory = foodIconRules.find(
+    ([kw]) => categoryOnlyKeywords.has(kw) && matchesFoodIconKeyword(categoryText, kw)
+  );
+
+  return `${iconBaseUrl}${matchByCategory?.[1] ?? "Meal.svg"}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1368,20 +1531,33 @@ function normalizeAmountUnit(unit: string): MeasuredAmountUnit | null {
   return null;
 }
 
-function getMeasuredServingBasis(food: Food) {
+function getMeasuredServingBasis(food: Pick<Food, "servingSize">) {
   const basis = parseServingSize(food.servingSize);
   const unit = basis ? normalizeAmountUnit(basis.unit) : null;
   return basis && unit ? { amount: basis.amount, unit } : null;
 }
 
-function convertAmountToBasisUnit(amount: number, amountUnit: MeasuredAmountUnit, basisUnit: MeasuredAmountUnit) {
+function convertAmountToBasisUnit(amount: number, amountUnit: AmountUnit, basisUnit: MeasuredAmountUnit) {
+  if (amountUnit === "serving") return amount;
   if (amountUnit === basisUnit) return amount;
-  if (amountUnit === "oz" && basisUnit === "g") return amount * 28.349523125;
-  if (amountUnit === "g" && basisUnit === "oz") return amount / 28.349523125;
+
+  const grams =
+    amountUnit === "g" ? amount :
+    amountUnit === "oz" ? amount * 28.349523125 :
+    amountUnit === "ml" ? amount * 0.92 :
+    amountUnit === "tbsp" ? amount * 15 * 0.92 :
+    amountUnit === "tsp" ? amount * 5 * 0.92 :
+    amountUnit === "cup" ? amount * 240 * 0.92 :
+    null;
+
+  if (grams === null) return null;
+  if (basisUnit === "g") return grams;
+  if (basisUnit === "oz") return grams / 28.349523125;
+
   return null;
 }
 
-function getScaleFromServingBasis(food: Food, amount: number) {
+function getScaleFromServingBasis(food: Pick<Food, "servingSize">, amount: number) {
   const basis = getMeasuredServingBasis(food);
   if (!basis) return null;
 
@@ -1559,6 +1735,11 @@ function getRecentFoods(selectedDate: string) {
           name: item.name,
           brand: item.brand,
           servingSize: item.servingSize,
+          amount: item.amount,
+          amountUnit: item.amountUnit,
+          portionLabel: item.portionLabel,
+          portionScale: item.portionScale,
+          servingLabel: item.servingLabel,
           calories: item.calories,
           protein: item.protein,
           carbs: item.carbs,
@@ -1627,6 +1808,7 @@ function getFoodSearchScore(food: Food, query: string) {
     (synonym) => nameText.includes(synonym) || brandText.includes(synonym)
   );
   let score = 0;
+  
 
   // Foundation/SR descriptions are authoritative — boost when all query words appear in the name itself.
   if (dataTypeText === "foundation" || dataTypeText === "sr legacy") {
@@ -1740,6 +1922,80 @@ function getBrandDisplayName(brand: string | null | undefined) {
 const WORKER_BASE_URL = "https://jessica-worker.snack-bunker.workers.dev";
 const foodDetailCache = new Map<number, FoodDetail>();
 
+// ── Local food database ──────────────────────────────────────────────────────
+
+type LocalFoodEntry = {
+  id: number;
+  category: string;
+  name: string;
+  preparation: string;
+  serving: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sodium: number;
+  source: string;
+  notes: string;
+  measurementType?: "solid" | "liquid" | "spoonable";
+};
+
+let localFoodsCache: LocalFoodEntry[] | null = null;
+
+async function getLocalFoods(): Promise<LocalFoodEntry[]> {
+  if (localFoodsCache) return localFoodsCache;
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}foods.json`);
+    const data = await res.json() as { foods: LocalFoodEntry[] };
+    localFoodsCache = data.foods;
+    return localFoodsCache;
+  } catch {
+    return [];
+  }
+}
+
+function localFoodToFood(entry: LocalFoodEntry): Food {
+  return {
+    id: entry.id,
+    name: entry.name,
+    brand: null,
+    category: entry.category,
+    source: entry.source,
+    dataType: "local",
+    servingSize: "100 g",
+    calories: entry.calories,
+    protein: entry.protein,
+    carbs: entry.carbs,
+    fat: entry.fat,
+    fiber: entry.fiber,
+    sodium: entry.sodium,
+    notes: entry.notes || undefined,
+    isSearchPreview: false,
+    measurementType: entry.measurementType,
+  };
+}
+
+async function searchLocalFoods(query: string): Promise<Food[]> {
+  const foods = await getLocalFoods();
+  const queryText = normalizeSearchText(query);
+  if (!queryText) return [];
+
+  return foods
+  .filter(entry => {
+    const name = normalizeSearchText(entry.name);
+    const cat = normalizeSearchText(entry.category);
+    const tokens = queryText.split(/\s+/);
+    return tokens.every(token =>
+      new RegExp(`\\b${token}s?\\b`, "i").test(name) ||
+      new RegExp(`\\b${token}s?\\b`, "i").test(cat)
+);
+  })
+  .map(localFoodToFood)
+  .sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query))
+  .slice(0, 10);
+}
+
 async function fetchUsdaFoods(query: string) {
   const res = await fetch(
     `${WORKER_BASE_URL}/?query=${encodeURIComponent(query)}`
@@ -1762,18 +2018,107 @@ async function fetchUsdaFoodDetail(foodId: number): Promise<FoodDetail> {
 }
 
 async function searchUsdaFoodsWithSynonyms(query: string) {
+  const localResults = await searchLocalFoods(query);
+
+  // Always add local results first — they are protected from dedup
+  const foodsById = new Map<number, Food>();
+  for (const food of localResults) {
+    foodsById.set(food.id, food);
+  }
+
+  // Only call USDA if local results are sparse
+  if (localResults.length >= 1) {
+    return rankSearchResults([...foodsById.values()], query);
+  }
+
+  // Fall through to USDA for packaged/branded foods
   const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
   const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
-  const foodsById = new Map<number, Food>();
 
   for (const foods of resultSets) {
     for (const food of foods) {
-      if (!foodsById.has(food.id)) foodsById.set(food.id, food);
+      const isDuplicatedLocally = localResults.some(local =>
+        normalizeSearchText(local.name).replace(/\s+/g, "") ===
+        normalizeSearchText(food.name).replace(/\s+/g, "")
+      );
+      if (!foodsById.has(food.id) && !isDuplicatedLocally) {
+        foodsById.set(food.id, food);
+      }
     }
   }
 
   return rankSearchResults([...foodsById.values()], query);
 }
+
+
+
+// ── Grouped search results ────────────────────────────────────────────────────
+
+type SearchResultGroup = {
+  label: string;
+  foods: Food[];
+};
+
+/**
+ * Returns search results split into labelled groups:
+ * "My Foods" (custom foods + recent), "Whole Foods" (local DB), "Packaged" (USDA).
+ * Groups with no results are omitted.
+ */
+async function searchFoodsGrouped(
+  query: string,
+  customFoods: Food[],
+  recentFoods: Food[],
+  recipes: Recipe[]
+): Promise<SearchResultGroup[]> {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+
+  // My Foods: custom foods + recipes that match the query
+  const myFoods: Food[] = [
+    ...customFoods.filter(f => matchesFoodQuery(f, query)),
+    ...recipes.filter(f => matchesFoodQuery(f, query)),
+  ];
+
+  // Recent: recently logged foods matching the query (not already in myFoods)
+  const myFoodIds = new Set(myFoods.map(f => f.id));
+  const recentMatches = recentFoods.filter(
+    f => matchesFoodQuery(f, query) && !myFoodIds.has(f.id)
+  );
+
+  // Local DB foods
+  const localResults = await searchLocalFoods(query);
+
+  // USDA (packaged) — only if local results are sparse
+  let usdaResults: Food[] = [];
+  if (localResults.length < 3) {
+    const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
+    const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
+    const localIds = new Set(localResults.map(f => f.id));
+    const usdaById = new Map<number, Food>();
+    for (const foods of resultSets) {
+      for (const food of foods) {
+        const isDuplicatedLocally = localResults.some(local =>
+          normalizeSearchText(local.name).replace(/\s+/g, "") ===
+          normalizeSearchText(food.name).replace(/\s+/g, "")
+        );
+        if (!localIds.has(food.id) && !usdaById.has(food.id) && !isDuplicatedLocally) {
+          usdaById.set(food.id, food);
+        }
+      }
+    }
+    usdaResults = rankSearchResults([...usdaById.values()], query);
+  }
+
+  const groups: SearchResultGroup[] = [];
+
+  const myFoodsAll = [...rankSearchResults(myFoods, query), ...rankSearchResults(recentMatches, query)];
+  if (myFoodsAll.length > 0) groups.push({ label: "My Foods", foods: myFoodsAll });
+  if (localResults.length > 0) groups.push({ label: "Whole Foods", foods: localResults });
+  if (usdaResults.length > 0) groups.push({ label: "Packaged", foods: usdaResults.slice(0, 15) });
+
+  return groups;
+}
+
 
 function getIngredientCalories(ingredient: RecipeIngredient) {
   return Math.round(ingredient.food.calories * ingredient.quantity);
@@ -2187,5 +2532,5 @@ function getConfiguredGoogleClientId() {
   return import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem(googleDriveClientIdKey) || "";
 }
 
-export type { Food, RecipeIngredient, Recipe, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, WeightImportEntry, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, OAuthPendingAction, MealCategory, LogItem, SavedLogItem };
-export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms };
+export type { Food, RecipeIngredient, Recipe, SearchResultGroup, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, WeightImportEntry, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, OAuthPendingAction, MealCategory, LogItem, SavedLogItem };
+export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getFoodServingDisplay, getFoodSearchServingDisplay, getFoodSearchCalorieDisplay, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms, searchFoodsGrouped };

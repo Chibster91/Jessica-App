@@ -3,6 +3,7 @@ import {
   getBrandDisplayName,
   getFoodDisplayName,
   getFoodIconUrl,
+  getFoodServingDisplay,
   getIngredientCalories,
   type CustomFoodForm,
   type Food,
@@ -191,7 +192,7 @@ export function FoodLibraryView({
                         </span>
                         <span className="food-card-meta-row">
                           <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
-                          <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
+                          <span className="food-card-cal">{food.calories} cal per {getFoodServingDisplay(food)}</span>
                         </span>
                         <span className="food-card-logged">Logged {food.loggedCount ?? 0} times this week</span>
                       </button>
@@ -217,7 +218,7 @@ export function FoodLibraryView({
                         </span>
                         <span className="food-card-meta-row">
                           <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
-                          <span className="food-card-cal">{food.calories} cal per {food.servingSize}</span>
+                          <span className="food-card-cal">{food.calories} cal per {getFoodServingDisplay(food)}</span>
                         </span>
                       </button>
                     ))}
@@ -242,7 +243,7 @@ export function FoodLibraryView({
                         </span>
                         <span className="food-card-meta-row">
                           <span className="food-card-brand">{recipe.ingredients.length} ingredients</span>
-                          <span className="food-card-cal">{recipe.calories} cal per {recipe.servingSize}</span>
+                          <span className="food-card-cal">{recipe.calories} cal per {getFoodServingDisplay(recipe)}</span>
                         </span>
                       </button>
                     ))}
@@ -263,7 +264,7 @@ export function FoodLibraryView({
                     <p>{getBrandDisplayName(librarySelection.food.brand)}</p>
                     <div className="nutrition-grid">
                       <span>Serving</span>
-                      <strong>{librarySelection.food.servingSize}</strong>
+                      <strong>{getFoodServingDisplay(librarySelection.food)}</strong>
                       <span>Calories</span>
                       <strong>{librarySelection.food.calories}</strong>
                       <span>Protein</span>

@@ -3219,6 +3219,22 @@ button {
   gap: 0.5rem;
 }
 
+.amount-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(90px, 120px);
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.amount-field,
+.unit-field {
+  min-width: 0;
+}
+
+.unit-field select {
+  width: 100%;
+}
+
 .import-preview-overlay {
   z-index: 285;
 }

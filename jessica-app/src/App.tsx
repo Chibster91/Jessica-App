@@ -63,6 +63,8 @@ import {
   getRecentFoods,
   matchesFoodQuery,
   getFoodDisplayName,
+  getFoodServingDisplay,
+  getFoodSearchCalorieDisplay,
   getBrandDisplayName,
   getIngredientCalories,
   getRecipeTotals,
@@ -1142,6 +1144,16 @@ function App() {
       name: getFoodDisplayName(selectedFoodServing),
       brand: selectedFoodServing.brand ? getBrandDisplayName(selectedFoodServing.brand) : selectedFoodServing.brand,
     };
+    const servingLabel =
+      amountUnit === "serving"
+        ? selectedPortion
+          ? selectedServings === 1
+            ? selectedPortion.label
+            : `${selectedServings} x ${selectedPortion.label}`
+          : selectedServings === 1
+          ? selectedFoodServing.servingSize
+          : `${selectedServings} x ${selectedFoodServing.servingSize}`
+        : `${amount} ${amountUnit}`;
 
     setLog([
       ...log,
@@ -1149,6 +1161,13 @@ function App() {
         ...displayFoodServing,
         category: pendingCategory,
         quantity: selectedServings,
+        amount: amountUnit === "serving" ? selectedServings : amount,
+        amountUnit,
+        portionLabel: selectedPortion?.label,
+        portionScale: selectedPortion
+          ? getScaleFromServingBasis(selectedFood, selectedPortion.gramWeight) ?? undefined
+          : amountScale ?? undefined,
+        servingLabel,
         logId: createClientId(),
       },
     ]);
@@ -1209,6 +1228,7 @@ function App() {
               ...item,
               quantity,
               servingSize: editItemServingSize.trim() || item.servingSize,
+              servingLabel: editItemServingSize.trim() || item.servingLabel,
             }
           : item
       )
@@ -2331,15 +2351,56 @@ function startEditWeightEntry(entry: WeightEntry) {
 
   const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood?.name);
   const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
-  const localPortionAmount = Number(portionAmount);
+ const convertToGrams = (value: number, unit: AmountUnit, food: Food | null) => {
+  const density = food?.measurementType === "liquid" ? 0.92 : 1;
+
+  switch (unit) {
+    case "g":
+      return value;
+    case "oz":
+      return value * 28.3495;
+    case "ml":
+      return value * density;
+    case "tbsp":
+      return value * 15 * density;
+    case "tsp":
+      return value * 5 * density;
+    case "cup":
+      return value * 240 * density;
+    default:
+      return value;
+  }
+};
+  const rawPortionAmount = Number(portionAmount);
+
+const localPortionAmount =
+  amountUnit === "serving"
+    ? rawPortionAmount
+    : convertToGrams(rawPortionAmount, amountUnit, selectedFood);
   const measuredServingBasis = selectedFood ? getMeasuredServingBasis(selectedFood) : null;
-  const allowedAmountUnits = selectedFood && measuredServingBasis
-    ? [measuredServingBasis.unit]
-    : (["serving"] as AmountUnit[]);
+ const allowedAmountUnits = (() => {
+  if (!selectedFood) return ["serving"] as AmountUnit[];
+
+  switch (selectedFood.measurementType ?? "solid") {
+    case "liquid":
+      return ["ml", "cup", "tbsp", "tsp"] as AmountUnit[];
+
+    case "spoonable":
+      return ["g", "oz", "tbsp", "tsp"] as AmountUnit[];
+
+    default:
+      return ["g", "oz"] as AmountUnit[];
+  }
+})();
+useEffect(() => {
+  if (!allowedAmountUnits.includes(amountUnit)) {
+    setAmountUnit(allowedAmountUnits[0]);
+  }
+}, [allowedAmountUnits, amountUnit]);
   const portionAmountInBasisUnits =
-    measuredServingBasis && amountUnit !== "serving"
-      ? convertAmountToBasisUnit(localPortionAmount, amountUnit, measuredServingBasis.unit)
-      : localPortionAmount;
+  amountUnit === "serving"
+    ? localPortionAmount
+    : convertAmountToBasisUnit(localPortionAmount, amountUnit, "g")
   const localPortionScale =
     selectedFood &&
     hasUsableSearchNutrition(selectedFood) &&
@@ -2384,12 +2445,23 @@ function startEditWeightEntry(entry: WeightEntry) {
   const startingWeightEntry = sortedWeightEntriesOldest[0] ?? null;
   const parsedWeightFormValue = parseDecimalInput(weightForm.weight);
   const isWeightFormValid = parsedWeightFormValue > 0 && Number.isFinite(parsedWeightFormValue);
+ console.log("ADD FOOD DEBUG", {
+  selectedFood: Boolean(selectedFood),
+  isSearchPreview: selectedFood?.isSearchPreview,
+  isLoadingDetail,
+  amountUnit,
+  allowedAmountUnits,
+  localPortionScale,
+  selectedPortionCalories,
+  portionOptionsLength: portionOptions.length,
+  selectedPortion: Boolean(selectedPortion),
+});
   const canAddSelectedFood =
     Boolean(selectedFood) &&
     !selectedFood?.isSearchPreview &&
     !isLoadingDetail &&
-    (amountUnit === "serving" || (allowedAmountUnits.includes(amountUnit) && localPortionScale !== null)) &&
-    (portionOptions.length === 0 || Boolean(selectedPortion));
+    (amountUnit === "serving" || (allowedAmountUnits.includes(amountUnit) && selectedPortionCalories !== null)) &&
+    (amountUnit !== "serving" || portionOptions.length === 0 || Boolean(selectedPortion));
   const profileCalculation = calculateProfile(profileForm);
   const profileErrors = getProfileValidationErrors(profileForm);
   const profileHasBlockingErrors = Object.keys(profileErrors).length > 0 || profileCalculation === null;
@@ -2801,7 +2873,7 @@ if (appView === "egg-oracle") {
                             </div>
                             <div className="log-food-main">
                               <strong>{getFoodDisplayName(item)}</strong>
-                              <span>{item.quantity === 1 ? item.servingSize : `${item.servingSize} × ${item.quantity}`}</span>
+                              <span>{getFoodServingDisplay(item)}</span>
                             </div>
                             <div className="log-food-calories">
                               <strong>{getItemCalories(item)}</strong>
@@ -2908,6 +2980,11 @@ if (appView === "egg-oracle") {
                       selectedPortion,
                       isLoadingDetail
                     );
+                    const calorieDisplay = getFoodSearchCalorieDisplay(
+                      food,
+                      resultDisplay.calories,
+                      resultDisplay.servingSize
+                    );
                     return (
                       <button
                         className={`food-card ${selectedFood?.id === food.id ? "selected" : ""}`}
@@ -2927,7 +3004,7 @@ if (appView === "egg-oracle") {
                               ? "Loading..."
                               : food.isSearchPreview && selectedFood?.id !== food.id
                                 ? resultDisplay.servingSize
-                                : `${resultDisplay.calories} cal per ${resultDisplay.servingSize}`}
+                                : `${calorieDisplay.calories} cal per ${calorieDisplay.serving}`}
                           </span>
                         </span>
                       </button>
@@ -3420,21 +3497,6 @@ if (appView === "egg-oracle") {
               Based on {measuredServingBasis ? `${measuredServingBasis.amount}${measuredServingBasis.unit}` : selectedFood.servingSize}
             </p>
 
-            {allowedAmountUnits.length > 1 && (
-              <div className="serving-unit-tabs" role="group" aria-label="Serving unit">
-                {allowedAmountUnits.map((unit) => (
-                  <button
-                    key={unit}
-                    type="button"
-                    className={amountUnit === unit ? "active" : ""}
-                    onClick={() => setAmountUnit(unit)}
-                  >
-                    {unit === "serving" ? "Serving" : unit}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {amountUnit === "serving" && portionOptions.length > 0 && (
               <label className="floating-field">
                 Portion
@@ -3448,19 +3510,35 @@ if (appView === "egg-oracle") {
               </label>
             )}
 
-            <label className="floating-field">
-              {amountUnit === "serving" ? "Servings" : `Amount (${allowedAmountUnits[0]})`}
-              <input
-                type="text"
-                inputMode="decimal"
-                value={amountUnit === "serving" ? quantity : portionAmount}
-                onChange={(e) =>
-                  amountUnit === "serving"
-                    ? setQuantity(e.target.value)
-                    : setPortionAmount(e.target.value)
-                }
-              />
-            </label>
+<div className="amount-row">
+  <label className="floating-field amount-field">
+    {amountUnit === "serving" ? "Servings" : "Amount"}
+    <input
+      type="text"
+      inputMode="decimal"
+      value={amountUnit === "serving" ? quantity : portionAmount}
+      onChange={(e) =>
+        amountUnit === "serving"
+          ? setQuantity(e.target.value)
+          : setPortionAmount(e.target.value)
+      }
+    />
+  </label>
+
+  <label className="floating-field unit-field">
+    Unit
+    <select
+      value={amountUnit}
+      onChange={(e) => setAmountUnit(e.target.value as AmountUnit)}
+    >
+      {allowedAmountUnits.map((unit) => (
+        <option key={unit} value={unit}>
+          {unit}
+        </option>
+      ))}
+    </select>
+  </label>
+</div>
 
             {selectedPortionCalories !== null && (
               <p className="modal-hint">
