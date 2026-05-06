@@ -123,6 +123,9 @@ export function ProfileView({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteStats, setDeleteStats] = useState<DeleteStats | null>(null);
+  const [isManualCalorieEditorOpen, setIsManualCalorieEditorOpen] = useState(false);
+  const [manualCalorieDraft, setManualCalorieDraft] = useState("");
+  const [manualCalorieDraftError, setManualCalorieDraftError] = useState("");
 
   function openDeleteModal() {
     let logDays = 0;
@@ -181,6 +184,29 @@ export function ProfileView({
   const handleProfileSave = () => {
     saveProfile();
     if (!profileHasBlockingErrors) setProfileWizardStep(0);
+  };
+  const openManualCalorieEditor = () => {
+    setManualCalorieDraft(
+      profileForm.manualCalorieOverride ||
+      (profileCalculation ? String(profileCalculation.calculatedCalories) : "")
+    );
+    setManualCalorieDraftError("");
+    setIsManualCalorieEditorOpen(true);
+  };
+  const applyManualCalorieGoal = () => {
+    const calories = Number(manualCalorieDraft);
+    if (!Number.isFinite(calories) || calories <= 0) {
+      setManualCalorieDraftError("Enter a calorie goal above 0.");
+      return;
+    }
+
+    updateProfileForm({
+      useManualCalories: true,
+      manualCalorieOverride: String(Math.round(calories)),
+    });
+    setManualCalorieDraft(String(Math.round(calories)));
+    setManualCalorieDraftError("");
+    setIsManualCalorieEditorOpen(false);
   };
 
   // ─── READ-ONLY VIEW ────────────────────────────────────────────
@@ -452,7 +478,7 @@ export function ProfileView({
       {/* Step 0: Basics */}
       {profileWizardStep === 0 && (
         <section className="panel">
-          <div className="wizard-card profile-form-grid">
+          <div className="wizard-card profile-form-grid profile-basics-form">
             <div className="wz-name-age-row">
               <label>
                 Display Name
@@ -497,33 +523,38 @@ export function ProfileView({
 
             <label>
               Height
-              <div className="height-input-row">
-                <input
-                  aria-label="Height feet"
-                  type="number"
-                  min="3"
-                  max="8"
-                  step="1"
-                  value={profileForm.heightFeet}
-                  onChange={(e) => updateProfileForm({ heightFeet: e.target.value })}
-                />
-                <input
-                  aria-label="Height inches"
-                  type="number"
-                  min="0"
-                  max="11"
-                  step="0.1"
-                  value={profileForm.heightInches}
-                  onChange={(e) => updateProfileForm({ heightInches: e.target.value })}
-                />
-                <span>ft / in</span>
+              <div className="profile-height-row">
+                <div className="profile-unit-input">
+                  <input
+                    aria-label="Height feet"
+                    type="number"
+                    min="3"
+                    max="8"
+                    step="1"
+                    value={profileForm.heightFeet}
+                    onChange={(e) => updateProfileForm({ heightFeet: e.target.value })}
+                  />
+                  <span>ft</span>
+                </div>
+                <div className="profile-unit-input">
+                  <input
+                    aria-label="Height inches"
+                    type="number"
+                    min="0"
+                    max="11"
+                    step="0.1"
+                    value={profileForm.heightInches}
+                    onChange={(e) => updateProfileForm({ heightInches: e.target.value })}
+                  />
+                  <span>in</span>
+                </div>
               </div>
               {profileErrors.height && <span className="profile-field-error">{profileErrors.height}</span>}
             </label>
 
             <label>
               Current Weight
-              <div className="goals-input-row">
+              <div className="profile-weight-row">
                 <input
                   type="number"
                   min="66"
@@ -631,6 +662,60 @@ export function ProfileView({
             </div>
           </section>
 
+          <section className="panel profile-manual-calorie-panel">
+            <div className="profile-manual-calorie-header">
+              <div>
+                <span>Calorie target</span>
+                <strong>
+                  {profileForm.useManualCalories && profileForm.manualCalorieOverride
+                    ? `${Number(profileForm.manualCalorieOverride).toLocaleString()} kcal/day`
+                    : "Using recommendation"}
+                </strong>
+              </div>
+              <button type="button" className="secondary-button" onClick={openManualCalorieEditor}>
+                Set calorie goal manually
+              </button>
+            </div>
+
+            {isManualCalorieEditorOpen && (
+              <div className="profile-manual-calorie-editor">
+                <label>
+                  Manual calorie goal
+                  <div className="profile-manual-calorie-input">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={manualCalorieDraft}
+                      onChange={(e) => {
+                        setManualCalorieDraft(e.target.value);
+                        setManualCalorieDraftError("");
+                      }}
+                    />
+                    <span>kcal/day</span>
+                  </div>
+                </label>
+                <div className="profile-manual-calorie-actions">
+                  <button type="button" className="primary-button" onClick={applyManualCalorieGoal}>
+                    Apply
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setIsManualCalorieEditorOpen(false);
+                      setManualCalorieDraftError("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {manualCalorieDraftError && <span className="profile-field-error">{manualCalorieDraftError}</span>}
+                {profileErrors.manualCalories && <span className="profile-field-error">{profileErrors.manualCalories}</span>}
+              </div>
+            )}
+          </section>
+
           <section className="panel">
             <p className="wz-card-title">Live calculation</p>
             {profileCalculation ? (
@@ -645,7 +730,7 @@ export function ProfileView({
                 </div>
                 <div className="wz-live-tile wz-live-accent">
                   <div className="wz-live-label">Recommended</div>
-                  <div className="wz-live-val">{profileCalculation.activeCalories.toLocaleString()}<small>kcal/day</small></div>
+                  <div className="wz-live-val">{profileCalculation.calculatedCalories.toLocaleString()}<small>kcal/day</small></div>
                 </div>
                 <div className="wz-live-tile">
                   <div className="wz-live-label">Protein</div>

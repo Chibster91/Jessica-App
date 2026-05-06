@@ -56,6 +56,7 @@ import {
   getMeasuredServingBasis,
   convertAmountToBasisUnit,
   getScaleFromServingBasis,
+  scaleFoodNutrition,
   hasUsableSearchNutrition,
   getFoodForSelectedPortion,
   getCaloriesPerServing,
@@ -540,8 +541,8 @@ function App() {
   const [moveToDayDate, setMoveToDayDate] = useState("");
   const [moveToDayStep, setMoveToDayStep] = useState<"date" | "meal">("date");
   const [itemToEdit, setItemToEdit] = useState<LogItem | null>(null);
-  const [editItemQuantity, setEditItemQuantity] = useState("1");
-  const [editItemServingSize, setEditItemServingSize] = useState("");
+  const [editItemAmount, setEditItemAmount] = useState("1");
+  const [editItemAmountUnit, setEditItemAmountUnit] = useState<AmountUnit>("serving");
   const [amountUnit, setAmountUnit] = useState<AmountUnit>("serving");
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
@@ -1209,27 +1210,80 @@ function App() {
     setMoveToDayStep("date");
   }
 
+  function formatAmountLabel(amount: number) {
+    return Number.isInteger(amount) ? String(amount) : String(Number(amount.toFixed(2)));
+  }
+
+  function getEditAmountUnits(item: LogItem | null) {
+    if (!item) return ["serving"] as AmountUnit[];
+
+    const units: AmountUnit[] =
+      item.measurementType === "liquid"
+        ? ["ml", "cup", "tbsp", "tsp", "serving"]
+        : item.measurementType === "spoonable"
+        ? ["g", "oz", "tbsp", "tsp", "serving"]
+        : ["g", "oz", "serving"];
+
+    if (item.amountUnit && !units.includes(item.amountUnit)) units.unshift(item.amountUnit);
+
+    return units;
+  }
+
   function openEditFoodItem(item: LogItem) {
     setItemToEdit(item);
-    setEditItemQuantity(String(item.quantity));
-    setEditItemServingSize(item.servingSize);
+    setEditItemAmount(String(item.amount ?? item.quantity ?? 1));
+    setEditItemAmountUnit(item.amountUnit ?? "serving");
   }
 
   function saveEditedFoodItem() {
     if (!itemToEdit) return;
 
-    const quantity = parseDecimalInput(editItemQuantity);
-    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    const amount = parseDecimalInput(editItemAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const amountLabel = formatAmountLabel(amount);
 
     setLog(
       log.map((item) =>
         item.logId === itemToEdit.logId
-          ? {
-              ...item,
-              quantity,
-              servingSize: editItemServingSize.trim() || item.servingSize,
-              servingLabel: editItemServingSize.trim() || item.servingLabel,
-            }
+          ? (() => {
+              if (editItemAmountUnit === "serving") {
+                const servingName = item.portionLabel ?? item.servingSize;
+                return {
+                  ...item,
+                  quantity: amount,
+                  amount,
+                  amountUnit: editItemAmountUnit,
+                  servingLabel: amount === 1 ? servingName : `${amountLabel} x ${servingName}`,
+                };
+              }
+
+              const measuredBasis = getMeasuredServingBasis(item);
+              if (!measuredBasis) return item;
+
+              const basisAmount = convertAmountToBasisUnit(amount, editItemAmountUnit, measuredBasis.unit);
+              if (basisAmount === null) return item;
+
+              const amountScale = getScaleFromServingBasis(item, basisAmount);
+              if (amountScale === null) return item;
+
+              const nextServingSize = `${formatAmountLabel(basisAmount)} ${measuredBasis.unit}`;
+              const nextItem = scaleFoodNutrition(item, amountScale, nextServingSize);
+
+              return {
+                ...item,
+                ...nextItem,
+                category: item.category,
+                logId: item.logId,
+                quantity: 1,
+                amount,
+                amountUnit: editItemAmountUnit,
+                portionScale:
+                  item.portionScale !== undefined && Number.isFinite(item.portionScale)
+                    ? item.portionScale * amountScale
+                    : item.portionScale,
+                servingLabel: `${amountLabel} ${editItemAmountUnit}`,
+              };
+            })()
           : item
       )
     );
@@ -2351,32 +2405,7 @@ function startEditWeightEntry(entry: WeightEntry) {
 
   const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood?.name);
   const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
- const convertToGrams = (value: number, unit: AmountUnit, food: Food | null) => {
-  const density = food?.measurementType === "liquid" ? 0.92 : 1;
-
-  switch (unit) {
-    case "g":
-      return value;
-    case "oz":
-      return value * 28.3495;
-    case "ml":
-      return value * density;
-    case "tbsp":
-      return value * 15 * density;
-    case "tsp":
-      return value * 5 * density;
-    case "cup":
-      return value * 240 * density;
-    default:
-      return value;
-  }
-};
   const rawPortionAmount = Number(portionAmount);
-
-const localPortionAmount =
-  amountUnit === "serving"
-    ? rawPortionAmount
-    : convertToGrams(rawPortionAmount, amountUnit, selectedFood);
   const measuredServingBasis = selectedFood ? getMeasuredServingBasis(selectedFood) : null;
  const allowedAmountUnits = (() => {
   if (!selectedFood) return ["serving"] as AmountUnit[];
@@ -2399,13 +2428,15 @@ useEffect(() => {
 }, [allowedAmountUnits, amountUnit]);
   const portionAmountInBasisUnits =
   amountUnit === "serving"
-    ? localPortionAmount
-    : convertAmountToBasisUnit(localPortionAmount, amountUnit, "g")
+    ? rawPortionAmount
+    : measuredServingBasis && Number.isFinite(rawPortionAmount) && rawPortionAmount > 0
+      ? convertAmountToBasisUnit(rawPortionAmount, amountUnit, measuredServingBasis.unit)
+      : null
   const localPortionScale =
     selectedFood &&
     hasUsableSearchNutrition(selectedFood) &&
-    Number.isFinite(localPortionAmount) &&
-    localPortionAmount > 0 &&
+    Number.isFinite(rawPortionAmount) &&
+    rawPortionAmount > 0 &&
     portionAmountInBasisUnits !== null
       ? getScaleFromServingBasis(selectedFood, portionAmountInBasisUnits)
       : null;
@@ -2462,6 +2493,10 @@ useEffect(() => {
     !isLoadingDetail &&
     (amountUnit === "serving" || (allowedAmountUnits.includes(amountUnit) && selectedPortionCalories !== null)) &&
     (amountUnit !== "serving" || portionOptions.length === 0 || Boolean(selectedPortion));
+  const servingBasisText =
+    amountUnit === "serving"
+      ? `Based on ${measuredServingBasis ? `${measuredServingBasis.amount}${measuredServingBasis.unit}` : selectedFood?.servingSize ?? "serving"}`
+      : `Using ${Number.isFinite(rawPortionAmount) && rawPortionAmount > 0 ? rawPortionAmount : ""} ${amountUnit}`.trim();
   const profileCalculation = calculateProfile(profileForm);
   const profileErrors = getProfileValidationErrors(profileForm);
   const profileHasBlockingErrors = Object.keys(profileErrors).length > 0 || profileCalculation === null;
@@ -3494,7 +3529,7 @@ if (appView === "egg-oracle") {
             {detailError && <p className="modal-error">{detailError}</p>}
 
             <p className="serving-basis-text">
-              Based on {measuredServingBasis ? `${measuredServingBasis.amount}${measuredServingBasis.unit}` : selectedFood.servingSize}
+              {servingBasisText}
             </p>
 
             {amountUnit === "serving" && portionOptions.length > 0 && (
@@ -3971,19 +4006,33 @@ if (appView === "egg-oracle") {
           <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="edit-food-title">
             <h2 id="edit-food-title">Edit food</h2>
             <p>{getFoodDisplayName(itemToEdit)}</p>
-            <label className="floating-field">
-              Quantity
-              <input
-                type="text"
-                inputMode="decimal"
-                value={editItemQuantity}
-                onChange={(e) => setEditItemQuantity(e.target.value)}
-              />
-            </label>
-            <label className="floating-field">
-              Serving
-              <input value={editItemServingSize} onChange={(e) => setEditItemServingSize(e.target.value)} />
-            </label>
+            <div className="amount-row">
+              <label className="floating-field amount-field">
+                {editItemAmountUnit === "serving" ? "Servings" : "Amount"}
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={editItemAmount}
+                  onChange={(e) => setEditItemAmount(e.target.value)}
+                />
+              </label>
+              <label className="floating-field unit-field">
+                Unit
+                <select
+                  value={editItemAmountUnit}
+                  onChange={(e) => setEditItemAmountUnit(e.target.value as AmountUnit)}
+                >
+                  {getEditAmountUnits(itemToEdit).map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="modal-hint">
+              Current: {getFoodServingDisplay(itemToEdit)}
+            </p>
             <div className="floating-actions">
               <button type="button" className="primary-button" onClick={saveEditedFoodItem}>
                 Save

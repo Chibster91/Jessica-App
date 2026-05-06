@@ -180,6 +180,30 @@ export function WeightView({
     const remainingAmount = summaryCurrentWeight !== null && goalWeight !== null ? Math.abs(summaryCurrentWeight - goalWeight) : null;
     const firstEntryTime = startingWeightEntry ? new Date(`${startingWeightEntry.date}T00:00:00`).getTime() : null;
     const todayTime = new Date(`${today}T00:00:00`).getTime();
+    const plannedGoalTime = (() => {
+      if (!profile || !startingWeightEntry || !profile.goalWeightKg || profile.goal === "maintain" || profile.weeklyRateKg <= 0) {
+        return null;
+      }
+
+      const startTime = new Date(`${startingWeightEntry.date}T00:00:00`).getTime();
+      if (!Number.isFinite(startTime)) return null;
+
+      const startWeightKg = convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, "kg");
+      const goalRangeKg = Math.abs(startWeightKg - profile.goalWeightKg);
+      if (!Number.isFinite(goalRangeKg) || goalRangeKg <= 0) return null;
+
+      const plannedDays = (goalRangeKg / profile.weeklyRateKg) * 7;
+      const goalTime = startTime + plannedDays * 86400000;
+
+      return Number.isFinite(goalTime) && goalTime > startTime ? goalTime : null;
+    })();
+    const timePct =
+      firstEntryTime !== null &&
+      Number.isFinite(firstEntryTime) &&
+      Number.isFinite(todayTime) &&
+      plannedGoalTime !== null
+        ? Math.min(100, Math.max(0, ((todayTime - firstEntryTime) / (plannedGoalTime - firstEntryTime)) * 100))
+        : 0;
     const elapsedDays = firstEntryTime ? Math.max(1, Math.round((todayTime - firstEntryTime) / 86400000)) : 0;
     const avgDailyChange = summaryChange !== null && elapsedDays > 0 ? summaryChange / elapsedDays : null;
     const avgWeeklyChange = avgDailyChange !== null ? avgDailyChange * 7 : null;
@@ -194,11 +218,6 @@ export function WeightView({
     const expectedGoalDate = projectedGoalDays !== null
       ? new Date(todayTime + projectedGoalDays * 86400000).toISOString().slice(0, 10)
       : null;
-    const timePct = projectedGoalDays !== null
-      ? Math.min(100, Math.max(0, (elapsedDays / (elapsedDays + projectedGoalDays)) * 100))
-      : chartEntries.length > 1
-        ? 100
-        : 0;
     const ringSegmentsOn = Math.round(progressPct / 20);
     const selectedChartBmi = selectedChartPoint && profile
       ? convertWeightValue(selectedChartPoint.weight, selectedChartPoint.unit, "kg") / ((profile.heightCm / 100) ** 2)

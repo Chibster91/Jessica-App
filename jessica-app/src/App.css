@@ -1339,6 +1339,61 @@ input:disabled {
   grid-template-columns: 3fr 1fr;
 }
 
+.profile-basics-form {
+  gap: 0.6rem;
+  padding: 0.85rem;
+}
+
+.profile-basics-form .wz-name-age-row {
+  gap: 0.6rem;
+  grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 0.34fr);
+}
+
+.profile-basics-form label,
+.profile-basics-form .profile-field {
+  gap: 0.35rem;
+}
+
+.profile-height-row {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profile-unit-input,
+.profile-weight-row {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.profile-unit-input input,
+.profile-weight-row input {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.profile-unit-input span,
+.profile-weight-row span {
+  align-items: center;
+  background: #1b1e26;
+  border: 1px solid #343845;
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  color: #B7BCC7;
+  display: flex;
+  font-size: 0.82rem;
+  justify-content: center;
+  min-width: 2.65rem;
+  padding: 0 0.65rem;
+}
+
+.profile-weight-row {
+  max-width: 14rem;
+}
+
 .profile-form-grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -2155,6 +2210,80 @@ input:disabled {
   cursor: default;
   padding: 0.6rem 0.8rem;
   width: 100%;
+}
+
+.profile-manual-calorie-panel {
+  padding: 0.85rem 1rem;
+}
+
+.profile-manual-calorie-header {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.profile-manual-calorie-header div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.profile-manual-calorie-header span,
+.profile-manual-calorie-editor label {
+  color: var(--fg-2);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.profile-manual-calorie-header strong {
+  color: var(--fg);
+  font-size: 0.95rem;
+}
+
+.profile-manual-calorie-editor {
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.profile-manual-calorie-editor label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.profile-manual-calorie-input {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  max-width: 16rem;
+}
+
+.profile-manual-calorie-input input {
+  border-bottom-right-radius: 0;
+  border-top-right-radius: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.profile-manual-calorie-input span {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  color: var(--fg-2);
+  display: flex;
+  font-size: 0.78rem;
+  justify-content: center;
+  padding: 0 0.7rem;
+  white-space: nowrap;
+}
+
+.profile-manual-calorie-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 /* Live calculation tile grid */
@@ -3095,6 +3224,25 @@ button {
 .height-input-row,
 .library-layout {
   grid-template-columns: 1fr;
+}
+
+.profile-basics-form .wz-name-age-row,
+.profile-height-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profile-weight-row {
+  max-width: none;
+}
+
+.profile-manual-calorie-header,
+.profile-manual-calorie-actions {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.profile-manual-calorie-input {
+  max-width: none;
 }
 
 .custom-food-form > label:first-of-type,
@@ -5057,4 +5205,3 @@ button {
   flex: 0 0 auto;
   white-space: nowrap;
 }
-
