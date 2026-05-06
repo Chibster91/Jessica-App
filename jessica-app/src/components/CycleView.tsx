@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import "../../styles/eggOracle.css";
+import "../styles/eggOracle.css";
 
 const STORAGE_KEY = "eggOracleTrackingFirst.v2";
 
@@ -192,10 +192,6 @@ function normalizeImportedData(value: unknown): EggOracleData {
     periodLengthFallback: clampNumber(obj.periodLengthFallback, 5, 1, 14),
     logs: cleanedLogs,
   };
-}
-
-function makeExportPayload(data: EggOracleData) {
-  return { app: "Egg Oracle", version: 2, exportedAt: new Date().toISOString(), data: normalizeImportedData(data) };
 }
 
 // ─── Cycle computation ────────────────────────────────────────────────────────
@@ -707,125 +703,11 @@ function StatsPage({ data }: StatsPageProps) {
   );
 }
 
-type SettingsPageProps = {
-  data: EggOracleData;
-  setData: React.Dispatch<React.SetStateAction<EggOracleData>>;
-};
-
-function SettingsPage({ data, setData }: SettingsPageProps) {
-  const [importError, setImportError] = useState("");
-  const [statusMsg, setStatusMsg] = useState("");
-  const [exportText, setExportText] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  function exportData() {
-    const text = JSON.stringify(makeExportPayload(data), null, 2);
-    setExportText(text);
-    setImportError("");
-    setStatusMsg("Export ready — copy the text below or download the JSON file.");
-  }
-
-  function downloadExport() {
-    const text = exportText || JSON.stringify(makeExportPayload(data), null, 2);
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `egg-oracle-${toISO(new Date())}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function importFromFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    setImportError("");
-    setStatusMsg("");
-    setConfirmDelete(false);
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result || "{}"));
-        setData(normalizeImportedData(parsed.data || parsed));
-        setStatusMsg("Import complete — your data has been replaced.");
-      } catch (err) {
-        setImportError((err as Error).message || "Could not import that file.");
-      }
-    };
-    reader.onerror = () => setImportError("Could not read that file.");
-    reader.readAsText(file);
-  }
-
-  function importFromText() {
-    setImportError("");
-    setStatusMsg("");
-    setConfirmDelete(false);
-    try {
-      const parsed = JSON.parse(exportText || "{}");
-      setData(normalizeImportedData(parsed.data || parsed));
-      setStatusMsg("Import complete from pasted text.");
-    } catch (err) {
-      setImportError((err as Error).message || "Could not import that pasted text.");
-    }
-  }
-
-  function deleteAllData() {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      setStatusMsg("Tap again to confirm permanent deletion.");
-      return;
-    }
-    const fresh = defaultData();
-    setData(fresh);
-    saveData(fresh);
-    setExportText("");
-    setConfirmDelete(false);
-    setStatusMsg("All data deleted.");
-  }
-
+export function CycleSettingsCard() {
+  const [data, setData] = useState<EggOracleData>(() => loadData());
+  useEffect(() => saveData(data), [data]);
   return (
     <div className="eo-page">
-      <section className="panel">
-        <p className="panel-eyebrow">Data</p>
-        <ul className="pf-kv-list">
-          <li className="pf-row" role="button" tabIndex={0} onClick={exportData} onKeyDown={(e) => e.key === "Enter" && exportData()}>
-            <span>Export data (JSON)</span><span className="pf-chev">›</span>
-          </li>
-          <li className="pf-row" role="button" tabIndex={0}>
-            <label style={{ display: "contents", cursor: "pointer" }}>
-              <span>Import from file</span><span className="pf-chev">›</span>
-              <input type="file" accept="application/json,.json" onChange={importFromFile} style={{ display: "none" }} />
-            </label>
-          </li>
-          <li className="pf-row pf-row-danger" role="button" tabIndex={0} onClick={deleteAllData} onKeyDown={(e) => e.key === "Enter" && deleteAllData()}>
-            <span>{confirmDelete ? "Confirm — delete everything" : "Delete all data"}</span><span className="pf-chev">›</span>
-          </li>
-        </ul>
-
-        {exportText && (
-          <div className="eo-export-box">
-            <div className="eo-export-actions">
-              <button type="button" className="secondary-button" onClick={downloadExport}>Download JSON</button>
-              <button type="button" className="secondary-button" onClick={() => navigator.clipboard?.writeText(exportText)}>Copy</button>
-              <button type="button" className="secondary-button" onClick={importFromText}>Import text</button>
-            </div>
-            <textarea
-              className="eo-export-text"
-              value={exportText}
-              onChange={(e) => setExportText(e.target.value)}
-              aria-label="Exported data"
-              rows={6}
-            />
-          </div>
-        )}
-
-        {importError && <p className="profile-warning" style={{ marginTop: "0.75rem" }}>{importError}</p>}
-        {statusMsg && <p className="profile-toast" style={{ position: "static", marginTop: "0.75rem" }}>{statusMsg}</p>}
-      </section>
-
       <section className="panel">
         <p className="panel-eyebrow">Manual defaults</p>
         <p style={{ color: "var(--fg-2)", fontSize: "0.82rem", margin: "0 0 1rem" }}>
@@ -866,13 +748,14 @@ function SettingsPage({ data, setData }: SettingsPageProps) {
 
 // ─── Root component ───────────────────────────────────────────────────────────
 
-type EggOracleProps = {
+type CycleViewProps = {
   bottomNav: ReactNode;
+  healthTabs?: ReactNode;
 };
 
-export default function EggOracle({ bottomNav }: EggOracleProps) {
+export default function CycleView({ bottomNav, healthTabs }: CycleViewProps) {
   const [data, setData] = useState<EggOracleData>(() => loadData());
-  const [tab, setTab] = useState<"calendar" | "stats" | "settings">("calendar");
+  const [tab, setTab] = useState<"calendar" | "stats">("calendar");
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedISO, setSelectedISO] = useState<string | null>(null);
 
@@ -884,6 +767,7 @@ export default function EggOracle({ bottomNav }: EggOracleProps) {
 
   return (
     <main className="app eo-app">
+      {healthTabs}
       <div className="top-bar">
         <div>
         </div>
@@ -910,12 +794,10 @@ export default function EggOracle({ bottomNav }: EggOracleProps) {
       <div className="tab-row eo-tabs">
         <button type="button" className={tab === "calendar" ? "active" : ""} onClick={() => setTab("calendar")}>Calendar</button>
         <button type="button" className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Stats</button>
-        <button type="button" className={tab === "settings" ? "active" : ""} onClick={() => setTab("settings")}>Settings</button>
       </div>
 
       {tab === "calendar" && <CalendarPage data={data} monthDate={monthDate} setMonthDate={setMonthDate} onOpenDay={setSelectedISO} />}
       {tab === "stats" && <StatsPage data={data} setData={setData} />}
-      {tab === "settings" && <SettingsPage data={data} setData={setData} />}
 
       {selectedISO && <DayModal iso={selectedISO} data={data} setData={setData} onClose={() => setSelectedISO(null)} />}
 

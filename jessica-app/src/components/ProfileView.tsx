@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/profile.css";
+import { CycleSettingsCard } from "./CycleView";
 import {
   formatEntryDate,
   formatHeightValue,
@@ -45,6 +46,9 @@ type ProfileViewProps = {
   setIsProfileWizardOpen: Dispatch<SetStateAction<boolean>>;
   profileSaveStatus: string;
   setProfileSaveStatus: Dispatch<SetStateAction<string>>;
+  themeMode: "dark" | "light";
+  setThemeMode: Dispatch<SetStateAction<"dark" | "light">>;
+  setCycleTrackingPreference: (trackCycle: boolean) => void;
   cancelProfileChanges: () => void;
   saveProfile: () => void;
   onOpenExport: () => void;
@@ -114,6 +118,9 @@ export function ProfileView({
   setIsProfileWizardOpen,
   profileSaveStatus,
   setProfileSaveStatus,
+  themeMode,
+  setThemeMode,
+  setCycleTrackingPreference,
   cancelProfileChanges,
   saveProfile,
   onOpenExport,
@@ -127,6 +134,7 @@ export function ProfileView({
   const [isManualCalorieEditorOpen, setIsManualCalorieEditorOpen] = useState(false);
   const [manualCalorieDraft, setManualCalorieDraft] = useState("");
   const [manualCalorieDraftError, setManualCalorieDraftError] = useState("");
+  const [profileTab, setProfileTab] = useState<"info" | "settings">("info");
 
   function openDeleteModal() {
     let logDays = 0;
@@ -209,6 +217,12 @@ export function ProfileView({
     setManualCalorieDraftError("");
     setIsManualCalorieEditorOpen(false);
   };
+  const revertManualCalorieGoal = () => {
+    updateProfileForm({ useManualCalories: false, manualCalorieOverride: "" });
+    setManualCalorieDraft(profileCalculation ? String(profileCalculation.calculatedCalories) : "");
+    setManualCalorieDraftError("");
+    setIsManualCalorieEditorOpen(false);
+  };
 
   // ─── READ-ONLY VIEW ────────────────────────────────────────────
   if (profile && !isProfileWizardOpen) {
@@ -250,6 +264,27 @@ export function ProfileView({
 
         {profileSaveStatus && <p className="profile-toast">{profileSaveStatus}</p>}
 
+        <div className="profile-tabs" role="tablist" aria-label="Profile sections">
+          <button
+            type="button"
+            className={`profile-tab${profileTab === "info" ? " is-active" : ""}`}
+            onClick={() => setProfileTab("info")}
+            role="tab"
+            aria-selected={profileTab === "info"}
+          >
+            Info
+          </button>
+          <button
+            type="button"
+            className={`profile-tab${profileTab === "settings" ? " is-active" : ""}`}
+            onClick={() => setProfileTab("settings")}
+            role="tab"
+            aria-selected={profileTab === "settings"}
+          >
+            Settings
+          </button>
+        </div>
+
         <section className="panel">
           <div className="pf-hero">
             <div className="pf-avatar" aria-hidden>{avatarInitial}</div>
@@ -272,6 +307,8 @@ export function ProfileView({
           </div>
         </section>
 
+        {profileTab === "info" && (
+        <>
         <section className="panel">
           <p className="panel-eyebrow">Targets</p>
           <div className="pf-derived-grid">
@@ -344,6 +381,72 @@ export function ProfileView({
               <span className="pf-v">{paceLabel}</span>
             </li>
           </ul>
+          <button
+            type="button"
+            className="secondary-button profile-recalculate-btn"
+            onClick={() => {
+              setProfileForm(profileToForm(profile));
+              setProfileWizardStep(0);
+              setIsProfileWizardOpen(true);
+              setProfileSaveStatus("");
+            }}
+          >
+            Recalculate goals
+          </button>
+        </section>
+        </>
+        )}
+
+        {profileTab === "settings" && (
+        <>
+        <section className="panel">
+          <p className="panel-eyebrow">General</p>
+          <ul className="pf-kv-list">
+            <li className="pf-kv">
+              <span className="pf-k">Theme</span>
+              <button
+                type="button"
+                className={`toggle-pill${themeMode === "light" ? " active" : ""}`}
+                onClick={() => setThemeMode((mode) => (mode === "light" ? "dark" : "light"))}
+              >
+                {themeMode === "light" ? "Light" : "Dark"}
+              </button>
+            </li>
+          </ul>
+        </section>
+
+        <section className="panel">
+          <p className="panel-eyebrow">Home</p>
+          <p className="profile-placeholder">Settings coming soon.</p>
+        </section>
+
+        <section className="panel">
+          <p className="panel-eyebrow">Food Logging</p>
+          <p className="profile-placeholder">Settings coming soon.</p>
+        </section>
+
+        <section className="panel">
+          <p className="panel-eyebrow">Weight</p>
+          <p className="profile-placeholder">Settings coming soon.</p>
+        </section>
+
+        <section className="panel">
+          <p className="panel-eyebrow">Cycle</p>
+          <ul className="pf-kv-list">
+            <li className="pf-kv">
+              <span className="pf-k">Show Cycle in Health</span>
+              <button
+                type="button"
+                className={`toggle-pill${profile.trackCycle !== false ? " active" : ""}`}
+                onClick={() => setCycleTrackingPreference(profile.trackCycle === false)}
+              >
+                {profile.trackCycle !== false ? "Shown" : "Hidden"}
+              </button>
+            </li>
+          </ul>
+          <div className="profile-cycle-settings">
+            <CycleSettingsCard />
+          </div>
         </section>
 
         <section className="panel">
@@ -391,6 +494,8 @@ export function ProfileView({
             </li>
           </ul>
         </section>
+        </>
+        )}
 
         {isDeleteModalOpen && (
           <div className="modal-backdrop" role="dialog" aria-modal aria-labelledby="pf-dlg-title">
@@ -568,6 +673,15 @@ export function ProfileView({
               </div>
               {profileErrors.weight && <span className="profile-field-error">{profileErrors.weight}</span>}
             </label>
+
+            <label className="profile-checkbox-row">
+              <input
+                type="checkbox"
+                checked={profileForm.trackCycle}
+                onChange={(e) => updateProfileForm({ trackCycle: e.target.checked })}
+              />
+              <span>Track Menstrual Cycle</span>
+            </label>
           </div>
         </section>
       )}
@@ -709,6 +823,9 @@ export function ProfileView({
                     }}
                   >
                     Cancel
+                  </button>
+                  <button type="button" className="secondary-button" onClick={revertManualCalorieGoal}>
+                    Revert to recommended
                   </button>
                 </div>
                 {manualCalorieDraftError && <span className="profile-field-error">{manualCalorieDraftError}</span>}

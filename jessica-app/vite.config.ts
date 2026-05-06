@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192.png', 'pwa-512.png'],
       manifest: {
-        name: 'Jessica',
-        short_name: 'Jessica',
+        name: 'FoodVault',
+        short_name: 'FoodVault',
         description: 'Personal nutrition and health tracker',
         theme_color: '#171921',
         background_color: '#171921',

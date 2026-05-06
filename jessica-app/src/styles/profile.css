@@ -1292,3 +1292,114 @@
   flex: 0 0 auto;
   white-space: nowrap;
 }
+
+.profile-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill, 999px);
+  padding: 4px;
+  margin-bottom: 1rem;
+}
+
+.profile-tab {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--fg-2);
+  font-weight: 600;
+  padding: 8px 12px;
+}
+
+.profile-tab.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.profile-recalculate-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+
+.profile-placeholder {
+  color: var(--fg-2);
+  font-size: 0.86rem;
+  margin: 0;
+  text-align: left;
+}
+
+.profile-cycle-settings {
+  margin-top: 0.75rem;
+}
+
+.profile-cycle-settings .eo-page {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.profile-cycle-settings .panel {
+  margin: 0;
+}
+
+.profile-checkbox-row {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
+}
+
+.profile-checkbox-row input {
+  width: auto;
+}
+
+:root[data-theme="light"] .profile-card,
+:root[data-theme="light"] .profile-wizard-card,
+:root[data-theme="light"] .wizard-card,
+:root[data-theme="light"] .profile-summary-hero,
+:root[data-theme="light"] .profile-summary-card,
+:root[data-theme="light"] .profile-summary-card > div,
+:root[data-theme="light"] .profile-option,
+:root[data-theme="light"] .option-card,
+:root[data-theme="light"] .pf-avatar,
+:root[data-theme="light"] .pf-derived,
+:root[data-theme="light"] .pf-macro,
+:root[data-theme="light"] .pf-kv,
+:root[data-theme="light"] .pf-row,
+:root[data-theme="light"] .pf-delete-modal,
+:root[data-theme="light"] .wz-3btn-item,
+:root[data-theme="light"] .wz-live-tile,
+:root[data-theme="light"] .profile-manual-calorie-panel,
+:root[data-theme="light"] .profile-tabs,
+:root[data-theme="light"] .wz-readonly-input,
+:root[data-theme="light"] .goals-input-row input {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+:root[data-theme="light"] .toggle-pill:not(.active),
+:root[data-theme="light"] .segmented-control,
+:root[data-theme="light"] .segmented-control button:not(.active) {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.pf-delete-modal {
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  padding: var(--popup-padding);
+}
+
+.pf-dlg-body {
+  padding: 0;
+}
+
+.pf-dlg-foot {
+  margin-top: auto;
+  padding: var(--popup-footer-space) 0 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}

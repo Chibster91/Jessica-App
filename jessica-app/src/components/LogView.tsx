@@ -46,6 +46,45 @@ export function LogView(props: LogViewProps) {
   const {
     goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, isLogMenuOpen, setIsLogMenuOpen, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, visibleMealCategories, getCategoryTotals, scrollToMeal, log, expandedMeals, mealCardRefs, toggleMeal, mealMenuCategory, setMealMenuCategory, openSaveMealAsRecipe, setMealToDelete, suppressNextClickRef, openEditFoodItem, setContextMenuItem, setContextMenuY, longPressRef, getItemCalories, logTapProbe, openAddFood, handleFinishToggle, pendingCategory, tapProbeProps, activeAddFoodTab, setActiveAddFoodTab, modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, selectedFoodDetail, selectedPortion, isLoadingDetail, selectFood, recentFoods, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm, isCustomFormOpen, customFoodScanInputRef, isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError, customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, setIsCustomFormOpen, filteredCustomFoods, recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, recipeForm, setRecipeForm, recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods, isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity, confirmRecipeIngredient, setPendingRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe, setIsRecipeFormOpen, filteredRecipes, closeAddFood, detailError, servingBasisText, amountUnit, portionOptions, selectedPortionValue, setSelectedPortionValue, quantity, setQuantity, portionAmount, setPortionAmount, setAmountUnit, allowedAmountUnits, selectedPortionCalories, addSelectedFood, canAddSelectedFood, setSelectedFood, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, mealToSaveAsRecipe, mealRecipeName, setMealRecipeName, saveMealAsRecipe, setMealToSaveAsRecipe, mealToDelete, confirmDeleteMeal, itemToEdit, editItemAmountUnit, editItemAmount, setEditItemAmount, setEditItemAmountUnit, getEditAmountUnits, saveEditedFoodItem, setItemToEdit, itemToRemove, confirmRemoveFood, setItemToRemove, contextMenuItem, contextMenuY, moveToMealItem, setMoveToMealItem, moveItemToMeal, moveToDayItem, setMoveToDayItem, setMoveToDayDate, setMoveToDayStep, moveToDayStep, moveToDayDate, moveItemToDifferentDay, bottomNav
   } = props;
+  const sortedRecentFoods = [...recentFoods].sort((a, b) => {
+    const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
+    if (dateCompare !== 0) return dateCompare;
+    return (b.loggedCount ?? 0) - (a.loggedCount ?? 0);
+  });
+  const sortedCustomFoods = [...filteredCustomFoods].sort((a, b) =>
+    getFoodDisplayName(a).localeCompare(getFoodDisplayName(b))
+  );
+  const sortedRecipes = [...filteredRecipes].sort((a, b) =>
+    getFoodDisplayName(a).localeCompare(getFoodDisplayName(b))
+  );
+  const visibleRecentFoods = sortedRecentFoods.filter((food) => {
+    const query = modalQuery.trim().toLowerCase();
+    if (!query) return true;
+    return `${getFoodDisplayName(food)} ${getBrandDisplayName(food.brand)}`.toLowerCase().includes(query);
+  });
+  const addFoodSearchValue =
+    activeAddFoodTab === "custom" ? customQuery :
+    activeAddFoodTab === "recipes" ? recipeQuery :
+    modalQuery;
+  const addFoodSearchPlaceholder =
+    activeAddFoodTab === "custom" ? "Search custom foods..." :
+    activeAddFoodTab === "recipes" ? "Search recipes..." :
+    activeAddFoodTab === "recent" ? "Search recent foods..." :
+    "Search all foods...";
+  function updateAddFoodSearch(value: string) {
+    if (activeAddFoodTab === "custom") {
+      setCustomQuery(value);
+      return;
+    }
+    if (activeAddFoodTab === "recipes") {
+      setRecipeQuery(value);
+      return;
+    }
+    setModalQuery(value);
+  }
+  function submitAddFoodSearch() {
+    if (activeAddFoodTab === "search") searchModalFood();
+  }
 
   return (
     <main className="app">
@@ -207,22 +246,25 @@ export function LogView(props: LogViewProps) {
                         ⋯
                       </button>
                       {mealMenuCategory === category && (
-                        <div className="meal-settings-menu">
-                          <button type="button" onClick={() => openSaveMealAsRecipe(category)} disabled={mealItems.length === 0}>
-                            Save Meal as Recipe
-                          </button>
-                          <button
-                            type="button"
-                            className="danger-menu-item"
-                            onClick={() => {
-                              setMealMenuCategory(null);
-                              setMealToDelete(category);
-                            }}
-                            disabled={mealItems.length === 0}
-                          >
-                            Delete Entire Meal
-                          </button>
-                        </div>
+                        <>
+                          <div className="meal-menu-backdrop" onClick={() => setMealMenuCategory(null)} />
+                          <div className="meal-settings-menu">
+                            <button type="button" onClick={() => openSaveMealAsRecipe(category)} disabled={mealItems.length === 0}>
+                              Save Meal as Recipe
+                            </button>
+                            <button
+                              type="button"
+                              className="danger-menu-item"
+                              onClick={() => {
+                                setMealMenuCategory(null);
+                                setMealToDelete(category);
+                              }}
+                              disabled={mealItems.length === 0}
+                            >
+                              Delete Entire Meal
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
 
@@ -330,13 +372,38 @@ export function LogView(props: LogViewProps) {
       })()}
 
       {pendingCategory && (
-        <div className="modal-backdrop" role="presentation" {...tapProbeProps("add-food-modal-backdrop")}>
-          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="meal-category-title" {...tapProbeProps("add-food-modal")}>
-            <h2 id="meal-category-title">Add to {pendingCategory}</h2>
+        <section className="add-food-screen" aria-labelledby="meal-category-title" {...tapProbeProps("add-food-modal")}>
+          <div className="add-food-top">
+            <h2 id="meal-category-title" className="add-food-title">Add to {pendingCategory}</h2>
+            <button type="button" className="add-food-close" onClick={closeAddFood} aria-label="Close add food">
+              ×
+            </button>
+            <div className="add-food-search-row">
+              <input
+                value={addFoodSearchValue}
+                placeholder={addFoodSearchPlaceholder}
+                onChange={(e) => updateAddFoodSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitAddFoodSearch()}
+              />
+              {activeAddFoodTab === "search" && (
+                <button type="button" onClick={searchModalFood}>Search</button>
+              )}
+            </div>
+          </div>
 
-            <div className="tab-row" role="tablist" aria-label="Add food source">
+          <div className="add-food-content">
+            <div className="add-food-tabs" role="tablist" aria-label="Add food source">
               <button
-                className={activeAddFoodTab === "recent" ? "active" : ""}
+                className={`add-food-tab${activeAddFoodTab === "search" ? " is-active" : ""}`}
+                type="button"
+                onClick={() => setActiveAddFoodTab("search")}
+                role="tab"
+                aria-selected={activeAddFoodTab === "search"}
+              >
+                All
+              </button>
+              <button
+                className={`add-food-tab${activeAddFoodTab === "recent" ? " is-active" : ""}`}
                 type="button"
                 onClick={() => setActiveAddFoodTab("recent")}
                 role="tab"
@@ -345,16 +412,7 @@ export function LogView(props: LogViewProps) {
                 Recent
               </button>
               <button
-                className={activeAddFoodTab === "search" ? "active" : ""}
-                type="button"
-                onClick={() => setActiveAddFoodTab("search")}
-                role="tab"
-                aria-selected={activeAddFoodTab === "search"}
-              >
-                Search
-              </button>
-              <button
-                className={activeAddFoodTab === "custom" ? "active" : ""}
+                className={`add-food-tab${activeAddFoodTab === "custom" ? " is-active" : ""}`}
                 type="button"
                 onClick={() => setActiveAddFoodTab("custom")}
                 role="tab"
@@ -363,7 +421,7 @@ export function LogView(props: LogViewProps) {
                 Custom
               </button>
               <button
-                className={activeAddFoodTab === "recipes" ? "active" : ""}
+                className={`add-food-tab${activeAddFoodTab === "recipes" ? " is-active" : ""}`}
                 type="button"
                 onClick={() => setActiveAddFoodTab("recipes")}
                 role="tab"
@@ -374,18 +432,10 @@ export function LogView(props: LogViewProps) {
             </div>
 
             {activeAddFoodTab === "search" && (
-              <>
-                <div className="search-row">
-                  <input
-                    value={modalQuery}
-                    placeholder="Search USDA foods..."
-                    onChange={(e) => setModalQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && searchModalFood()}
-                  />
-                  <button onClick={searchModalFood}>Search</button>
-                </div>
-
-                <div className="modal-results">
+              <div className="modal-results add-food-results">
+                  {modalFoods.length === 0 && (
+                    <p className="empty-meal">Search for foods from USDA, local foods, custom foods, recipes, and recent logs.</p>
+                  )}
                   {modalFoods.map((food) => {
                     const resultDisplay = getModalResultCalories(
                       food,
@@ -424,17 +474,16 @@ export function LogView(props: LogViewProps) {
                       </button>
                     );
                   })}
-                </div>
-              </>
+              </div>
             )}
 
             {activeAddFoodTab === "recent" && (
-              <div className="modal-results">
-                {recentFoods.length === 0 && (
+              <div className="modal-results add-food-results">
+                {visibleRecentFoods.length === 0 && (
                   <p className="empty-meal">No recent foods logged in the last week.</p>
                 )}
 
-                {recentFoods.map((food) => (
+                {visibleRecentFoods.map((food) => (
                   <button
                     className={`food-card ${selectedFood?.id === food.id ? "selected" : ""}`}
                     key={food.id}
@@ -456,12 +505,7 @@ export function LogView(props: LogViewProps) {
 
             {activeAddFoodTab === "custom" && (
               <>
-                <div className="search-row">
-                  <input
-                    value={customQuery}
-                    placeholder="Search custom foods..."
-                    onChange={(e) => setCustomQuery(e.target.value)}
-                  />
+                <div className="add-food-tab-action">
                   <button
                     type="button"
                     onPointerDown={(event) => logTapProbe("open-custom-food-form", "pointerdown", event)}
@@ -471,12 +515,15 @@ export function LogView(props: LogViewProps) {
                       openCustomFoodForm();
                     }}
                   >
-                    Add custom
+                    Add Custom Food
                   </button>
                 </div>
 
                 {isCustomFormOpen && (
-                  <div className="custom-food-form" {...tapProbeProps("custom-food-form")}>
+                  <div className="floating-overlay custom-food-form-overlay" role="presentation" onClick={() => setIsCustomFormOpen(false)}>
+                    <div className="floating-popover custom-food-form-popover" role="dialog" aria-modal="true" aria-labelledby="custom-food-form-title" onClick={(e) => e.stopPropagation()}>
+                      <h2 id="custom-food-form-title">Add custom food</h2>
+                      <div className="custom-food-form" {...tapProbeProps("custom-food-form")}>
                     <div className="scan-food-panel">
                       <label className={`scan-file-label${isScanningCustomFood ? " disabled" : ""}`}>
                         <input
@@ -653,16 +700,17 @@ export function LogView(props: LogViewProps) {
                         Cancel
                       </button>
                     </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                {!isCustomFormOpen && (
-                  <div className="modal-results">
-                    {filteredCustomFoods.length === 0 && (
+                <div className="modal-results add-food-results">
+                    {sortedCustomFoods.length === 0 && (
                       <p className="empty-meal">No custom foods match this search.</p>
                     )}
 
-                    {filteredCustomFoods.map((food) => (
+                    {sortedCustomFoods.map((food) => (
                       <button
                         className={`food-card ${selectedFood?.id === food.id ? "selected" : ""}`}
                         key={food.id}
@@ -678,197 +726,195 @@ export function LogView(props: LogViewProps) {
                         </span>
                       </button>
                     ))}
-                  </div>
-                )}
+                </div>
               </>
             )}
 
             {activeAddFoodTab === "recipes" && (
               <>
-                <div className="search-row">
-                  <input
-                    value={recipeQuery}
-                    placeholder="Search recipes..."
-                    onChange={(e) => setRecipeQuery(e.target.value)}
-                  />
+                <div className="add-food-tab-action">
                   <button type="button" onClick={openRecipeForm}>
-                    Add recipe
+                    Add Recipe
                   </button>
                 </div>
 
                 {isRecipeFormOpen && (
-                  <div className="recipe-form">
-                    <div className="custom-food-form">
-                      <label>
-                        Recipe name
-                        <input
-                          value={recipeForm.name}
-                          onChange={(e) => setRecipeForm({ ...recipeForm, name: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Serving size
-                        <input
-                          value={recipeForm.servingSize}
-                          placeholder="1, 0.5, 250"
-                          onChange={(e) =>
-                            setRecipeForm({ ...recipeForm, servingSize: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Serving unit
-                        <input
-                          value={recipeForm.servingUnit}
-                          placeholder="serving, bowl, g"
-                          onChange={(e) =>
-                            setRecipeForm({ ...recipeForm, servingUnit: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Notes
-                        <textarea
-                          value={recipeForm.notes}
-                          onChange={(e) => setRecipeForm({ ...recipeForm, notes: e.target.value })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="recipe-builder">
-                      <div className="recipe-totals">
-                        <strong>{recipeTotals.calories} cal total</strong>
-                        <span>
-                          {Number(recipeTotals.protein.toFixed(1))}g protein /{" "}
-                          {Number(recipeTotals.carbs.toFixed(1))}g carbs /{" "}
-                          {Number(recipeTotals.fat.toFixed(1))}g fat
-                        </span>
-                      </div>
-
-                      <div className="search-row">
-                        <input
-                          value={recipeIngredientQuery}
-                          placeholder="Search USDA and custom foods..."
-                          onChange={(e) => setRecipeIngredientQuery(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
-                        />
-                        <button type="button" onClick={searchRecipeIngredientFoods}>
-                          Search
-                        </button>
-                      </div>
-
-                      <div className="ingredient-picker">
-                        {isSearchingRecipeIngredients && (
-                          <p className="empty-meal">Searching foods...</p>
-                        )}
-
-                        {recipeIngredientOptions.length === 0 && (
-                          <p className="empty-meal">Search USDA, or add custom foods to use as ingredients.</p>
-                        )}
-
-                        {recipeIngredientOptions.map((food) => {
-                          return (
-                            <button
-                              className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
-                              key={food.id}
-                              type="button"
-                              onClick={() => selectRecipeIngredient(food)}
-                            >
-                              <span className="food-card-title">
-                                <img src={getFoodIconUrl(food)} alt="" />
-                                <strong>{getFoodDisplayName(food)}</strong>
-                              </span>
-                              <span className="food-card-meta-row">
-                                <span className="food-card-brand">
-                                  {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
-                                </span>
-                                <span className="food-card-cal">
-                                  {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
-                                </span>
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {pendingRecipeIngredient && (
-                        <div className="ingredient-confirm">
-                          <div>
-                            <span className="food-card-title">
-                              <img src={getFoodIconUrl(pendingRecipeIngredient)} alt="" />
-                              <strong>{pendingRecipeIngredient.name}</strong>
-                            </span>
-                            <span>
-                              {pendingRecipeIngredient.calories} cal per{" "}
-                              {pendingRecipeIngredient.servingSize}
-                            </span>
-                          </div>
+                  <div className="floating-overlay recipe-form-overlay" role="presentation" onClick={() => setIsRecipeFormOpen(false)}>
+                    <div className="floating-popover recipe-form-popover" role="dialog" aria-modal="true" aria-labelledby="recipe-form-title" onClick={(e) => e.stopPropagation()}>
+                      <h2 id="recipe-form-title">Add recipe</h2>
+                      <div className="recipe-form">
+                        <div className="custom-food-form">
                           <label>
-                            Quantity
+                            Recipe name
                             <input
-                              type="number"
-                              min="0.1"
-                              step="0.1"
-                              value={pendingRecipeIngredientQuantity}
-                              onChange={(e) => setPendingRecipeIngredientQuantity(e.target.value)}
+                              value={recipeForm.name}
+                              onChange={(e) => setRecipeForm({ ...recipeForm, name: e.target.value })}
                             />
                           </label>
-                          <button type="button" onClick={confirmRecipeIngredient}>
-                            Add ingredient
-                          </button>
-                          <button type="button" onClick={() => setPendingRecipeIngredient(null)}>
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="ingredient-list">
-                        {recipeIngredients.length === 0 && (
-                          <p className="empty-meal">No ingredients added yet.</p>
-                        )}
-
-                        {recipeIngredients.map((ingredient) => (
-                          <div className="ingredient-row" key={ingredient.food.id}>
-                            <span className="food-card-title">
-                              <img src={getFoodIconUrl(ingredient.food)} alt="" />
-                              <span>{ingredient.food.name}</span>
-                            </span>
+                          <label>
+                            Serving size
                             <input
-                              type="number"
-                              min="0.1"
-                              step="0.1"
-                              value={ingredient.quantity}
+                              value={recipeForm.servingSize}
+                              placeholder="1, 0.5, 250"
                               onChange={(e) =>
-                                updateRecipeIngredientQuantity(ingredient.food.id, e.target.value)
+                                setRecipeForm({ ...recipeForm, servingSize: e.target.value })
                               }
                             />
-                            <span>{getIngredientCalories(ingredient)} cal</span>
-                            <button type="button" onClick={() => removeRecipeIngredient(ingredient.food.id)}>
-                              Remove
+                          </label>
+                          <label>
+                            Serving unit
+                            <input
+                              value={recipeForm.servingUnit}
+                              placeholder="serving, bowl, g"
+                              onChange={(e) =>
+                                setRecipeForm({ ...recipeForm, servingUnit: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Notes
+                            <textarea
+                              value={recipeForm.notes}
+                              onChange={(e) => setRecipeForm({ ...recipeForm, notes: e.target.value })}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="recipe-builder">
+                          <div className="recipe-totals">
+                            <strong>{recipeTotals.calories} cal total</strong>
+                            <span>
+                              {Number(recipeTotals.protein.toFixed(1))}g protein /{" "}
+                              {Number(recipeTotals.carbs.toFixed(1))}g carbs /{" "}
+                              {Number(recipeTotals.fat.toFixed(1))}g fat
+                            </span>
+                          </div>
+
+                          <div className="search-row">
+                            <input
+                              value={recipeIngredientQuery}
+                              placeholder="Search USDA and custom foods..."
+                              onChange={(e) => setRecipeIngredientQuery(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
+                            />
+                            <button type="button" onClick={searchRecipeIngredientFoods}>
+                              Search
                             </button>
                           </div>
-                        ))}
-                      </div>
 
-                      <div className="form-actions">
-                        <button type="button" onClick={createRecipe}>
-                          Save recipe
-                        </button>
-                        <button type="button" onClick={() => setIsRecipeFormOpen(false)}>
-                          Cancel
-                        </button>
+                          <div className="ingredient-picker">
+                            {isSearchingRecipeIngredients && (
+                              <p className="empty-meal">Searching foods...</p>
+                            )}
+
+                            {recipeIngredientOptions.length === 0 && (
+                              <p className="empty-meal">Search USDA, or add custom foods to use as ingredients.</p>
+                            )}
+
+                            {recipeIngredientOptions.map((food) => {
+                              return (
+                                <button
+                                  className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
+                                  key={food.id}
+                                  type="button"
+                                  onClick={() => selectRecipeIngredient(food)}
+                                >
+                                  <span className="food-card-title">
+                                    <img src={getFoodIconUrl(food)} alt="" />
+                                    <strong>{getFoodDisplayName(food)}</strong>
+                                  </span>
+                                  <span className="food-card-meta-row">
+                                    <span className="food-card-brand">
+                                      {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
+                                    </span>
+                                    <span className="food-card-cal">
+                                      {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {pendingRecipeIngredient && (
+                            <div className="ingredient-confirm">
+                              <div>
+                                <span className="food-card-title">
+                                  <img src={getFoodIconUrl(pendingRecipeIngredient)} alt="" />
+                                  <strong>{pendingRecipeIngredient.name}</strong>
+                                </span>
+                                <span>
+                                  {pendingRecipeIngredient.calories} cal per{" "}
+                                  {pendingRecipeIngredient.servingSize}
+                                </span>
+                              </div>
+                              <label>
+                                Quantity
+                                <input
+                                  type="number"
+                                  min="0.1"
+                                  step="0.1"
+                                  value={pendingRecipeIngredientQuantity}
+                                  onChange={(e) => setPendingRecipeIngredientQuantity(e.target.value)}
+                                />
+                              </label>
+                              <button type="button" onClick={confirmRecipeIngredient}>
+                                Add ingredient
+                              </button>
+                              <button type="button" onClick={() => setPendingRecipeIngredient(null)}>
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+
+                          <div className="ingredient-list">
+                            {recipeIngredients.length === 0 && (
+                              <p className="empty-meal">No ingredients added yet.</p>
+                            )}
+
+                            {recipeIngredients.map((ingredient) => (
+                              <div className="ingredient-row" key={ingredient.food.id}>
+                                <span className="food-card-title">
+                                  <img src={getFoodIconUrl(ingredient.food)} alt="" />
+                                  <span>{ingredient.food.name}</span>
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0.1"
+                                  step="0.1"
+                                  value={ingredient.quantity}
+                                  onChange={(e) =>
+                                    updateRecipeIngredientQuantity(ingredient.food.id, e.target.value)
+                                  }
+                                />
+                                <span>{getIngredientCalories(ingredient)} cal</span>
+                                <button type="button" onClick={() => removeRecipeIngredient(ingredient.food.id)}>
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="form-actions">
+                            <button type="button" onClick={createRecipe}>
+                              Save recipe
+                            </button>
+                            <button type="button" onClick={() => setIsRecipeFormOpen(false)}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {!isRecipeFormOpen && (
-                  <div className="modal-results">
-                    {filteredRecipes.length === 0 && (
+                <div className="modal-results add-food-results">
+                    {sortedRecipes.length === 0 && (
                       <p className="empty-meal">No recipes match this search.</p>
                     )}
 
-                    {filteredRecipes.map((recipe) => (
+                    {sortedRecipes.map((recipe) => (
                       <button
                         className={`food-card ${selectedFood?.id === recipe.id ? "selected" : ""}`}
                         key={recipe.id}
@@ -884,20 +930,12 @@ export function LogView(props: LogViewProps) {
                         </span>
                       </button>
                     ))}
-                  </div>
-                )}
+                </div>
               </>
             )}
 
-            {!isCustomFormOpen && !isRecipeFormOpen && (
-              <>
-                <button className="secondary-button" onClick={closeAddFood}>
-                  Cancel
-                </button>
-              </>
-            )}
           </div>
-        </div>
+        </section>
       )}
 
       {pendingCategory && selectedFood && !isCustomFormOpen && !isRecipeFormOpen && (
@@ -1581,7 +1619,7 @@ export function LogView(props: LogViewProps) {
         </div>
       )}
 
-      {bottomNav}
+      {!pendingCategory && bottomNav}
     </main>
   );
 

@@ -177,6 +177,7 @@ type Profile = {
     fatGrams?: number;
   };
   units: ProfileUnits;
+  trackCycle: boolean;
   startingWeightKg: number;
   profileCreatedAt: string;
   profileUpdatedAt: string;
@@ -205,6 +206,7 @@ type ProfileForm = {
   proteinGrams: string;
   carbGrams: string;
   fatGrams: string;
+  trackCycle: boolean;
 };
 
 type ProfileCalculation = {
@@ -1063,6 +1065,7 @@ function profileToForm(profile: Profile): ProfileForm {
   return {
     name: profile.name,
     units: profile.units,
+    trackCycle: profile.trackCycle ?? true,
     age: String(profile.age),
     sex: profile.sex,
     heightCm: formatProfileNumber(profile.heightCm, 1),
@@ -1117,6 +1120,7 @@ function profileFormFromLegacyGoals(goals: Goals | null): ProfileForm {
   return {
     name: "",
     units,
+    trackCycle: true,
     age: inputs.age,
     sex: inputs.sex,
     heightCm: heightCm ? formatProfileNumber(heightCm, 1) : "",
@@ -1297,6 +1301,7 @@ function profileFormToProfile(form: ProfileForm, existingProfile: Profile | null
       fatGrams: Math.round(parseDecimalInput(form.fatGrams || "0")),
     },
     units: form.units,
+    trackCycle: form.trackCycle,
     startingWeightKg: existingProfile?.startingWeightKg ?? weightKg,
     profileCreatedAt: existingProfile?.profileCreatedAt ?? now,
     profileUpdatedAt: now,
@@ -2088,26 +2093,23 @@ async function searchFoodsGrouped(
   // Local DB foods
   const localResults = await searchLocalFoods(query);
 
-  // USDA (packaged) — only if local results are sparse
-  let usdaResults: Food[] = [];
-  if (localResults.length < 3) {
-    const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
-    const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
-    const localIds = new Set(localResults.map(f => f.id));
-    const usdaById = new Map<number, Food>();
-    for (const foods of resultSets) {
-      for (const food of foods) {
-        const isDuplicatedLocally = localResults.some(local =>
-          normalizeSearchText(local.name).replace(/\s+/g, "") ===
-          normalizeSearchText(food.name).replace(/\s+/g, "")
-        );
-        if (!localIds.has(food.id) && !usdaById.has(food.id) && !isDuplicatedLocally) {
-          usdaById.set(food.id, food);
-        }
+  // USDA packaged foods
+  const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
+  const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
+  const localIds = new Set(localResults.map(f => f.id));
+  const usdaById = new Map<number, Food>();
+  for (const foods of resultSets) {
+    for (const food of foods) {
+      const isDuplicatedLocally = localResults.some(local =>
+        normalizeSearchText(local.name).replace(/\s+/g, "") ===
+        normalizeSearchText(food.name).replace(/\s+/g, "")
+      );
+      if (!localIds.has(food.id) && !usdaById.has(food.id) && !isDuplicatedLocally) {
+        usdaById.set(food.id, food);
       }
     }
-    usdaResults = rankSearchResults([...usdaById.values()], query);
   }
+  const usdaResults = rankSearchResults([...usdaById.values()], query);
 
   const groups: SearchResultGroup[] = [];
 
@@ -2165,7 +2167,7 @@ function parseRecipe(form: RecipeForm, ingredients: RecipeIngredient[]): Recipe 
 
   return {
     id: -Date.now(),
-    name,
+    name: name.endsWith("- Recipe") ? name : `${name} - Recipe`,
     brand: "Recipe",
     servingSize: `${servingSize} ${servingUnit}`,
     calories: Math.round(totals.calories),

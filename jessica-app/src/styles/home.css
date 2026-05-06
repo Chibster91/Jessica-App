@@ -818,3 +818,21 @@
 }
 .streak-day-letter { font-size: 0.65rem; color: #B7BCC7; }
 
+:root[data-theme="light"] .home-card,
+:root[data-theme="light"] .home-stat-card,
+:root[data-theme="light"] .home-qa-btn,
+:root[data-theme="light"] .dash-card,
+:root[data-theme="light"] .dash-mini-card,
+:root[data-theme="light"] .dash-goals-toggle,
+:root[data-theme="light"] .dash-goals-toggle button,
+:root[data-theme="light"] .finished-logging-row,
+:root[data-theme="light"] .finish-toggle,
+:root[data-theme="light"] .home-bar-wrap,
+:root[data-theme="light"] .dash-budget-wrap,
+:root[data-theme="light"] .dash-macro-meter,
+:root[data-theme="light"] .dash-macro-prog-track,
+:root[data-theme="light"] .streak-day-check {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}

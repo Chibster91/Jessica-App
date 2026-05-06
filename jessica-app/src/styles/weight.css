@@ -12,7 +12,7 @@
 .w-screen-head h1 {
   font-size: 1.6rem;
   font-weight: 500;
-  margin: 0;
+  margin: 0
 }
 
 .w-screen-head .sub {
@@ -613,6 +613,57 @@
   font-size: 0.95rem;
 }
 
+.weight-wheel-wrap {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    linear-gradient(to bottom, var(--surface) 0%, rgba(30, 32, 38, 0) 30%, rgba(30, 32, 38, 0) 70%, var(--surface) 100%),
+    var(--surface-2);
+}
+
+.weight-wheel-wrap::before {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  top: 50%;
+  height: 2.25rem;
+  border-block: 1px solid var(--accent-border);
+  border-radius: 10px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.weight-wheel-picker {
+  width: 100%;
+  height: 12.25rem;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.8;
+  overflow-y: auto;
+  padding: 4.4rem 0;
+  text-align: center;
+  scrollbar-width: none;
+}
+
+.weight-wheel-picker::-webkit-scrollbar {
+  display: none;
+}
+
+.weight-wheel-picker option {
+  background: var(--surface);
+  color: var(--fg);
+  padding: 0.45rem;
+  text-align: center;
+}
+
 .weight-form-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -648,6 +699,23 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 3;
+}
+
+.weight-chart-goal-line,
+.weight-chart-trend-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 2.5;
+  stroke-dasharray: 4 6;
+  vector-effect: non-scaling-stroke;
+}
+
+.weight-chart-goal-line {
+  stroke: var(--macro-protein);
+}
+
+.weight-chart-trend-line {
+  stroke: var(--macro-fat);
 }
 
 .weight-chart-dot {
@@ -735,3 +803,67 @@
   font-size: 0.9rem;
 }
 
+.weight-form-popover {
+  height: auto;
+  max-height: min(640px, calc(100svh - 2rem));
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.weight-form {
+  min-height: 0;
+  overflow: auto;
+}
+
+.weight-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  background: var(--surface);
+}
+
+:root[data-theme="light"] .w-panel,
+:root[data-theme="light"] .w-avg,
+:root[data-theme="light"] .w-stat,
+:root[data-theme="light"] .w-ring-inner,
+:root[data-theme="light"] .w-progress-track,
+:root[data-theme="light"] .w-bmi-row,
+:root[data-theme="light"] .w-cta,
+:root[data-theme="light"] .w-history-head .month-btn,
+:root[data-theme="light"] .w-range-pills,
+:root[data-theme="light"] .w-range-pills button:not(.is-active),
+:root[data-theme="light"] .w-chart-panel,
+:root[data-theme="light"] .w-history-panel,
+:root[data-theme="light"] .w-hist-row,
+:root[data-theme="light"] .w-segs span,
+:root[data-theme="light"] .weight-chart-point-card,
+:root[data-theme="light"] .weight-entry-row,
+:root[data-theme="light"] .weight-form-popover {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+:root[data-theme="light"] .weight-wheel-wrap {
+  background:
+    linear-gradient(to bottom, var(--surface) 0%, rgba(169, 180, 212, 0) 30%, rgba(169, 180, 212, 0) 70%, var(--surface) 100%),
+    var(--surface-2);
+}
+
+.weight-form-popover {
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  padding: var(--popup-padding);
+}
+
+.weight-form-actions {
+  margin-top: auto;
+  padding: var(--popup-footer-space) 0 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}

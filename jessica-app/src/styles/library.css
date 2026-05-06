@@ -115,3 +115,15 @@
   }
 }
 
+:root[data-theme="light"] .library-detail,
+:root[data-theme="light"] .library-edit-form,
+:root[data-theme="light"] .nutrition-grid {
+  border-color: var(--border);
+}
+
+.modal {
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  padding: var(--popup-padding);
+}

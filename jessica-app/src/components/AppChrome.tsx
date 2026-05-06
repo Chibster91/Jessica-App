@@ -62,20 +62,11 @@ export function AppChrome({
 
   <button
     type="button"
-    className={appView === "weight" ? "active" : ""}
+    className={appView === "weight" || appView === "egg-oracle" ? "active" : ""}
     onClick={() => onNavigate("weight")}
   >
     <span className="nav-icon">↕</span>
-    <span>Weight</span>
-  </button>
-
-  <button
-    type="button"
-    className={appView === "egg-oracle" ? "active" : ""}
-    onClick={() => onNavigate("egg-oracle")}
-  >
-    <span className="nav-icon">◌</span>
-    <span>Cycle</span>
+    <span>Health</span>
   </button>
 
   <button

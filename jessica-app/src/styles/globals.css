@@ -128,7 +128,7 @@ input, button, textarea {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--popup-overlay);
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -138,10 +138,11 @@ input, button, textarea {
 .modal {
   width: min(560px, 100%);
   box-sizing: border-box;
-  background: #1E2026;
-  border: 1px solid #343845;
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: var(--surface);
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  padding: var(--popup-padding);
   max-height: 90svh;
   overflow-y: auto;
 }
@@ -519,6 +520,97 @@ input:disabled {
   line-height: 1;
 }
 
+.health-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.health-tabs button {
+  min-height: 2.5rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--fg-2);
+  font-weight: 800;
+}
+
+.health-tabs button.active {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.modal,
+.floating-popover,
+.weight-form-popover,
+.eo-modal {
+  height: auto;
+  max-height: min(640px, calc(100svh - 2rem));
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  padding: var(--popup-padding);
+  gap: var(--popup-gap);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-results,
+.custom-food-form,
+.recipe-form,
+.import-preview-list,
+.drive-import-list,
+.import-step-meals,
+.eo-modal-body,
+.weight-form {
+  min-height: 0;
+  overflow: auto;
+}
+
+.form-actions,
+.floating-actions,
+.weight-form-actions,
+.eo-modal-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  background: var(--surface);
+}
+
+.modal-backdrop,
+.floating-overlay {
+  background: var(--popup-overlay);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.debug-panel-header,
+.import-preview-header,
+.eo-modal-head {
+  margin: 0 0 var(--popup-header-space);
+  padding: 0;
+}
+
+.modal > h2,
+.floating-popover > h2 {
+  margin: 0 0 var(--popup-header-space);
+}
+
+.modal > .form-actions,
+.floating-popover .floating-actions,
+.weight-form-actions,
+.eo-modal-foot,
+.pf-dlg-foot {
+  margin-top: auto;
+  padding: var(--popup-footer-space) 0 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
 /* Macro progress bars (day view + home screen cards) */
 .macro-bar-track {
   height: 5px;
@@ -540,3 +632,42 @@ input:disabled {
   background: #f87171;
 }
 
+:root[data-theme="light"] body,
+:root[data-theme="light"] .app,
+:root[data-theme="light"] .bottom-nav {
+  background: var(--bg);
+}
+
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .modal,
+:root[data-theme="light"] .floating-popover,
+:root[data-theme="light"] .debug-panel,
+:root[data-theme="light"] .food-card,
+:root[data-theme="light"] .tab-row button,
+:root[data-theme="light"] .bottom-nav button:hover,
+:root[data-theme="light"] .health-tabs button,
+:root[data-theme="light"] .scan-food-panel,
+:root[data-theme="light"] .scan-file-label,
+:root[data-theme="light"] .ingredient-confirm,
+:root[data-theme="light"] .import-preview-item,
+:root[data-theme="light"] .drive-import-file,
+:root[data-theme="light"] .ocr-debug pre,
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] button {
+  background-color: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+:root[data-theme="light"] .modal-backdrop,
+:root[data-theme="light"] .floating-overlay {
+  background: rgba(22, 24, 28, 0.28);
+}
+
+:root[data-theme="light"] .food-card.selected,
+:root[data-theme="light"] .tab-row button.active,
+:root[data-theme="light"] .health-tabs button.active {
+  border-color: var(--accent);
+}

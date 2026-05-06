@@ -20,6 +20,7 @@ import {
 
 type WeightViewProps = {
   bottomNav: ReactNode;
+  healthTabs?: ReactNode;
   today: string;
   weightUnit: WeightUnit;
   profile: Profile | null;
@@ -50,6 +51,7 @@ type WeightViewProps = {
 
 export function WeightView({
   bottomNav,
+  healthTabs,
   today,
   weightUnit,
   profile,
@@ -90,9 +92,76 @@ export function WeightView({
       ...entry,
       displayWeight: convertWeightValue(entry.weight, entry.unit, displayUnit),
     }));
+    const chartFirstTime = chartEntries[0] ? new Date(`${chartEntries[0].date}T00:00:00`).getTime() : null;
+    const chartLastTime = chartEntries.length > 0 ? new Date(`${chartEntries[chartEntries.length - 1].date}T00:00:00`).getTime() : null;
+    const chartTimeRange =
+      chartFirstTime !== null && chartLastTime !== null
+        ? Math.max(1, chartLastTime - chartFirstTime)
+        : 1;
+    const chartXForTime = (time: number) =>
+      chartLeft + ((time - (chartFirstTime ?? time)) / chartTimeRange) * chartPlotWidth;
+    const goalWeight = profile?.goalWeightKg ? convertWeightValue(profile.goalWeightKg, "kg", displayUnit) : null;
+    const goalPaceLineData = (() => {
+      if (!profile?.goalWeightKg || !startingWeightEntry || goalWeight === null || profile.goal === "maintain" || profile.weeklyRateKg <= 0 || chartFirstTime === null || chartLastTime === null) {
+        return null;
+      }
+
+      const startTime = new Date(`${startingWeightEntry.date}T00:00:00`).getTime();
+      if (!Number.isFinite(startTime)) return null;
+
+      const startWeight = convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, displayUnit);
+      const startWeightKg = convertWeightValue(startingWeightEntry.weight, startingWeightEntry.unit, "kg");
+      const goalRangeKg = Math.abs(startWeightKg - profile.goalWeightKg);
+      if (!Number.isFinite(goalRangeKg) || goalRangeKg <= 0) return null;
+
+      const plannedDays = (goalRangeKg / profile.weeklyRateKg) * 7;
+      const goalTime = startTime + plannedDays * 86400000;
+      if (!Number.isFinite(goalTime) || goalTime <= startTime) return null;
+
+      const lineStartTime = Math.max(chartFirstTime, startTime);
+      const lineEndTime = Math.min(chartLastTime, goalTime);
+      if (lineEndTime <= lineStartTime) return null;
+
+      const slope = (goalWeight - startWeight) / (goalTime - startTime);
+      const startValue = startWeight + slope * (lineStartTime - startTime);
+      const endValue = startWeight + slope * (lineEndTime - startTime);
+      return { startTime: lineStartTime, endTime: lineEndTime, startValue, endValue, goalTime };
+    })();
+    const trendLineData = (() => {
+      if (chartEntries.length < 2 || chartFirstTime === null || chartLastTime === null) return null;
+
+      const points = chartEntries
+        .map((entry) => ({
+          time: new Date(`${entry.date}T00:00:00`).getTime(),
+          value: entry.displayWeight,
+        }))
+        .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.value));
+      if (points.length < 2) return null;
+
+      const meanTime = points.reduce((sum, point) => sum + point.time, 0) / points.length;
+      const meanValue = points.reduce((sum, point) => sum + point.value, 0) / points.length;
+      const denominator = points.reduce((sum, point) => sum + (point.time - meanTime) ** 2, 0);
+      if (denominator === 0) return null;
+
+      const slope = points.reduce((sum, point) => sum + (point.time - meanTime) * (point.value - meanValue), 0) / denominator;
+      const valueAt = (time: number) => meanValue + slope * (time - meanTime);
+      return {
+        startTime: chartFirstTime,
+        endTime: chartLastTime,
+        startValue: valueAt(chartFirstTime),
+        endValue: valueAt(chartLastTime),
+      };
+    })();
     const chartWeights = chartEntries.map((entry) => entry.displayWeight);
-    const minDisplayWeight = chartWeights.length ? Math.min(...chartWeights) : 0;
-    const maxDisplayWeight = chartWeights.length ? Math.max(...chartWeights) : 0;
+    const chartReferenceWeights = [
+      goalPaceLineData?.startValue,
+      goalPaceLineData?.endValue,
+      trendLineData?.startValue,
+      trendLineData?.endValue,
+    ].filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    const chartDomainWeights = [...chartWeights, ...chartReferenceWeights];
+    const minDisplayWeight = chartDomainWeights.length ? Math.min(...chartDomainWeights) : 0;
+    const maxDisplayWeight = chartDomainWeights.length ? Math.max(...chartDomainWeights) : 0;
     const chartRange = Math.max(1, maxDisplayWeight - minDisplayWeight);
     const chartStep = getNiceWeightStep(chartRange);
     const chartMin = roundToIncrement(minDisplayWeight, chartStep) - chartStep;
@@ -118,6 +187,13 @@ export function WeightView({
 
       return { ...entry, x, y };
     });
+    const chartYForWeight = (value: number) => chartTop + ((chartMax - value) / chartDomainRange) * chartPlotHeight;
+    const goalPaceLinePoints = goalPaceLineData
+      ? `${chartXForTime(goalPaceLineData.startTime)},${chartYForWeight(goalPaceLineData.startValue)} ${chartXForTime(goalPaceLineData.endTime)},${chartYForWeight(goalPaceLineData.endValue)}`
+      : "";
+    const trendLinePoints = trendLineData
+      ? `${chartXForTime(trendLineData.startTime)},${chartYForWeight(trendLineData.startValue)} ${chartXForTime(trendLineData.endTime)},${chartYForWeight(trendLineData.endValue)}`
+      : "";
     const chartLinePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(" ");
     const chartYAxisTicks = [...new Set(chartTickValues)];
     for (const value of chartExtraTickValues) {
@@ -160,7 +236,6 @@ export function WeightView({
         : `Gained ${formatWeightValue(summaryChange, displayUnit)}`;
     const [activeWeightTab, setActiveWeightTab] = useState<"current" | "graph" | "history">("current");
     const [isWeightFormOpen, setIsWeightFormOpen] = useState(false);
-    const goalWeight = profile?.goalWeightKg ? convertWeightValue(profile.goalWeightKg, "kg", displayUnit) : null;
     const currentWeightKg = currentWeightEntry ? convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, "kg") : null;
     const bmi = profile && currentWeightKg ? currentWeightKg / ((profile.heightCm / 100) ** 2) : null;
     const goalBmi = profile?.goalWeightKg ? profile.goalWeightKg / ((profile.heightCm / 100) ** 2) : null;
@@ -258,6 +333,23 @@ export function WeightView({
       if (delta > 0) return index === 0 ? "red" : "";
       return "green";
     };
+    const weightPickerStep = displayUnit === "kg" ? 0.2 : 0.5;
+    const weightPickerMin = displayUnit === "kg" ? 30 : 70;
+    const weightPickerMax = displayUnit === "kg" ? 250 : 550;
+    const parsedPickerWeight = Number(weightForm.weight);
+    const normalizedPickerWeight = Number.isFinite(parsedPickerWeight)
+      ? Math.round(parsedPickerWeight / weightPickerStep) * weightPickerStep
+      : null;
+    const weightPickerValues = Array.from(
+      { length: Math.floor((weightPickerMax - weightPickerMin) / weightPickerStep) + 1 },
+      (_, index) => Number((weightPickerMin + index * weightPickerStep).toFixed(1))
+    );
+    const visibleWeightPickerValues =
+      normalizedPickerWeight !== null && !weightPickerValues.includes(Number(normalizedPickerWeight.toFixed(1)))
+        ? [...weightPickerValues, Number(normalizedPickerWeight.toFixed(1))].sort((a, b) => a - b)
+        : weightPickerValues;
+    const selectedPickerValue =
+      normalizedPickerWeight !== null ? Number(normalizedPickerWeight.toFixed(1)).toString() : "";
     const renderWeightForm = () => (
       <div className="floating-overlay" role="presentation" onClick={closeWeightForm}>
         <div
@@ -284,16 +376,24 @@ export function WeightView({
               </label>
               <label>
                 Weight ({weightUnit})
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  pattern="[0-9]*[.]?[0-9]*"
-                  value={weightForm.weight}
-                  onChange={(e) => {
-                    setWeightSaveError("");
-                    setWeightForm({ ...weightForm, weight: e.target.value });
-                  }}
-                />
+                <div className="weight-wheel-wrap">
+                  <select
+                    className="weight-wheel-picker"
+                    size={7}
+                    value={selectedPickerValue}
+                    onChange={(e) => {
+                      setWeightSaveError("");
+                      setWeightForm({ ...weightForm, weight: e.target.value });
+                    }}
+                    aria-label={`Weight in ${weightUnit}`}
+                  >
+                    {visibleWeightPickerValues.map((value) => (
+                      <option key={value} value={value.toString()}>
+                        {value.toFixed(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </label>
             </div>
             <label>
@@ -331,6 +431,7 @@ export function WeightView({
     return (
       <main className="app">
         <div className="w-screen-head"></div>
+        {healthTabs}
 
         <div className="w-subtabs" role="tablist" aria-label="Weight views">
           {(["current", "graph"] as const).map((tab) => (
@@ -500,6 +601,8 @@ export function WeightView({
                       {chartXAxisPositions.map((x, index) => (
                         <line key={`v-${index}`} className="weight-chart-grid" x1={x} y1={chartTop} x2={x} y2={chartHeight - chartBottom} />
                       ))}
+                      {goalPaceLinePoints && <polyline className="weight-chart-goal-line" points={goalPaceLinePoints} />}
+                      {trendLinePoints && <polyline className="weight-chart-trend-line" points={trendLinePoints} />}
                       <polyline className="weight-chart-line" points={chartLinePoints} />
                       {selectedChartPoint && (
                         <line x1={selectedChartPoint.x} y1={chartTop} x2={selectedChartPoint.x} y2={chartHeight - chartBottom} stroke="#B46CFF" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />

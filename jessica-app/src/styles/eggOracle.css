@@ -277,7 +277,7 @@
 /* Toggle buttons */
 .eo-toggle-grid {
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .eo-toggle-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -396,4 +396,64 @@
   padding: 0.5rem 0.65rem 0.65rem;
 }
 
+.eo-modal {
+  height: auto;
+  max-height: min(640px, calc(100svh - 2rem));
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.eo-modal-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.eo-modal-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-top: auto;
+  background: var(--surface);
+}
+
 /* Step 3 goal/date compact row */
+
+:root[data-theme="light"] .eo-est-card,
+:root[data-theme="light"] .eo-calendar-panel,
+:root[data-theme="light"] .eo-cell,
+:root[data-theme="light"] .eo-legend,
+:root[data-theme="light"] .eo-stat-card,
+:root[data-theme="light"] .eo-modal,
+:root[data-theme="light"] .eo-toggle-btn:not(.selected),
+:root[data-theme="light"] .eo-export-box,
+:root[data-theme="light"] .eo-export-text {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+}
+
+.eo-modal {
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
+  box-shadow: var(--popup-shadow);
+  padding: var(--popup-padding);
+}
+
+.eo-modal-head {
+  margin: 0 0 var(--popup-header-space);
+  padding: 0;
+}
+
+.eo-modal-foot {
+  margin-top: auto;
+  padding: var(--popup-footer-space) 0 0;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.health-tabs {
+  margin: 1rem 0 0.75rem;
+  padding: 0 0.25rem;
+}

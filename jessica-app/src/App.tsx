@@ -1,12 +1,7 @@
 import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { recognize } from "tesseract.js";
 import { AppChrome } from "./components/AppChrome";
-import { FoodLibraryView } from "./components/FoodLibraryView";
-import { HomeView } from "./components/HomeView";
-import { ProfileView } from "./components/ProfileView";
-import { WeightView } from "./components/WeightView";
-import { LogView } from "./components/LogView";
-import EggOracle from "./features/egg-oracle/EggOracle";
+import { AppViewRouter } from "./components/AppViewRouter";
 import {
   debugLogKey,
   googleDriveClientIdKey,
@@ -79,6 +74,7 @@ import {
   createClientId,
   getConfiguredGoogleClientId,
   searchUsdaFoodsWithSynonyms,
+  searchFoodsGrouped,
   fetchUsdaFoodDetail,
   type Food,
   type RecipeIngredient,
@@ -130,6 +126,14 @@ type ImportFoodBatchResolver = {
   byDraftId: Map<string, ImportFoodResolution>;
   addedFoodIds: Set<number>;
 };
+
+type ThemeMode = "dark" | "light";
+
+const themeStorageKey = "theme-mode";
+
+function getSavedThemeMode(): ThemeMode {
+  return localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
+}
 
 function buildImportSteps(items: FoodLogImportDraft[], weightEntries: WeightImportEntry[]): ImportDayStep[] {
   const mealsByDate = new Map<string, FoodLogImportDraft[]>();
@@ -428,6 +432,27 @@ function getOAuthReturnPending(): OAuthPendingAction | null {
   }
 }
 
+function hasSavedLocalAppData() {
+  if (
+    getSavedProfile() ||
+    getSavedGoals() ||
+    getSavedCustomFoods().length > 0 ||
+    getSavedRecipes().length > 0 ||
+    getSavedWeightEntries().length > 0 ||
+    getSavedCompletedDays().length > 0 ||
+    getSavedTopFoods().length > 0
+  ) {
+    return true;
+  }
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith("log-")) return true;
+  }
+
+  return false;
+}
+
 function App() {
   const today = getLocalDateString();
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
@@ -439,7 +464,7 @@ function App() {
   const [appView, setAppView] = useState<AppView>(() => {
     const pending = getOAuthReturnPending();
     if (pending?.returnView) return pending.returnView;
-    return getSavedProfile() ? "home" : "profile";
+    return hasSavedLocalAppData() ? "day" : "profile";
   });
   const [selectedDate, setSelectedDate] = useState<string>(() => getOAuthReturnPending()?.returnDate ?? today);
   const [log, setLog] = useState<LogItem[]>(() => getSavedLog(getOAuthReturnPending()?.returnDate ?? today));
@@ -487,7 +512,8 @@ function App() {
   });
   const [profileSaveStatus, setProfileSaveStatus] = useState("");
   const [profileWizardStep, setProfileWizardStep] = useState(0);
-  const [isProfileWizardOpen, setIsProfileWizardOpen] = useState(() => !getSavedProfile());
+  const [isProfileWizardOpen, setIsProfileWizardOpen] = useState(() => !hasSavedLocalAppData());
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getSavedThemeMode());
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(() => getSavedWeightEntries());
   const [weightForm, setWeightForm] = useState<WeightForm>({
     date: today,
@@ -668,6 +694,11 @@ function App() {
   useEffect(() => { saveTopFoods(topFoods); }, [topFoods]);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    localStorage.setItem(themeStorageKey, themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
     const hash = window.location.hash;
     if (!hash.includes("access_token=")) return;
     const params = new URLSearchParams(hash.substring(1));
@@ -839,7 +870,14 @@ function App() {
   async function searchModalFood() {
     if (!modalQuery.trim()) return;
 
-    setModalFoods(await searchUsdaFoodsWithSynonyms(modalQuery));
+    const groups = await searchFoodsGrouped(modalQuery, customFoods, getRecentFoods(selectedDate), recipes);
+    const foodsById = new Map<number, Food>();
+    for (const group of groups) {
+      for (const food of group.foods) {
+        if (!foodsById.has(food.id)) foodsById.set(food.id, food);
+      }
+    }
+    setModalFoods([...foodsById.values()]);
   }
 
   async function selectFood(food: Food) {
@@ -2221,6 +2259,26 @@ function startEditWeightEntry(entry: WeightEntry) {
     setAppView("profile");
   }
 
+  function setCycleTrackingPreference(trackCycle: boolean) {
+    setProfileForm((current) => ({ ...current, trackCycle }));
+    if (!profile) return;
+
+    const nextProfile: Profile = {
+      ...profile,
+      trackCycle,
+      profileUpdatedAt: new Date().toISOString(),
+    };
+    const savedProfile = setStorageJson("profile", nextProfile);
+    if (!savedProfile) {
+      setProfileSaveStatus("Profile could not be saved in this browser.");
+      return;
+    }
+
+    setProfile(nextProfile);
+    setProfileForm(profileToForm(nextProfile));
+    setProfileSaveStatus("Profile saved.");
+  }
+
   function cancelLibraryEditing() {
     setEditingCustomFoodId(null);
     setEditingRecipeId(null);
@@ -2485,14 +2543,16 @@ function startEditWeightEntry(entry: WeightEntry) {
       ? `This target is below ${profileLowCalorieThreshold} kcal/day. Consider a slower rate.`
       : "";
 
+  function navigateAppView(view: AppView) {
+    setLibrarySelection(null);
+    cancelLibraryEditing();
+    setAppView(view);
+  }
+
   const bottomNav = (
     <AppChrome
       appView={appView}
-      onNavigate={(view) => {
-        setLibrarySelection(null);
-        cancelLibraryEditing();
-        setAppView(view);
-      }}
+      onNavigate={navigateAppView}
       onOpenLibrary={openFoodLibrary}
       isDebugPanelOpen={isDebugPanelOpen}
       debugLogText={debugLogText}
@@ -2508,315 +2568,293 @@ function startEditWeightEntry(entry: WeightEntry) {
     />
   );
 
-
-  if (appView === "home") {
-    return (
-      <HomeView
-        bottomNav={bottomNav}
-        selectedDate={selectedDate}
-        log={log}
-        goals={goals}
-        homeSelectedDate={homeSelectedDate}
-        setHomeSelectedDate={setHomeSelectedDate}
-        changeSelectedDate={changeSelectedDate}
-        toggleHomeDate={toggleHomeDate}
-        today={today}
-        getCompletedStreak={getCompletedStreak}
-        goalsView={goalsView}
-        setGoalsView={setGoalsView}
-        currentWeightEntry={currentWeightEntry}
-        startingWeightEntry={startingWeightEntry}
-        weightUnit={weightUnit}
-      />
-    );
-  }
-
-if (appView === "egg-oracle") {
-  return <EggOracle bottomNav={bottomNav} />;
-}
-
-  if (appView === "profile") {
-    return (
-      <ProfileView
-        bottomNav={bottomNav}
-        profile={profile}
-        profileForm={profileForm}
-        setProfileForm={setProfileForm}
-        updateProfileForm={updateProfileForm}
-        profileCalculation={profileCalculation}
-        profileErrors={profileErrors}
-        profileHasBlockingErrors={profileHasBlockingErrors}
-        profileLowCalorieWarning={profileLowCalorieWarning}
-        profileWizardStep={profileWizardStep}
-        setProfileWizardStep={setProfileWizardStep}
-        isProfileWizardOpen={isProfileWizardOpen}
-        setIsProfileWizardOpen={setIsProfileWizardOpen}
-        profileSaveStatus={profileSaveStatus}
-        setProfileSaveStatus={setProfileSaveStatus}
-        cancelProfileChanges={cancelProfileChanges}
-        saveProfile={saveProfile}
-        onOpenExport={exportAllData}
-        onOpenImport={openImportFilePicker}
-        onConnectDrive={openDriveImport}
-        onDeleteAllData={clearAllData}
-      />
-    );
-  }
-
-  if (appView === "weight") {
-    return (
-      <WeightView
-        bottomNav={bottomNav}
-        today={today}
-        weightUnit={weightUnit}
-        profile={profile}
-        chartWeightEntries={chartWeightEntries}
-        currentWeightEntry={currentWeightEntry}
-        startingWeightEntry={startingWeightEntry}
-        weightForm={weightForm}
-        setWeightForm={setWeightForm}
-        weightSaveError={weightSaveError}
-        setWeightSaveError={setWeightSaveError}
-        isWeightFormValid={isWeightFormValid}
-        editingWeightEntryId={editingWeightEntryId}
-        setEditingWeightEntryId={setEditingWeightEntryId}
-        saveWeightEntry={saveWeightEntry}
-        tapProbeProps={tapProbeProps}
-        logTapProbe={logTapProbe}
-        weightRange={weightRange}
-        setWeightRange={setWeightRange}
-        weightChartPointId={weightChartPointId}
-        setWeightChartPointId={setWeightChartPointId}
-        sortedWeightEntriesOldest={sortedWeightEntriesOldest}
-        sortedWeightEntriesNewest={sortedWeightEntriesNewest}
-        startEditWeightEntry={startEditWeightEntry}
-        weightEntryToDelete={weightEntryToDelete}
-        setWeightEntryToDelete={setWeightEntryToDelete}
-        confirmDeleteWeightEntry={confirmDeleteWeightEntry}
-      />
-    );
-  }
-
-  if (appView === "library") {
-    return (
-      <FoodLibraryView
-        bottomNav={bottomNav}
-        foodLibraryTab={foodLibraryTab}
-        setFoodLibraryTab={setFoodLibraryTab}
-        libraryQuery={libraryQuery}
-        setLibraryQuery={setLibraryQuery}
-        librarySelection={librarySelection}
-        setLibrarySelection={setLibrarySelection}
-        cancelLibraryEditing={cancelLibraryEditing}
-        createLibraryCustomFood={createLibraryCustomFood}
-        createLibraryRecipe={createLibraryRecipe}
-        libraryRecentFoods={libraryRecentFoods}
-        libraryCustomFoods={libraryCustomFoods}
-        libraryRecipes={libraryRecipes}
-        isCreatingLibraryCustomFood={isCreatingLibraryCustomFood}
-        isCreatingLibraryRecipe={isCreatingLibraryRecipe}
-        editingCustomFoodId={editingCustomFoodId}
-        editingRecipeId={editingRecipeId}
-        editCustomFood={editCustomFood}
-        deleteCustomFood={deleteCustomFood}
-        libraryCustomFoodForm={libraryCustomFoodForm}
-        setLibraryCustomFoodForm={setLibraryCustomFoodForm}
-        saveNewLibraryCustomFood={saveNewLibraryCustomFood}
-        saveLibraryCustomFood={saveLibraryCustomFood}
-        editRecipe={editRecipe}
-        deleteRecipe={deleteRecipe}
-        libraryRecipeForm={libraryRecipeForm}
-        setLibraryRecipeForm={setLibraryRecipeForm}
-        recipeIngredientQuery={recipeIngredientQuery}
-        setRecipeIngredientQuery={setRecipeIngredientQuery}
-        searchRecipeIngredientFoods={searchRecipeIngredientFoods}
-        recipeIngredientOptions={recipeIngredientOptions}
-        pendingRecipeIngredient={pendingRecipeIngredient}
-        selectRecipeIngredient={selectRecipeIngredient}
-        isSearchingRecipeIngredients={isSearchingRecipeIngredients}
-        pendingRecipeIngredientQuantity={pendingRecipeIngredientQuantity}
-        setPendingRecipeIngredientQuantity={setPendingRecipeIngredientQuantity}
-        confirmLibraryRecipeIngredient={confirmLibraryRecipeIngredient}
-        setPendingRecipeIngredient={setPendingRecipeIngredient}
-        libraryRecipeIngredients={libraryRecipeIngredients}
-        updateLibraryRecipeIngredientQuantity={updateLibraryRecipeIngredientQuantity}
-        removeLibraryRecipeIngredient={removeLibraryRecipeIngredient}
-        saveNewLibraryRecipe={saveNewLibraryRecipe}
-        saveLibraryRecipe={saveLibraryRecipe}
-      />
-    );
-  }
-
   return (
-    <LogView
-      goals={goals}
-      totalCalories={totalCalories}
-      dailyTotals={dailyTotals}
-      completedDays={completedDays}
-      selectedDate={selectedDate}
-      moveSelectedDate={moveSelectedDate}
-      changeSelectedDate={changeSelectedDate}
-      importStatus={importStatus}
-      importErrors={importErrors}
-      importDrafts={importDrafts}
-      isLogMenuOpen={isLogMenuOpen}
-      setIsLogMenuOpen={setIsLogMenuOpen}
-      setExportStatus={setExportStatus}
-      visibleMealCategories={visibleMealCategories}
-      getCategoryTotals={getCategoryTotals}
-      scrollToMeal={scrollToMeal}
-      log={log}
-      expandedMeals={expandedMeals}
-      mealCardRefs={mealCardRefs}
-      toggleMeal={toggleMeal}
-      mealMenuCategory={mealMenuCategory}
-      setMealMenuCategory={setMealMenuCategory}
-      openSaveMealAsRecipe={openSaveMealAsRecipe}
-      setMealToDelete={setMealToDelete}
-      suppressNextClickRef={suppressNextClickRef}
-      openEditFoodItem={openEditFoodItem}
-      setContextMenuItem={setContextMenuItem}
-      setContextMenuY={setContextMenuY}
-      longPressRef={longPressRef}
-      getItemCalories={getItemCalories}
-      logTapProbe={logTapProbe}
-      openAddFood={openAddFood}
-      handleFinishToggle={handleFinishToggle}
-      pendingCategory={pendingCategory}
-      tapProbeProps={tapProbeProps}
-      activeAddFoodTab={activeAddFoodTab}
-      setActiveAddFoodTab={setActiveAddFoodTab}
-      modalQuery={modalQuery}
-      setModalQuery={setModalQuery}
-      searchModalFood={searchModalFood}
-      modalFoods={modalFoods}
-      selectedFood={selectedFood}
-      selectedFoodDetail={selectedFoodDetail}
-      selectedPortion={selectedPortion}
-      isLoadingDetail={isLoadingDetail}
-      selectFood={selectFood}
-      recentFoods={recentFoods}
-      selectLocalFood={selectLocalFood}
-      customQuery={customQuery}
-      setCustomQuery={setCustomQuery}
-      openCustomFoodForm={openCustomFoodForm}
-      isCustomFormOpen={isCustomFormOpen}
-      customFoodScanInputRef={customFoodScanInputRef}
-      isScanningCustomFood={isScanningCustomFood}
-      scanCustomFoodLabel={scanCustomFoodLabel}
-      customFoodOcrError={customFoodOcrError}
-      customFoodOcrText={customFoodOcrText}
-      customFoodForm={customFoodForm}
-      setCustomFoodForm={setCustomFoodForm}
-      customFoodSaveError={customFoodSaveError}
-      createCustomFood={createCustomFood}
-      setIsCustomFormOpen={setIsCustomFormOpen}
-      filteredCustomFoods={filteredCustomFoods}
-      recipeQuery={recipeQuery}
-      setRecipeQuery={setRecipeQuery}
-      openRecipeForm={openRecipeForm}
-      isRecipeFormOpen={isRecipeFormOpen}
-      recipeForm={recipeForm}
-      setRecipeForm={setRecipeForm}
-      recipeTotals={recipeTotals}
-      recipeIngredientQuery={recipeIngredientQuery}
-      setRecipeIngredientQuery={setRecipeIngredientQuery}
-      searchRecipeIngredientFoods={searchRecipeIngredientFoods}
-      isSearchingRecipeIngredients={isSearchingRecipeIngredients}
-      recipeIngredientOptions={recipeIngredientOptions}
-      pendingRecipeIngredient={pendingRecipeIngredient}
-      selectRecipeIngredient={selectRecipeIngredient}
-      pendingRecipeIngredientQuantity={pendingRecipeIngredientQuantity}
-      setPendingRecipeIngredientQuantity={setPendingRecipeIngredientQuantity}
-      confirmRecipeIngredient={confirmRecipeIngredient}
-      setPendingRecipeIngredient={setPendingRecipeIngredient}
-      recipeIngredients={recipeIngredients}
-      updateRecipeIngredientQuantity={updateRecipeIngredientQuantity}
-      removeRecipeIngredient={removeRecipeIngredient}
-      createRecipe={createRecipe}
-      setIsRecipeFormOpen={setIsRecipeFormOpen}
-      filteredRecipes={filteredRecipes}
-      closeAddFood={closeAddFood}
-      detailError={detailError}
-      servingBasisText={servingBasisText}
-      amountUnit={amountUnit}
-      portionOptions={portionOptions}
-      selectedPortionValue={selectedPortionValue}
-      setSelectedPortionValue={setSelectedPortionValue}
-      quantity={quantity}
-      setQuantity={setQuantity}
-      portionAmount={portionAmount}
-      setPortionAmount={setPortionAmount}
-      setAmountUnit={setAmountUnit}
-      allowedAmountUnits={allowedAmountUnits}
-      selectedPortionCalories={selectedPortionCalories}
-      addSelectedFood={addSelectedFood}
-      canAddSelectedFood={canAddSelectedFood}
-      setSelectedFood={setSelectedFood}
-      importSteps={importSteps}
-      importStepIndex={importStepIndex}
-      cancelImportStepper={cancelImportStepper}
-      confirmImportStep={confirmImportStep}
-      skipImportStep={skipImportStep}
-      importStepResults={importStepResults}
-      closeImportSummary={closeImportSummary}
-      importFileName={importFileName}
-      importWeightEntries={importWeightEntries}
-      updateImportDraft={updateImportDraft}
-      removeImportDraft={removeImportDraft}
-      removeImportWeightEntry={removeImportWeightEntry}
-      confirmFoodLogImport={confirmFoodLogImport}
-      closeImportPreview={closeImportPreview}
-      isExportPanelOpen={isExportPanelOpen}
-      setIsExportPanelOpen={setIsExportPanelOpen}
-      googleDriveClientId={googleDriveClientId}
-      isUploadingToDrive={isUploadingToDrive}
-      setGoogleDriveClientId={setGoogleDriveClientId}
-      exportStatus={exportStatus}
-      exportDriveLink={exportDriveLink}
-      downloadDayExport={downloadDayExport}
-      uploadDayExportToDrive={uploadDayExportToDrive}
-      isImportDayOpen={isImportDayOpen}
-      setIsImportDayOpen={setIsImportDayOpen}
-      openDriveImport={openDriveImport}
-      isLoadingDriveImport={isLoadingDriveImport}
-      openImportFilePicker={openImportFilePicker}
-      isDriveImportOpen={isDriveImportOpen}
-      setIsDriveImportOpen={setIsDriveImportOpen}
-      driveImportStatus={driveImportStatus}
-      driveImportFiles={driveImportFiles}
-      importGoogleDriveFile={importGoogleDriveFile}
-      mealToSaveAsRecipe={mealToSaveAsRecipe}
-      mealRecipeName={mealRecipeName}
-      setMealRecipeName={setMealRecipeName}
-      saveMealAsRecipe={saveMealAsRecipe}
-      setMealToSaveAsRecipe={setMealToSaveAsRecipe}
-      mealToDelete={mealToDelete}
-      confirmDeleteMeal={confirmDeleteMeal}
-      itemToEdit={itemToEdit}
-      editItemAmountUnit={editItemAmountUnit}
-      editItemAmount={editItemAmount}
-      setEditItemAmount={setEditItemAmount}
-      setEditItemAmountUnit={setEditItemAmountUnit}
-      getEditAmountUnits={getEditAmountUnits}
-      saveEditedFoodItem={saveEditedFoodItem}
-      setItemToEdit={setItemToEdit}
-      itemToRemove={itemToRemove}
-      confirmRemoveFood={confirmRemoveFood}
-      setItemToRemove={setItemToRemove}
-      contextMenuItem={contextMenuItem}
-      contextMenuY={contextMenuY}
-      moveToMealItem={moveToMealItem}
-      setMoveToMealItem={setMoveToMealItem}
-      moveItemToMeal={moveItemToMeal}
-      moveToDayItem={moveToDayItem}
-      setMoveToDayItem={setMoveToDayItem}
-      setMoveToDayDate={setMoveToDayDate}
-      setMoveToDayStep={setMoveToDayStep}
-      moveToDayStep={moveToDayStep}
-      moveToDayDate={moveToDayDate}
-      moveItemToDifferentDay={moveItemToDifferentDay}
+    <AppViewRouter
+      appView={appView}
+      onNavigate={navigateAppView}
       bottomNav={bottomNav}
+      homeProps={{
+        selectedDate,
+        log,
+        goals,
+        homeSelectedDate,
+        setHomeSelectedDate,
+        changeSelectedDate,
+        toggleHomeDate,
+        today,
+        getCompletedStreak,
+        goalsView,
+        setGoalsView,
+        currentWeightEntry,
+        startingWeightEntry,
+        weightUnit,
+      }}
+      profileProps={{
+        profile,
+        profileForm,
+        setProfileForm,
+        updateProfileForm,
+        profileCalculation,
+        profileErrors,
+        profileHasBlockingErrors,
+        profileLowCalorieWarning,
+        profileWizardStep,
+        setProfileWizardStep,
+        isProfileWizardOpen,
+        setIsProfileWizardOpen,
+        profileSaveStatus,
+        setProfileSaveStatus,
+        themeMode,
+        setThemeMode,
+        setCycleTrackingPreference,
+        cancelProfileChanges,
+        saveProfile,
+        onOpenExport: exportAllData,
+        onOpenImport: openImportFilePicker,
+        onConnectDrive: openDriveImport,
+        onDeleteAllData: clearAllData,
+      }}
+      weightProps={{
+        today,
+        weightUnit,
+        profile,
+        chartWeightEntries,
+        currentWeightEntry,
+        startingWeightEntry,
+        weightForm,
+        setWeightForm,
+        weightSaveError,
+        setWeightSaveError,
+        isWeightFormValid,
+        editingWeightEntryId,
+        setEditingWeightEntryId,
+        saveWeightEntry,
+        tapProbeProps,
+        logTapProbe,
+        weightRange,
+        setWeightRange,
+        weightChartPointId,
+        setWeightChartPointId,
+        sortedWeightEntriesOldest,
+        sortedWeightEntriesNewest,
+        startEditWeightEntry,
+        weightEntryToDelete,
+        setWeightEntryToDelete,
+        confirmDeleteWeightEntry,
+      }}
+      libraryProps={{
+        foodLibraryTab,
+        setFoodLibraryTab,
+        libraryQuery,
+        setLibraryQuery,
+        librarySelection,
+        setLibrarySelection,
+        cancelLibraryEditing,
+        createLibraryCustomFood,
+        createLibraryRecipe,
+        libraryRecentFoods,
+        libraryCustomFoods,
+        libraryRecipes,
+        isCreatingLibraryCustomFood,
+        isCreatingLibraryRecipe,
+        editingCustomFoodId,
+        editingRecipeId,
+        editCustomFood,
+        deleteCustomFood,
+        libraryCustomFoodForm,
+        setLibraryCustomFoodForm,
+        saveNewLibraryCustomFood,
+        saveLibraryCustomFood,
+        editRecipe,
+        deleteRecipe,
+        libraryRecipeForm,
+        setLibraryRecipeForm,
+        recipeIngredientQuery,
+        setRecipeIngredientQuery,
+        searchRecipeIngredientFoods,
+        recipeIngredientOptions,
+        pendingRecipeIngredient,
+        selectRecipeIngredient,
+        isSearchingRecipeIngredients,
+        pendingRecipeIngredientQuantity,
+        setPendingRecipeIngredientQuantity,
+        confirmLibraryRecipeIngredient,
+        setPendingRecipeIngredient,
+        libraryRecipeIngredients,
+        updateLibraryRecipeIngredientQuantity,
+        removeLibraryRecipeIngredient,
+        saveNewLibraryRecipe,
+        saveLibraryRecipe,
+      }}
+      logProps={{
+        goals,
+        totalCalories,
+        dailyTotals,
+        completedDays,
+        selectedDate,
+        moveSelectedDate,
+        changeSelectedDate,
+        importStatus,
+        importErrors,
+        importDrafts,
+        isLogMenuOpen,
+        setIsLogMenuOpen,
+        setExportStatus,
+        visibleMealCategories,
+        getCategoryTotals,
+        scrollToMeal,
+        log,
+        expandedMeals,
+        mealCardRefs,
+        toggleMeal,
+        mealMenuCategory,
+        setMealMenuCategory,
+        openSaveMealAsRecipe,
+        setMealToDelete,
+        suppressNextClickRef,
+        openEditFoodItem,
+        setContextMenuItem,
+        setContextMenuY,
+        longPressRef,
+        getItemCalories,
+        logTapProbe,
+        openAddFood,
+        handleFinishToggle,
+        pendingCategory,
+        tapProbeProps,
+        activeAddFoodTab,
+        setActiveAddFoodTab,
+        modalQuery,
+        setModalQuery,
+        searchModalFood,
+        modalFoods,
+        selectedFood,
+        selectedFoodDetail,
+        selectedPortion,
+        isLoadingDetail,
+        selectFood,
+        recentFoods,
+        selectLocalFood,
+        customQuery,
+        setCustomQuery,
+        openCustomFoodForm,
+        isCustomFormOpen,
+        customFoodScanInputRef,
+        isScanningCustomFood,
+        scanCustomFoodLabel,
+        customFoodOcrError,
+        customFoodOcrText,
+        customFoodForm,
+        setCustomFoodForm,
+        customFoodSaveError,
+        createCustomFood,
+        setIsCustomFormOpen,
+        filteredCustomFoods,
+        recipeQuery,
+        setRecipeQuery,
+        openRecipeForm,
+        isRecipeFormOpen,
+        recipeForm,
+        setRecipeForm,
+        recipeTotals,
+        recipeIngredientQuery,
+        setRecipeIngredientQuery,
+        searchRecipeIngredientFoods,
+        isSearchingRecipeIngredients,
+        recipeIngredientOptions,
+        pendingRecipeIngredient,
+        selectRecipeIngredient,
+        pendingRecipeIngredientQuantity,
+        setPendingRecipeIngredientQuantity,
+        confirmRecipeIngredient,
+        setPendingRecipeIngredient,
+        recipeIngredients,
+        updateRecipeIngredientQuantity,
+        removeRecipeIngredient,
+        createRecipe,
+        setIsRecipeFormOpen,
+        filteredRecipes,
+        closeAddFood,
+        detailError,
+        servingBasisText,
+        amountUnit,
+        portionOptions,
+        selectedPortionValue,
+        setSelectedPortionValue,
+        quantity,
+        setQuantity,
+        portionAmount,
+        setPortionAmount,
+        setAmountUnit,
+        allowedAmountUnits,
+        selectedPortionCalories,
+        addSelectedFood,
+        canAddSelectedFood,
+        setSelectedFood,
+        importSteps,
+        importStepIndex,
+        cancelImportStepper,
+        confirmImportStep,
+        skipImportStep,
+        importStepResults,
+        closeImportSummary,
+        importFileName,
+        importWeightEntries,
+        updateImportDraft,
+        removeImportDraft,
+        removeImportWeightEntry,
+        confirmFoodLogImport,
+        closeImportPreview,
+        isExportPanelOpen,
+        setIsExportPanelOpen,
+        googleDriveClientId,
+        isUploadingToDrive,
+        setGoogleDriveClientId,
+        exportStatus,
+        exportDriveLink,
+        downloadDayExport,
+        uploadDayExportToDrive,
+        isImportDayOpen,
+        setIsImportDayOpen,
+        openDriveImport,
+        isLoadingDriveImport,
+        openImportFilePicker,
+        isDriveImportOpen,
+        setIsDriveImportOpen,
+        driveImportStatus,
+        driveImportFiles,
+        importGoogleDriveFile,
+        mealToSaveAsRecipe,
+        mealRecipeName,
+        setMealRecipeName,
+        saveMealAsRecipe,
+        setMealToSaveAsRecipe,
+        mealToDelete,
+        confirmDeleteMeal,
+        itemToEdit,
+        editItemAmountUnit,
+        editItemAmount,
+        setEditItemAmount,
+        setEditItemAmountUnit,
+        getEditAmountUnits,
+        saveEditedFoodItem,
+        setItemToEdit,
+        itemToRemove,
+        confirmRemoveFood,
+        setItemToRemove,
+        contextMenuItem,
+        contextMenuY,
+        moveToMealItem,
+        setMoveToMealItem,
+        moveItemToMeal,
+        moveToDayItem,
+        setMoveToDayItem,
+        setMoveToDayDate,
+        setMoveToDayStep,
+        moveToDayStep,
+        moveToDayDate,
+        moveItemToDifferentDay,
+      }}
     />
   );
 }
