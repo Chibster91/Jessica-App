@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import "../styles/profile.css";
 import {
   formatEntryDate,
   formatHeightValue,

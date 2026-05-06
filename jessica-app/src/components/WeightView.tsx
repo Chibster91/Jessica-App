@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction, type SyntheticEvent } from "react";
+import "../styles/weight.css";
 import {
   convertWeightValue,
   formatDateRange,

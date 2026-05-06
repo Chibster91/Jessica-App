@@ -115,7 +115,7 @@ import {
   type MealCategory,
   type LogItem
 } from "./appSupport";
-import "./App.css";
+import "./styles/log.css";
 
 interface ImportDayStep {
   date: string;
@@ -2407,31 +2407,18 @@ function startEditWeightEntry(entry: WeightEntry) {
   const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
   const rawPortionAmount = Number(portionAmount);
   const measuredServingBasis = selectedFood ? getMeasuredServingBasis(selectedFood) : null;
- const allowedAmountUnits = (() => {
-  if (!selectedFood) return ["serving"] as AmountUnit[];
-
-  switch (selectedFood.measurementType ?? "solid") {
-    case "liquid":
-      return ["ml", "cup", "tbsp", "tsp"] as AmountUnit[];
-
-    case "spoonable":
-      return ["g", "oz", "tbsp", "tsp"] as AmountUnit[];
-
-    default:
-      return ["g", "oz"] as AmountUnit[];
-  }
-})();
-useEffect(() => {
-  if (!allowedAmountUnits.includes(amountUnit)) {
-    setAmountUnit(allowedAmountUnits[0]);
-  }
-}, [allowedAmountUnits, amountUnit]);
+  const allowedAmountUnits: AmountUnit[] =
+    selectedFood?.measurementType === "liquid"
+      ? ["serving", "ml", "cup", "tbsp", "tsp"]
+      : selectedFood?.measurementType === "spoonable"
+        ? ["serving", "g", "oz", "tbsp", "tsp"]
+        : ["serving", "g", "oz"];
   const portionAmountInBasisUnits =
-  amountUnit === "serving"
-    ? rawPortionAmount
-    : measuredServingBasis && Number.isFinite(rawPortionAmount) && rawPortionAmount > 0
-      ? convertAmountToBasisUnit(rawPortionAmount, amountUnit, measuredServingBasis.unit)
-      : null
+    amountUnit === "serving"
+      ? rawPortionAmount
+      : measuredServingBasis && Number.isFinite(rawPortionAmount) && rawPortionAmount > 0
+        ? convertAmountToBasisUnit(rawPortionAmount, amountUnit, measuredServingBasis.unit)
+        : null;
   const localPortionScale =
     selectedFood &&
     hasUsableSearchNutrition(selectedFood) &&

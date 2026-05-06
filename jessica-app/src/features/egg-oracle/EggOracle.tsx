@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
+import "../../styles/eggOracle.css";
 
 const STORAGE_KEY = "eggOracleTrackingFirst.v2";
 

@@ -1,0 +1,117 @@
+.library-layout {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+  text-align: left;
+}
+
+.library-main,
+.library-detail,
+.library-list {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.library-search {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.library-list {
+  max-height: 62svh;
+  overflow: auto;
+}
+
+.library-detail {
+  border-left: 1px solid #343845;
+  padding-left: 1.5rem;
+}
+
+.nutrition-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem 1rem;
+}
+
+.library-detail-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.library-detail-heading img {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: 0 0 auto;
+}
+
+.library-detail-heading h2 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.library-edit-form {
+  border-top: 1px solid #343845;
+  padding-top: 1rem;
+}
+
+@media (max-width: 520px) {
+  .tab-row,
+  .calculator-fields,
+  .option-card-grid,
+  .option-card-grid.three,
+  .profile-actions,
+  .targets-grid,
+  .custom-food-form,
+  .form-actions,
+  .ingredient-confirm,
+  .ingredient-row {
+    grid-template-columns: 1fr;
+  }
+
+  .height-input-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .height-input-row select {
+    grid-column: 1 / -1;
+  }
+
+  .custom-food-form h2,
+  .custom-food-form > label:first-of-type,
+  .custom-food-form > label:nth-of-type(12),
+  .scan-food-panel,
+  .form-actions {
+    grid-column: auto;
+  }
+
+  .top-bar,
+  .library-layout,
+  .daily-nutrition-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .top-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .library-detail {
+    border-left: 0;
+    border-top: 1px solid #343845;
+    padding-left: 0;
+    padding-top: 1rem;
+  }
+
+  .modal {
+    padding: 1rem;
+  }
+
+  .modal-results {
+    max-height: 200px;
+  }
+}
+

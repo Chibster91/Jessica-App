@@ -1,0 +1,542 @@
+.app {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 2rem 5.5rem;
+}
+
+.panel {
+  background: #1E2026;
+  border: 1px solid #343845;
+  border-radius: 18px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+}
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.search-row,
+.date-row {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.day-summary {
+  text-align: center;
+}
+
+input, button, textarea {
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+}
+
+.grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.food-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: left;
+  background: #262932;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 0.42rem 0.7rem;
+}
+
+.food-card.selected {
+  border-color: #B46CFF;
+  background: #262932;
+}
+
+.food-card-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.food-card-brand {
+  color: var(--fg-2, #9aa2b8);
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.food-card-cal {
+  color: var(--fg-2, #9aa2b8);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.food-card-logged {
+  color: var(--fg-2, #9aa2b8);
+  font-size: 0.72rem;
+}
+
+.food-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.food-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.food-card-title img,
+.library-detail-heading img,
+.log-food-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.food-card-title img {
+  width: 1.55rem;
+  height: 1.55rem;
+  flex: 0 0 auto;
+}
+
+.food-card-title strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 200;
+}
+
+.modal {
+  width: min(560px, 100%);
+  box-sizing: border-box;
+  background: #1E2026;
+  border: 1px solid #343845;
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-height: 90svh;
+  overflow-y: auto;
+}
+
+.modal p {
+  margin: 0 0 1rem;
+}
+
+.tab-row {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 1rem;
+}
+
+.tab-row button {
+  background: #262932;
+  border: 1px solid #343845;
+}
+
+.tab-row button.active {
+  background: #262932;
+  border-color: #B46CFF;
+}
+
+.modal-results {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 340px;
+  overflow: auto;
+  margin: 1rem 0;
+}
+
+.custom-food-form {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 1rem 0;
+  text-align: left;
+}
+
+.custom-food-form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.custom-food-form h2,
+.custom-food-form > label:first-of-type,
+.custom-food-form > label:nth-of-type(12),
+.scan-food-panel,
+.form-actions {
+  grid-column: 1 / -1;
+}
+
+.custom-food-form input,
+.custom-food-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.custom-food-form textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
+.scan-food-panel {
+  display: grid;
+  gap: 0.5rem;
+  border: 1px solid #343845;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.scan-food-panel .secondary-button {
+  margin-top: 0;
+}
+
+.scan-file-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #343845;
+  border-radius: 10px;
+  background: #262932;
+  color: #F2F2F0;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.scan-file-label.disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.scan-file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.scan-file-input:disabled {
+  cursor: not-allowed;
+}
+
+.scan-status,
+.form-error {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.scan-status {
+  color: #B7BCC7;
+}
+
+.form-error {
+  color: #fca5a5;
+}
+
+.ocr-debug {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ocr-debug summary {
+  cursor: pointer;
+}
+
+.ocr-debug pre {
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #262932;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.form-actions {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-actions .form-error,
+.weight-form .form-error {
+  grid-column: 1 / -1;
+}
+
+.form-actions button,
+.weight-form .primary-button,
+.weight-form .secondary-button,
+.add-food-button {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.recipe-form,
+.recipe-builder {
+  display: grid;
+  gap: 1rem;
+}
+
+.recipe-builder {
+  text-align: left;
+}
+
+.recipe-totals {
+  display: grid;
+  gap: 0.25rem;
+  border-top: 1px solid #343845;
+  padding-top: 0.75rem;
+}
+
+.ingredient-picker {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.ingredient-picker button {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: left;
+}
+
+.ingredient-picker button.selected {
+  background: #262932;
+  border-color: #B46CFF;
+}
+
+.ingredient-confirm {
+  display: grid;
+  align-items: end;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) 6rem auto auto;
+  border: 1px solid #343845;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.ingredient-confirm div,
+.ingredient-confirm label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ingredient-confirm input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ingredient-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.ingredient-row {
+  display: grid;
+  align-items: center;
+  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1fr) 5rem auto auto;
+}
+
+.ingredient-row input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.selected-food-summary {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.portion-row,
+.quantity-row {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+  text-align: left;
+}
+
+.portion-row select,
+.quantity-row input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-error {
+  color: #fca5a5;
+}
+
+.modal-hint {
+  color: #B7BCC7;
+  font-size: 0.9rem;
+  margin: 0 0 0.75rem;
+  text-align: left;
+}
+
+.primary-button,
+.danger-button,
+.secondary-button {
+  width: 100%;
+}
+
+button:disabled,
+input:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.danger-button {
+  background: #7f1d1d;
+  color: #fee2e2;
+  border-color: #b91c1c;
+}
+
+.secondary-button {
+  margin-top: 0.75rem;
+}
+
+/* Bottom navigation */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #15161A;
+  border-top: 1px solid #343845;
+  display: flex;
+  justify-content: space-around;
+  padding: 0.4rem 1rem;
+  z-index: 100;
+}
+
+.bottom-nav button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 1.25rem;
+  background: none;
+  border: none;
+  color: #B7BCC7;
+  font-size: 0.72rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: color 0.15s;
+}
+
+.bottom-nav button:hover {
+  color: #F2F2F0;
+  background: #262932;
+}
+
+.bottom-nav button.active {
+  color: #B46CFF;
+}
+
+.debug-fab {
+  display: none;
+}
+
+.debug-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.debug-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.debug-panel-header h2 {
+  margin: 0;
+}
+
+.debug-panel textarea {
+  width: 100%;
+  min-height: 55svh;
+  resize: vertical;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: pre;
+}
+
+.nav-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* Macro progress bars (day view + home screen cards) */
+.macro-bar-track {
+  height: 5px;
+  background: #343845;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.3rem;
+}
+
+.macro-bar-fill {
+  height: 100%;
+  background: #B46CFF;
+  border-radius: 3px;
+  min-width: 2px;
+  transition: width 0.3s ease;
+}
+
+.macro-bar-fill.over {
+  background: #f87171;
+}
+

@@ -1,4 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from "react";
+import "../styles/home.css";
 import {
   convertWeightValue,
   formatShortDate,
