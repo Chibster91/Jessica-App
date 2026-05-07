@@ -24,7 +24,7 @@
 }
 
 .library-detail {
-  border-left: 1px solid #343845;
+  border-left: var(--ui-border);
   padding-left: 1.5rem;
 }
 
@@ -54,7 +54,7 @@
 }
 
 .library-edit-form {
-  border-top: 1px solid #343845;
+  border-top: var(--ui-border);
   padding-top: 1rem;
 }
 
@@ -101,9 +101,9 @@
 
   .library-detail {
     border-left: 0;
-    border-top: 1px solid #343845;
+    border-top: var(--ui-border);
     padding-left: 0;
-    padding-top: 1rem;
+    padding-top: 10rem;
   }
 
   .modal {

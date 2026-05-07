@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction, type SyntheticEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction, type SyntheticEvent } from "react";
 import "../styles/weight.css";
 import {
   convertWeightValue,
@@ -300,6 +300,13 @@ export function WeightView({
       : null;
     const openWeightForm = () => {
       setWeightSaveError("");
+      setWeightForm((current) => {
+        if (current.weight.trim() || !currentWeightEntry) return current;
+        return {
+          ...current,
+          weight: convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit).toFixed(1),
+        };
+      });
       setIsWeightFormOpen(true);
     };
     const closeWeightForm = () => {
@@ -333,23 +340,45 @@ export function WeightView({
       if (delta > 0) return index === 0 ? "red" : "";
       return "green";
     };
-    const weightPickerStep = displayUnit === "kg" ? 0.2 : 0.5;
     const weightPickerMin = displayUnit === "kg" ? 30 : 70;
     const weightPickerMax = displayUnit === "kg" ? 250 : 550;
     const parsedPickerWeight = Number(weightForm.weight);
-    const normalizedPickerWeight = Number.isFinite(parsedPickerWeight)
-      ? Math.round(parsedPickerWeight / weightPickerStep) * weightPickerStep
-      : null;
-    const weightPickerValues = Array.from(
-      { length: Math.floor((weightPickerMax - weightPickerMin) / weightPickerStep) + 1 },
-      (_, index) => Number((weightPickerMin + index * weightPickerStep).toFixed(1))
-    );
-    const visibleWeightPickerValues =
-      normalizedPickerWeight !== null && !weightPickerValues.includes(Number(normalizedPickerWeight.toFixed(1)))
-        ? [...weightPickerValues, Number(normalizedPickerWeight.toFixed(1))].sort((a, b) => a - b)
-        : weightPickerValues;
-    const selectedPickerValue =
-      normalizedPickerWeight !== null ? Number(normalizedPickerWeight.toFixed(1)).toString() : "";
+    const normalizedPickerWeight = Number.isFinite(parsedPickerWeight) ? Math.max(0, parsedPickerWeight) : null;
+    const selectedWholeWeight = normalizedPickerWeight !== null
+      ? Math.floor(Math.round(normalizedPickerWeight * 10) / 10)
+      : currentWeightEntry
+        ? Math.floor(convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit))
+        : Math.round((weightPickerMin + weightPickerMax) / 2);
+    const selectedDecimalWeight = normalizedPickerWeight !== null
+      ? Math.round((Math.round(normalizedPickerWeight * 10) / 10 - selectedWholeWeight) * 10)
+      : currentWeightEntry
+        ? Math.round((convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit) % 1) * 10)
+        : 0;
+    const wholeWeightValues = useMemo(() => {
+      const values = Array.from(
+        { length: weightPickerMax - weightPickerMin + 1 },
+        (_, index) => weightPickerMin + index
+      );
+      return values.includes(selectedWholeWeight)
+        ? values
+        : [...values, selectedWholeWeight].sort((a, b) => a - b);
+    }, [selectedWholeWeight, weightPickerMax, weightPickerMin]);
+    const decimalWeightValues = Array.from({ length: 10 }, (_, index) => index);
+    const wholeWheelRef = useRef<HTMLSelectElement | null>(null);
+    const decimalWheelRef = useRef<HTMLSelectElement | null>(null);
+    useEffect(() => {
+      const centerSelectedOption = (select: HTMLSelectElement | null) => {
+        const option = select?.selectedOptions.item(0);
+        if (!select || !option) return;
+        select.scrollTop = option.offsetTop - select.clientHeight / 2 + option.clientHeight / 2;
+      };
+      centerSelectedOption(wholeWheelRef.current);
+      centerSelectedOption(decimalWheelRef.current);
+    }, [selectedDecimalWeight, selectedWholeWeight, isWeightFormOpen]);
+    const updateWeightPicker = (whole: number, decimal: number) => {
+      setWeightSaveError("");
+      setWeightForm({ ...weightForm, weight: `${whole}.${decimal}` });
+    };
     const renderWeightForm = () => (
       <div className="floating-overlay" role="presentation" onClick={closeWeightForm}>
         <div
@@ -362,8 +391,8 @@ export function WeightView({
         >
           <h2 id="weight-form-title">{editingWeightEntryId ? "Edit Weight" : "Enter Weight"}</h2>
           <div className="weight-form" {...tapProbeProps("weight-form")}>
-            <div className="weight-form-top">
-              <label>
+            <div className="weight-date-row">
+              <label className="weight-date-field">
                 Date
                 <input
                   type="date"
@@ -374,25 +403,49 @@ export function WeightView({
                   }}
                 />
               </label>
+            </div>
+            <div className="weight-picker-field">
               <label>
                 Weight ({weightUnit})
+                <div className="weight-dual-wheel-wrap">
                 <div className="weight-wheel-wrap">
                   <select
+                    ref={wholeWheelRef}
                     className="weight-wheel-picker"
                     size={7}
-                    value={selectedPickerValue}
+                    value={String(selectedWholeWeight)}
                     onChange={(e) => {
-                      setWeightSaveError("");
-                      setWeightForm({ ...weightForm, weight: e.target.value });
+                      updateWeightPicker(Number(e.target.value), selectedDecimalWeight);
                     }}
-                    aria-label={`Weight in ${weightUnit}`}
+                    aria-label={`Whole ${weightUnit}`}
                   >
-                    {visibleWeightPickerValues.map((value) => (
-                      <option key={value} value={value.toString()}>
-                        {value.toFixed(1)}
+                    {wholeWeightValues.map((value) => (
+                      <option key={value} value={String(value)}>
+                        {value}
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="weight-wheel-decimal">.</div>
+                <div className="weight-wheel-wrap weight-wheel-wrap-decimal">
+                  <select
+                    ref={decimalWheelRef}
+                    className="weight-wheel-picker weight-wheel-picker-decimal"
+                    size={7}
+                    value={String(Math.max(0, Math.min(9, selectedDecimalWeight)))}
+                    onChange={(e) => {
+                      updateWeightPicker(selectedWholeWeight, Number(e.target.value));
+                    }}
+                    aria-label={`Tenths of ${weightUnit}`}
+                  >
+                    {decimalWeightValues.map((value) => (
+                      <option key={value} value={String(value)}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <span className="weight-wheel-unit">{weightUnit}</span>
                 </div>
               </label>
             </div>

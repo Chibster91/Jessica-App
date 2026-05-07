@@ -73,6 +73,7 @@ import {
   parseDecimalInput,
   createClientId,
   getConfiguredGoogleClientId,
+  getAllLocalFoods,
   searchUsdaFoodsWithSynonyms,
   searchFoodsGrouped,
   fetchUsdaFoodDetail,
@@ -114,6 +115,21 @@ interface ImportDayStep {
 type ImportFoodResolution = {
   food: Food;
   quantity: number;
+  importAudit: {
+    name: string;
+    brand?: string;
+    serving: string;
+    quantity: string;
+    calories: string;
+    protein: string;
+    carbs: string;
+    fat: string;
+    source?: string;
+    notes?: string;
+    resolvedSource?: string;
+    resolvedFoodId?: number;
+    confidence?: string;
+  };
 };
 
 type ImportServingBasis = {
@@ -127,26 +143,53 @@ type ImportFoodBatchResolver = {
   addedFoodIds: Set<number>;
 };
 
+type ImportResolutionProgress = {
+  resolved: number;
+  total: number;
+};
+
+type ImportReviewAction = "applied" | "rejected";
+
+type ImportMatchSource = "local" | "custom" | "recipe" | "usda";
+type ImportConfidenceTier = "high" | "medium" | "low";
+type ImportReviewMode = "preview" | "step";
+
+type ImportFoodCandidate = {
+  key: string;
+  source: ImportMatchSource;
+  sourceLabel: string;
+  food: Food;
+  score: number;
+  confidence: ImportConfidenceTier;
+  quantity: number;
+  nameSimilarity: number;
+  unitCompatible: boolean;
+  nutritionEdge: boolean;
+};
+
+type ImportReviewItem = {
+  item: FoodLogImportDraft;
+  importedFood: Food;
+  candidates: ImportFoodCandidate[];
+};
+
+type ImportCandidateIndexEntry = {
+  source: ImportMatchSource;
+  food: Food;
+  normalizedName: string;
+};
+
+type ImportFoodBatchResolverOptions = {
+  forceReviewAll?: boolean;
+  onProgress?: (progress: ImportResolutionProgress) => void;
+};
+
 type ThemeMode = "dark" | "light";
 
 const themeStorageKey = "theme-mode";
 
 function getSavedThemeMode(): ThemeMode {
   return localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
-}
-
-function buildImportSteps(items: FoodLogImportDraft[], weightEntries: WeightImportEntry[]): ImportDayStep[] {
-  const mealsByDate = new Map<string, FoodLogImportDraft[]>();
-  for (const item of items) {
-    if (!mealsByDate.has(item.date)) mealsByDate.set(item.date, []);
-    mealsByDate.get(item.date)!.push(item);
-  }
-  const allDates = Array.from(new Set([...mealsByDate.keys(), ...weightEntries.map((e) => e.date)])).sort();
-  return allDates.map((date) => ({
-    date,
-    items: mealsByDate.get(date) ?? [],
-    weightEntry: weightEntries.find((e) => e.date === date) ?? null,
-  }));
 }
 
 function normalizeImportKeyPart(value: string | null | undefined): string {
@@ -215,11 +258,21 @@ function canonicalImportUnit(unit: string): string {
     g: "g",
     gram: "g",
     grams: "g",
+    kg: "kg",
+    kilogram: "kg",
+    kilograms: "kg",
     ml: "ml",
     milliliter: "ml",
     milliliters: "ml",
+    l: "l",
+    liter: "l",
+    liters: "l",
     serving: "serving",
     servings: "serving",
+    large: "large",
+    medium: "medium",
+    small: "small",
+    whole: "whole",
     piece: "piece",
     pieces: "piece",
     slice: "slice",
@@ -241,18 +294,18 @@ function canonicalImportUnit(unit: string): string {
 }
 
 function parseImportServingBasis(serving: string): ImportServingBasis {
-  const amount = parseImportAmount(serving);
+  const servingText = serving.trim().replace(/^per\s+/i, "");
+  const amount = parseImportAmount(servingText);
   if (amount === null) {
     const label = normalizeImportKeyPart(serving);
     return { amount: 1, unitLabel: label, servingSize: serving.trim() };
   }
 
   const amountPattern = /^(\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[.,]\d+)?)/;
-  const unitMatch = serving
-    .trim()
+  const unitMatch = servingText
     .replace(amountPattern, "")
     .trim()
-    .match(/^(fl\s*oz|fluid\s+ounces?|tablespoons?|tbsp|teaspoons?|tsp|cups?|ounces?|oz|grams?|g|milliliters?|ml|servings?|pieces?|slices?|containers?|bottles?|cans?|bars?|packets?|pouches?)\b/i);
+    .match(/^(fl\s*oz|fluid\s+ounces?|tablespoons?|tbsp|teaspoons?|tsp|cups?|ounces?|oz|kilograms?|kg|grams?|g|liters?|l|milliliters?|ml|servings?|large|medium|small|whole|pieces?|slices?|containers?|bottles?|cans?|bars?|packets?|pouches?)\b/i);
   const unitLabel = canonicalImportUnit(unitMatch?.[1] ?? "");
   if (!unitLabel) {
     const label = normalizeImportKeyPart(serving);
@@ -294,14 +347,35 @@ function getImportDraftQuantity(item: FoodLogImportDraft): number {
   return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
 }
 
+function makeImportAudit(
+  item: FoodLogImportDraft,
+  resolvedSource?: string,
+  resolvedFoodId?: number,
+  confidence?: string
+): ImportFoodResolution["importAudit"] {
+  return {
+    name: item.name,
+    brand: item.brand || undefined,
+    serving: item.serving,
+    quantity: item.quantity,
+    calories: item.calories,
+    protein: item.protein,
+    carbs: item.carbs,
+    fat: item.fat,
+    source: item.source || undefined,
+    notes: item.notes || undefined,
+    resolvedSource,
+    resolvedFoodId,
+    confidence,
+  };
+}
+
 function buildImportFoodFromDraft(item: FoodLogImportDraft, id: number): ImportFoodResolution {
   const loggedQuantity = getImportDraftQuantity(item);
   const servingBasis = parseImportServingBasis(item.serving);
   const quantity = loggedQuantity * servingBasis.amount;
 
-  return {
-    quantity,
-    food: {
+  const food = {
       id,
       name: item.name.trim(),
       brand: item.brand.trim() || null,
@@ -312,42 +386,436 @@ function buildImportFoodFromDraft(item: FoodLogImportDraft, id: number): ImportF
       carbs: roundImportMacro(parseDecimalInput(item.carbs || "0") / quantity),
       fat: roundImportMacro(parseDecimalInput(item.fat || "0") / quantity),
       notes: item.notes.trim() || undefined,
-    },
+    };
+
+  return {
+    quantity,
+    food,
+    importAudit: makeImportAudit(item, "new", food.id, "new"),
   };
 }
 
-function buildImportFoodBatchResolver(items: FoodLogImportDraft[], existingCustomFoods: Food[]): ImportFoodBatchResolver {
-  const foodDedupeMap = new Map<string, Food>();
-  for (const food of existingCustomFoods) {
-    const canonicalFood = canonicalizeImportFood(food);
-    const key = makeImportFoodKey(canonicalFood);
-    if (!foodDedupeMap.has(key)) foodDedupeMap.set(key, canonicalFood);
-  }
+function normalizeImportMatchName(value: string) {
+  return normalizeImportKeyPart(value)
+    .split(" ")
+    .map((word) => {
+      if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+      if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
+      if (word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
+      return word;
+    })
+    .filter(Boolean)
+    .sort()
+    .join(" ");
+}
 
+function levenshteinDistance(a: string, b: string) {
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  const current = Array.from({ length: b.length + 1 }, () => 0);
+  for (let i = 1; i <= a.length; i += 1) {
+    current[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+  return previous[b.length];
+}
+
+function tokenSortSimilarityNormalized(left: string, right: string) {
+  if (!left || !right) return 0;
+  if (left === right) return 100;
+  const maxLength = Math.max(left.length, right.length);
+  const ratio = maxLength === 0 ? 100 : ((maxLength - levenshteinDistance(left, right)) / maxLength) * 100;
+  const leftTokens = new Set(left.split(" "));
+  const rightTokens = new Set(right.split(" "));
+  const shared = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const containment = shared / Math.max(1, Math.min(leftTokens.size, rightTokens.size));
+  return Math.max(Math.round(ratio), Math.round(containment * 100));
+}
+
+function getHouseholdServingGrams(basis: ImportServingBasis, foodName: string): number | null {
+  const name = normalizeImportMatchName(foodName);
+  const servingText = normalizeImportKeyPart(`${basis.unitLabel} ${basis.servingSize}`);
+  const hasUnit = (...units: string[]) => units.some((unit) => basis.unitLabel === unit || servingText.includes(unit));
+  const scaled = (grams: number) => basis.amount * grams;
+
+  if (/\begg\b/.test(name) && !/\bwhite\b/.test(name)) {
+    if (hasUnit("small")) return scaled(38);
+    if (hasUnit("medium")) return scaled(44);
+    if (hasUnit("large", "whole", "egg", "serving", "piece")) return scaled(45);
+  }
+  if (/\begg\b/.test(name) && /\bwhite\b/.test(name)) {
+    if (hasUnit("small")) return scaled(25);
+    if (hasUnit("medium")) return scaled(30);
+    if (hasUnit("large", "white", "serving", "piece")) return scaled(33);
+  }
+  if (/\bbanana\b/.test(name)) {
+    if (hasUnit("small")) return scaled(101);
+    if (hasUnit("large")) return scaled(136);
+    if (hasUnit("medium", "whole", "banana", "serving", "piece")) return scaled(118);
+  }
+  if (/\bapple\b/.test(name)) {
+    if (hasUnit("small")) return scaled(149);
+    if (hasUnit("large")) return scaled(223);
+    if (hasUnit("medium", "whole", "apple", "serving", "piece")) return scaled(182);
+  }
+  if (/\borange\b/.test(name)) {
+    if (hasUnit("large")) return scaled(184);
+    if (hasUnit("medium", "whole", "orange", "serving", "piece")) return scaled(131);
+  }
+  if (/\bavocado\b/.test(name) && hasUnit("medium", "whole", "avocado", "serving", "piece")) return scaled(136);
+  if (/\bpotato\b/.test(name)) {
+    if (hasUnit("small")) return scaled(138);
+    if (hasUnit("large")) return scaled(299);
+    if (hasUnit("medium", "whole", "potato", "serving", "piece")) return scaled(173);
+  }
+  if (/\btomato\b/.test(name)) {
+    if (/\bcherry\b/.test(name) || hasUnit("cherry")) return scaled(17);
+    if (/\broma\b/.test(name) || hasUnit("roma")) return scaled(62);
+    if (hasUnit("medium", "whole", "tomato", "serving", "piece")) return scaled(123);
+  }
+  if (/\bonion\b/.test(name) && hasUnit("medium", "whole", "onion", "serving", "piece")) return scaled(110);
+  if (/\bcarrot\b/.test(name)) {
+    if (hasUnit("large")) return scaled(72);
+    if (hasUnit("medium", "whole", "carrot", "serving", "piece")) return scaled(61);
+  }
+  if (/\bpepper\b/.test(name) && /\bbell\b/.test(name) && hasUnit("medium", "whole", "pepper", "serving", "piece")) return scaled(119);
+  if (/\bcucumber\b/.test(name) && hasUnit("medium", "whole", "cucumber", "serving", "piece")) return scaled(201);
+  if (/\blemon\b/.test(name) && hasUnit("whole", "lemon", "serving", "piece")) return scaled(58);
+  if (/\blime\b/.test(name) && hasUnit("whole", "lime", "serving", "piece")) return scaled(67);
+
+  return null;
+}
+
+function getImportServingGramAmount(basis: ImportServingBasis, foodName: string): number | null {
+  const toBase = (servingBasis: ImportServingBasis): number | null => {
+    switch (servingBasis.unitLabel) {
+      case "g":
+        return servingBasis.amount;
+      case "kg":
+        return servingBasis.amount * 1000;
+      case "oz":
+        return servingBasis.amount * 28.349523125;
+      case "tsp":
+        return servingBasis.amount * 5;
+      case "tbsp":
+        return servingBasis.amount * 15;
+      case "cup":
+        return servingBasis.amount * 240;
+      case "ml":
+        return servingBasis.amount;
+      case "l":
+        return servingBasis.amount * 1000;
+      case "fl oz":
+        return servingBasis.amount * 29.5735295625;
+      default:
+        return null;
+    }
+  };
+
+  return toBase(basis) ?? getHouseholdServingGrams(basis, foodName);
+}
+
+function importFoodUnitRatio(
+  from: ImportServingBasis,
+  to: ImportServingBasis,
+  fromFoodName: string,
+  toFoodName: string
+): number | null {
+  if (!from.unitLabel || !to.unitLabel) return null;
+  if (from.unitLabel === to.unitLabel) return from.amount / to.amount;
+
+  const left = getImportServingGramAmount(from, fromFoodName);
+  const right = getImportServingGramAmount(to, toFoodName);
+  return left !== null && right !== null && right > 0 ? left / right : null;
+}
+
+function isWithinImportTolerance(imported: number, candidate: number, limit: number, percent: number) {
+  const tolerance = imported > limit ? Math.abs(imported) * percent : limit === 50 ? 5 : 1;
+  return Math.abs(imported - candidate) <= tolerance;
+}
+
+function getToleranceRatio(imported: number, candidate: number, limit: number, percent: number) {
+  const tolerance = imported > limit ? Math.abs(imported) * percent : limit === 50 ? 5 : 1;
+  return tolerance > 0 ? Math.abs(imported - candidate) / tolerance : 0;
+}
+
+function comparableMacroValue(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getImportFoodCandidate(
+  imported: ImportFoodResolution,
+  food: Food,
+  source: ImportMatchSource,
+  importedNormalizedName = normalizeImportMatchName(imported.food.name),
+  candidateNormalizedName = normalizeImportMatchName(food.name)
+): ImportFoodCandidate | null {
+  const nameSimilarity = tokenSortSimilarityNormalized(importedNormalizedName, candidateNormalizedName);
+  if (nameSimilarity < 75) return null;
+
+  const importedBasis = parseImportServingBasis(imported.food.servingSize);
+  const candidateBasis = parseImportServingBasis(food.servingSize);
+  const ratio = importFoodUnitRatio(importedBasis, candidateBasis, imported.food.name, food.name);
+  const equivalentServingBasis = importedBasis.unitLabel === candidateBasis.unitLabel || ratio !== null;
+  const unitCompatible = ratio !== null;
+  const scale = ratio ?? 1;
+  const candidateCalories = food.calories * scale;
+  const macroPairs: Array<[number | null, number | null, number, number]> = [
+    [comparableMacroValue(imported.food.protein), comparableMacroValue(food.protein), 5, 0.1],
+    [comparableMacroValue(imported.food.carbs), comparableMacroValue(food.carbs), 5, 0.1],
+    [comparableMacroValue(imported.food.fat), comparableMacroValue(food.fat), 5, 0.1],
+  ];
+  const comparableMacros = macroPairs
+    .map(([importedValue, candidateValue, limit, percent]) =>
+      importedValue !== null && candidateValue !== null
+        ? { importedValue, candidateValue: candidateValue * scale, limit, percent }
+        : null
+    )
+    .filter((pair): pair is { importedValue: number; candidateValue: number; limit: number; percent: number } => pair !== null);
+
+  const tight = !unitCompatible;
+  const calorieOk = isWithinImportTolerance(imported.food.calories, candidateCalories, 50, tight ? 0.025 : 0.05);
+  const macrosOk = comparableMacros.every(({ importedValue, candidateValue, limit, percent }) =>
+    isWithinImportTolerance(importedValue, candidateValue, limit, tight ? percent / 2 : percent)
+  );
+  const looseCalorieOk = isWithinImportTolerance(imported.food.calories, candidateCalories, 50, 0.1);
+  const isPossibleLowConfidence =
+    nameSimilarity >= 90 ||
+    (nameSimilarity >= 75 && looseCalorieOk);
+  if (!unitCompatible && (nameSimilarity < 95 || (!calorieOk && !isPossibleLowConfidence))) return null;
+  if ((!calorieOk || !macrosOk) && !isPossibleLowConfidence) return null;
+
+  const edge = getToleranceRatio(imported.food.calories, candidateCalories, 50, 0.05) >= 0.85 ||
+    comparableMacros.some(({ importedValue, candidateValue, limit, percent }) =>
+      getToleranceRatio(importedValue, candidateValue, limit, percent) >= 0.85
+    );
+  const confidence: ImportConfidenceTier =
+    calorieOk && macrosOk
+      ? nameSimilarity >= 90 && !edge && equivalentServingBasis ? "high" : "medium"
+      : "low";
+  const sourceOrder: Record<ImportMatchSource, number> = { local: 4, custom: 3, recipe: 2, usda: 1 };
+
+  return {
+    key: `${source}:${food.id}`,
+    source,
+    sourceLabel: source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "USDA",
+    food,
+    score: nameSimilarity * 100 + sourceOrder[source],
+    confidence,
+    quantity: unitCompatible && ratio !== null ? imported.quantity * ratio : getFoodQuantityRatio(imported.food, food),
+    nameSimilarity,
+    unitCompatible,
+    nutritionEdge: edge,
+  };
+}
+
+function rankImportCandidates(candidates: ImportFoodCandidate[]) {
+  const confidenceOrder: Record<ImportConfidenceTier, number> = { high: 3, medium: 2, low: 1 };
+  const sourceOrder: Record<ImportMatchSource, number> = { local: 4, custom: 3, recipe: 2, usda: 1 };
+  return [...candidates].sort((a, b) =>
+    confidenceOrder[b.confidence] - confidenceOrder[a.confidence] ||
+    b.score - a.score ||
+    sourceOrder[b.source] - sourceOrder[a.source]
+  );
+}
+
+function getDefaultImportReviewSelection(review: ImportReviewItem) {
+  const top = review.candidates[0];
+  return top && top.confidence !== "low" ? top.key : "new";
+}
+
+const importCandidateCache = new Map<string, ImportFoodCandidate[]>();
+const importUsdaCandidateCache = new Map<string, Food[]>();
+
+function getImportResolutionKey(imported: ImportFoodResolution) {
+  return makeImportFoodKey(imported.food);
+}
+
+function areDuplicateImportedFoods(left: ImportFoodResolution, right: ImportFoodResolution) {
+  const leftName = normalizeImportMatchName(left.food.name);
+  const rightName = normalizeImportMatchName(right.food.name);
+  if (tokenSortSimilarityNormalized(leftName, rightName) < 85) return false;
+
+  const leftBasis = parseImportServingBasis(left.food.servingSize);
+  const rightBasis = parseImportServingBasis(right.food.servingSize);
+  const ratio = importFoodUnitRatio(leftBasis, rightBasis, left.food.name, right.food.name);
+  if (ratio === null) return false;
+  if (!isWithinImportTolerance(left.food.calories, right.food.calories * ratio, 50, 0.05)) return false;
+
+  const macroPairs: Array<[number | undefined, number | undefined]> = [
+    [left.food.protein, right.food.protein],
+    [left.food.carbs, right.food.carbs],
+    [left.food.fat, right.food.fat],
+  ];
+
+  return macroPairs.every(([leftValue, rightValue]) => {
+    const comparableLeft = comparableMacroValue(leftValue);
+    const comparableRight = comparableMacroValue(rightValue);
+    if (comparableLeft === null || comparableRight === null) return true;
+    return isWithinImportTolerance(comparableLeft, comparableRight * ratio, 5, 0.1);
+  });
+}
+
+function indexImportCandidateFoods(source: ImportMatchSource, foods: Food[]): ImportCandidateIndexEntry[] {
+  return (Array.isArray(foods) ? foods : []).map((food) => ({
+    source,
+    food,
+    normalizedName: normalizeImportMatchName(food.name),
+  }));
+}
+
+async function getUsdaImportCandidates(query: string) {
+  const cacheKey = normalizeImportMatchName(query);
+  const cached = importUsdaCandidateCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const groups = await searchFoodsGrouped(query, [], [], []);
+    const foods = new Map<number, Food>();
+    for (const group of Array.isArray(groups) ? groups : []) {
+      if (group.label !== "Packaged") continue;
+      for (const food of Array.isArray(group.foods) ? group.foods : []) foods.set(food.id, food);
+    }
+    const candidates = [...foods.values()];
+    importUsdaCandidateCache.set(cacheKey, candidates);
+    return candidates;
+  } catch (error) {
+    appendDebugLog("import-usda-candidate-resolution-failed", {
+      query,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+}
+
+function buildImportCandidatesFromIndex(
+  imported: ImportFoodResolution,
+  index: ImportCandidateIndexEntry[]
+) {
+  const importedNormalizedName = normalizeImportMatchName(imported.food.name);
+  return rankImportCandidates(index
+    .map(({ source, food, normalizedName }) =>
+      getImportFoodCandidate(imported, food, source, importedNormalizedName, normalizedName)
+    )
+    .filter((candidate): candidate is ImportFoodCandidate => candidate !== null));
+}
+
+function resolveImportItemFromCandidate(
+  item: FoodLogImportDraft,
+  imported: ImportFoodResolution,
+  candidate: ImportFoodCandidate
+): ImportFoodResolution {
+  const importedBasis = parseImportServingBasis(imported.food.servingSize);
+  const candidateBasis = parseImportServingBasis(candidate.food.servingSize);
+  const ratio = importFoodUnitRatio(importedBasis, candidateBasis, imported.food.name, candidate.food.name);
+  return {
+    food: candidate.food,
+    quantity: ratio !== null ? imported.quantity * ratio : getFoodQuantityRatio(imported.food, candidate.food),
+    importAudit: makeImportAudit(item, candidate.sourceLabel, candidate.food.id, candidate.confidence),
+  };
+}
+
+async function buildImportFoodBatchResolver(
+  items: FoodLogImportDraft[],
+  existingCustomFoods: Food[],
+  existingRecipes: Recipe[],
+  decisions: Record<string, string> = {},
+  options: ImportFoodBatchResolverOptions = {}
+): Promise<{ resolver: ImportFoodBatchResolver; reviewItems: ImportReviewItem[] }> {
   const byDraftId = new Map<string, ImportFoodResolution>();
+  const reviewItems: ImportReviewItem[] = [];
+  const createdByKey = new Map<string, Food>();
+  const localFoods = await getAllLocalFoods().catch((error) => {
+    appendDebugLog("import-local-candidate-resolution-failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return [] as Food[];
+  });
+  const safeCustomFoods = Array.isArray(existingCustomFoods) ? existingCustomFoods : [];
+  const safeRecipes = Array.isArray(existingRecipes) ? existingRecipes : [];
+  const baseCandidateIndex = [
+    ...indexImportCandidateFoods("local", localFoods),
+    ...indexImportCandidateFoods("custom", safeCustomFoods),
+    ...indexImportCandidateFoods("recipe", safeRecipes),
+  ];
+  const uniqueImports = new Map<string, { item: FoodLogImportDraft; imported: ImportFoodResolution; items: FoodLogImportDraft[] }>();
   let nextFoodId = Date.now();
 
   for (const item of items) {
-    const candidate = buildImportFoodFromDraft(item, -(nextFoodId++));
-    const key = makeImportFoodKey(candidate.food);
-    const food = foodDedupeMap.get(key);
-    if (food) {
-      byDraftId.set(item.id, { food, quantity: candidate.quantity });
-    } else {
-      foodDedupeMap.set(key, candidate.food);
-      byDraftId.set(item.id, candidate);
+    const imported = buildImportFoodFromDraft(item, -(nextFoodId++));
+    const matchingKey = [...uniqueImports.entries()].find(([, group]) =>
+      areDuplicateImportedFoods(group.imported, imported)
+    )?.[0];
+    const key = matchingKey ?? getImportResolutionKey(imported);
+    const existing = uniqueImports.get(key);
+    if (existing) existing.items.push(item);
+    else uniqueImports.set(key, { item, imported, items: [item] });
+  }
+
+  options.onProgress?.({ resolved: 0, total: items.length });
+  let resolvedCount = 0;
+
+  for (const [uniqueKey, group] of uniqueImports) {
+    let candidates = importCandidateCache.get(uniqueKey);
+    if (!candidates) {
+      const baseCandidates = buildImportCandidatesFromIndex(group.imported, baseCandidateIndex);
+      const hasGoodBaseCandidate = baseCandidates.some((candidate) => candidate.confidence !== "low");
+      if (hasGoodBaseCandidate) {
+        candidates = baseCandidates;
+      } else {
+        const usdaFoods = await getUsdaImportCandidates(group.item.name);
+        const usdaCandidates = buildImportCandidatesFromIndex(group.imported, indexImportCandidateFoods("usda", usdaFoods));
+        candidates = rankImportCandidates([...baseCandidates, ...usdaCandidates]);
+      }
+      importCandidateCache.set(uniqueKey, candidates);
+    }
+    resolvedCount += group.items.length;
+    options.onProgress?.({ resolved: resolvedCount, total: items.length });
+
+    if (options.forceReviewAll || (candidates.length > 0 && group.items.some((item) => !decisions[item.id]))) {
+      group.items
+        .filter((item) => options.forceReviewAll || !decisions[item.id])
+        .forEach((item) => reviewItems.push({
+          item,
+          importedFood: buildImportFoodFromDraft(item, -Date.now()).food,
+          candidates,
+        }));
+      continue;
+    }
+
+    for (const item of group.items) {
+      const imported = buildImportFoodFromDraft(item, -(nextFoodId++));
+      const decision = decisions[item.id];
+      const candidate = decision && decision !== "new" ? candidates.find((match) => match.key === decision) : null;
+      if (candidate) {
+        byDraftId.set(item.id, resolveImportItemFromCandidate(item, imported, candidate));
+        continue;
+      }
+
+      const existingCreated = createdByKey.get(uniqueKey);
+      byDraftId.set(item.id, {
+        ...imported,
+        food: existingCreated ?? imported.food,
+        importAudit: makeImportAudit(item, "new", existingCreated?.id ?? imported.food.id, "new"),
+      });
+      if (!existingCreated) createdByKey.set(uniqueKey, imported.food);
     }
   }
 
-  return { byDraftId, addedFoodIds: new Set() };
+  return { resolver: { byDraftId, addedFoodIds: new Set() }, reviewItems };
 }
 
-function getFoodQuantityRatio(fromFood: Pick<Food, "servingSize" | "calories">, toFood: Pick<Food, "servingSize" | "calories">): number {
+function getFoodQuantityRatio(fromFood: Pick<Food, "name" | "servingSize" | "calories">, toFood: Pick<Food, "name" | "servingSize" | "calories">): number {
   const fromServing = parseImportServingBasis(fromFood.servingSize);
   const toServing = parseImportServingBasis(toFood.servingSize);
-  if (fromServing.unitLabel && fromServing.unitLabel === toServing.unitLabel && toServing.amount > 0) {
-    return fromServing.amount / toServing.amount;
-  }
+  const servingRatio = importFoodUnitRatio(fromServing, toServing, fromFood.name, toFood.name);
+  if (servingRatio !== null) return servingRatio;
   if (toFood.calories > 0) return fromFood.calories / toFood.calories;
   return 1;
 }
@@ -577,6 +1045,14 @@ function App() {
   const [importStepIndex, setImportStepIndex] = useState(0);
   const [importStepResults, setImportStepResults] = useState({ confirmed: 0, skipped: 0 });
   const [importConfirmedDates, setImportConfirmedDates] = useState<string[]>([]);
+  const [importReviewItems, setImportReviewItems] = useState<ImportReviewItem[]>([]);
+  const [importReviewSelections, setImportReviewSelections] = useState<Record<string, string>>({});
+  const [importReviewAppliedSelections, setImportReviewAppliedSelections] = useState<Record<string, string>>({});
+  const [importReviewActions, setImportReviewActions] = useState<Record<string, ImportReviewAction>>({});
+  const [unresolvedImportReviewIds, setUnresolvedImportReviewIds] = useState<string[]>([]);
+  const [importResolutionProgress, setImportResolutionProgress] = useState<ImportResolutionProgress | null>(null);
+  const [importReviewMode, setImportReviewMode] = useState<ImportReviewMode | null>(null);
+  const [isResolvingImport, setIsResolvingImport] = useState(false);
   const [driveImportFiles, setDriveImportFiles] = useState<GoogleDriveFile[]>([]);
   const [driveImportStatus, setDriveImportStatus] = useState("");
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
@@ -1367,7 +1843,7 @@ function App() {
     if (!file) return;
 
     try {
-      loadFoodLogImportText(await file.text(), file.name);
+      await loadFoodLogImportText(await file.text(), file.name);
     } catch (error) {
       setImportDrafts([]);
       setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
@@ -1382,13 +1858,21 @@ function App() {
     input.click();
   }
 
-  function loadFoodLogImportText(text: string, fileName: string) {
+  async function loadFoodLogImportText(text: string, fileName: string) {
     try {
+      importCandidateCache.clear();
+      importUsdaCandidateCache.clear();
       const parsed = JSON.parse(text) as unknown;
       const result = parseFoodLogImportJson(parsed);
 
       setImportFileName(fileName);
       setImportStatus("");
+      setImportReviewItems([]);
+      setImportReviewSelections({});
+      setImportReviewAppliedSelections({});
+      setImportReviewActions({});
+      setUnresolvedImportReviewIds([]);
+      setImportResolutionProgress(null);
 
       if (result.ok === false) {
         setImportDrafts([]);
@@ -1399,18 +1883,46 @@ function App() {
 
       setImportErrors([]);
       importFoodBatchResolverRef.current = null;
-      if (result.isMultiDay) {
-        setImportSteps(buildImportSteps(result.items, result.weightEntries));
-        setImportStepIndex(0);
-        setImportStepResults({ confirmed: 0, skipped: 0 });
-        setImportConfirmedDates([]);
-      } else {
-        setImportDrafts(result.items);
-        setImportWeightEntries(result.weightEntries);
+      setImportSteps([]);
+      setImportStepIndex(0);
+      setImportStepResults({ confirmed: 0, skipped: 0 });
+      setImportConfirmedDates([]);
+      setImportDrafts(result.items);
+      setImportWeightEntries(result.weightEntries);
+
+      const validationErrors = result.items.flatMap((item, index) => validateImportDraft(item, index));
+      if (validationErrors.length > 0) {
+        setImportErrors(validationErrors);
+        return;
+      }
+
+      if (result.items.length === 0) {
+        setImportStatus("No food items were found in this import.");
+        return;
+      }
+
+      setIsResolvingImport(true);
+      setImportResolutionProgress({ resolved: 0, total: result.items.length });
+      try {
+        const batch = await buildImportFoodBatchResolver(result.items, customFoods, recipes, {}, {
+          forceReviewAll: true,
+          onProgress: setImportResolutionProgress,
+        });
+        primeImportReview(batch.reviewItems, "preview");
+      } catch (error) {
+        appendDebugLog("import-file-resolution-failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        setImportErrors([`Could not resolve food matches: ${error instanceof Error ? error.message : String(error)}`]);
+      } finally {
+        setIsResolvingImport(false);
+        setImportResolutionProgress(null);
       }
     } catch (error) {
       setImportDrafts([]);
       setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
+      setIsResolvingImport(false);
+      setImportResolutionProgress(null);
     }
   }
 
@@ -1436,6 +1948,13 @@ function App() {
     setImportWeightEntries([]);
     setImportErrors([]);
     setImportFileName("");
+    setImportReviewItems([]);
+    setImportReviewSelections({});
+    setImportReviewAppliedSelections({});
+    setImportReviewActions({});
+    setUnresolvedImportReviewIds([]);
+    setImportResolutionProgress(null);
+    setImportReviewMode(null);
     importFoodBatchResolverRef.current = null;
   }
 
@@ -1446,53 +1965,117 @@ function App() {
     setImportConfirmedDates([]);
     setImportFileName("");
     setImportErrors([]);
+    setImportReviewItems([]);
+    setImportReviewSelections({});
+    setImportReviewAppliedSelections({});
+    setImportReviewActions({});
+    setUnresolvedImportReviewIds([]);
+    setImportResolutionProgress(null);
+    setImportReviewMode(null);
     importFoodBatchResolverRef.current = null;
   }
 
-  function confirmImportStep() {
+  function getResolvedImportedFoods(items: FoodLogImportDraft[], resolver: ImportFoodBatchResolver) {
+    return items.map((item) => {
+      const resolved = resolver.byDraftId.get(item.id) ?? buildImportFoodFromDraft(item, -Date.now());
+      return {
+        date: item.date,
+        meal: normalizeMealName(item.meal),
+        food: resolved.food,
+        quantity: resolved.quantity,
+        importAudit: resolved.importAudit,
+      };
+    });
+  }
+
+  function applyImportedFoods(importedFoods: ReturnType<typeof getResolvedImportedFoods>) {
+    const newCustomFoods = Array.from(
+      new Map(
+        importedFoods
+          .map((entry) => entry.food)
+          .filter((food) =>
+            food.id < 0 &&
+            !customFoods.some((existing) => existing.id === food.id)
+          )
+          .map((food) => [food.id, food])
+      ).values()
+    );
+    const { foods: dedupedCustomFoods, foodRemap } = dedupeCustomFoods([...newCustomFoods, ...customFoods]);
+    const nextLogsByDate = new Map<string, LogItem[]>();
+
+    for (const entry of importedFoods) {
+      const existingLog = nextLogsByDate.get(entry.date) ?? (entry.date === selectedDate ? log : getSavedLog(entry.date));
+      nextLogsByDate.set(entry.date, [
+        ...existingLog,
+        {
+          ...entry.food,
+          logId: createClientId(),
+          category: entry.meal,
+          quantity: entry.quantity,
+          importAudit: entry.importAudit,
+        },
+      ]);
+    }
+
+    for (const [date, nextLog] of nextLogsByDate) {
+      setStorageJson(`log-${date}`, remapLogFoodIds(nextLog, foodRemap));
+    }
+    remapSavedLogFoodIds(foodRemap);
+    setCustomFoods(dedupedCustomFoods);
+    setTopFoods((current) => {
+      const counts = new Map(current.map((food) => [food.name, food.count]));
+      importedFoods.forEach((entry) => {
+        counts.set(entry.food.name, (counts.get(entry.food.name) ?? 0) + 1);
+      });
+
+      return Array.from(counts, ([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+    });
+
+    return { nextLogsByDate, foodRemap };
+  }
+
+  function primeImportReview(reviewItems: ImportReviewItem[], mode: ImportReviewMode) {
+    setImportReviewItems(reviewItems);
+    setImportReviewSelections(Object.fromEntries(
+      reviewItems.map((review) => [review.item.id, getDefaultImportReviewSelection(review)])
+    ));
+    setImportReviewAppliedSelections({});
+    setImportReviewActions({});
+    setUnresolvedImportReviewIds([]);
+    setImportReviewMode(mode);
+    setImportStatus(`${reviewItems.length} imported food${reviewItems.length === 1 ? "" : "s"} need match review.`);
+  }
+
+  async function confirmImportStep() {
     const step = importSteps[importStepIndex];
     if (!step) return;
 
     if (step.items.length > 0) {
       if (!importFoodBatchResolverRef.current) {
-        importFoodBatchResolverRef.current = buildImportFoodBatchResolver(importSteps.flatMap((s) => s.items), customFoods);
+        setIsResolvingImport(true);
+        try {
+          const result = await buildImportFoodBatchResolver(importSteps.flatMap((s) => s.items), customFoods, recipes);
+          if (result.reviewItems.length > 0) {
+            primeImportReview(result.reviewItems, "step");
+            return;
+          }
+          importFoodBatchResolverRef.current = result.resolver;
+        } catch (error) {
+          appendDebugLog("import-step-resolution-failed", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+          setImportErrors([`Could not resolve food matches: ${error instanceof Error ? error.message : String(error)}`]);
+          return;
+        } finally {
+          setIsResolvingImport(false);
+        }
       }
 
       const resolver = importFoodBatchResolverRef.current;
-      const importedFoods = step.items.map((item) => {
-        const resolved = resolver.byDraftId.get(item.id) ?? buildImportFoodFromDraft(item, -Date.now());
-        return { meal: normalizeMealName(item.meal), food: resolved.food, quantity: resolved.quantity };
-      });
-
-      const existingLog = step.date === selectedDate ? log : getSavedLog(step.date);
-      const nextLog: LogItem[] = [
-        ...existingLog,
-        ...importedFoods.map(({ food, meal, quantity }) => ({
-          ...food,
-          logId: createClientId(),
-          category: meal,
-          quantity,
-        })),
-      ];
-
-      const foodsToAdd = importedFoods
-        .map((entry) => entry.food)
-        .filter((food) => !customFoods.some((existing) => existing.id === food.id) && !resolver.addedFoodIds.has(food.id));
-      foodsToAdd.forEach((food) => resolver.addedFoodIds.add(food.id));
-      const { foods: dedupedCustomFoods, foodRemap } = dedupeCustomFoods([...foodsToAdd, ...customFoods]);
-      const remappedLog = remapLogFoodIds(nextLog, foodRemap);
-      setStorageJson(`log-${step.date}`, remappedLog);
-      remapSavedLogFoodIds(foodRemap);
-      if (step.date === selectedDate) setLog(remappedLog);
-
-      setCustomFoods(dedupedCustomFoods);
-      setTopFoods((current) => {
-        const counts = new Map(current.map((f) => [f.name, f.count]));
-        importedFoods.forEach((e) => counts.set(e.food.name, (counts.get(e.food.name) ?? 0) + 1));
-        return Array.from(counts, ([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-      });
+      const { nextLogsByDate, foodRemap } = applyImportedFoods(getResolvedImportedFoods(step.items, resolver));
+      if (step.date === selectedDate) setLog(remapLogFoodIds(nextLogsByDate.get(step.date) ?? getSavedLog(step.date), foodRemap));
     }
 
     if (step.weightEntry) {
@@ -1539,64 +2122,35 @@ function App() {
     clearImportStepper();
   }
 
-  function confirmFoodLogImport() {
+  async function confirmFoodLogImport() {
     const validationErrors = importDrafts.flatMap((item, index) => validateImportDraft(item, index));
     if (validationErrors.length > 0) {
       setImportErrors(validationErrors);
       return;
     }
 
-    const resolver = buildImportFoodBatchResolver(importDrafts, customFoods);
-    const importedFoods = importDrafts.map((item) => {
-      const resolved = resolver.byDraftId.get(item.id) ?? buildImportFoodFromDraft(item, -Date.now());
-
-      return {
-        date: item.date,
-        meal: normalizeMealName(item.meal),
-        food: resolved.food,
-        quantity: resolved.quantity,
-      };
-    });
-
-    const newCustomFoods = Array.from(
-      new Map(
-        importedFoods
-          .map((entry) => entry.food)
-          .filter((food) => !customFoods.some((existing) => existing.id === food.id))
-          .map((food) => [food.id, food])
-      ).values()
-    );
-    const { foods: dedupedCustomFoods, foodRemap } = dedupeCustomFoods([...newCustomFoods, ...customFoods]);
-    const nextLogsByDate = new Map<string, LogItem[]>();
-    for (const entry of importedFoods) {
-      const existingLog = nextLogsByDate.get(entry.date) ?? (entry.date === selectedDate ? log : getSavedLog(entry.date));
-      nextLogsByDate.set(entry.date, [
-        ...existingLog,
-        {
-          ...entry.food,
-          logId: createClientId(),
-          category: entry.meal,
-          quantity: entry.quantity,
-        },
-      ]);
-    }
-
-    for (const [date, nextLog] of nextLogsByDate) {
-      setStorageJson(`log-${date}`, remapLogFoodIds(nextLog, foodRemap));
-    }
-    remapSavedLogFoodIds(foodRemap);
-
-    setCustomFoods(dedupedCustomFoods);
-    setTopFoods((current) => {
-      const counts = new Map(current.map((food) => [food.name, food.count]));
-      importedFoods.forEach((entry) => {
-        counts.set(entry.food.name, (counts.get(entry.food.name) ?? 0) + 1);
+    setIsResolvingImport(true);
+    try {
+      const result = await buildImportFoodBatchResolver(importDrafts, customFoods, recipes);
+      if (result.reviewItems.length > 0) {
+        primeImportReview(result.reviewItems, "preview");
+        return;
+      }
+      importFoodBatchResolverRef.current = result.resolver;
+      finalizeFoodLogImport(result.resolver);
+    } catch (error) {
+      appendDebugLog("import-preview-resolution-failed", {
+        message: error instanceof Error ? error.message : String(error),
       });
+      setImportErrors([`Could not resolve food matches: ${error instanceof Error ? error.message : String(error)}`]);
+    } finally {
+      setIsResolvingImport(false);
+    }
+  }
 
-      return Array.from(counts, ([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-    });
+  function finalizeFoodLogImport(resolver: ImportFoodBatchResolver, items: FoodLogImportDraft[] = importDrafts) {
+    const importedFoods = getResolvedImportedFoods(items, resolver);
+    const { nextLogsByDate, foodRemap } = applyImportedFoods(importedFoods);
 
     const firstDate = importedFoods[0]?.date ?? selectedDate;
     if (nextLogsByDate.has(firstDate)) {
@@ -1617,8 +2171,103 @@ function App() {
     const parts: string[] = [];
     if (importedFoods.length > 0) parts.push(`${importedFoods.length} food${importedFoods.length === 1 ? "" : "s"}`);
     if (importWeightEntries.length > 0) parts.push(`${importWeightEntries.length} weight entr${importWeightEntries.length === 1 ? "y" : "ies"}`);
-    setImportStatus(`Imported ${parts.join(" and ")}.`);
+    setImportStatus(parts.length > 0 ? `Imported ${parts.join(" and ")}.` : "No food items were imported.");
     closeImportPreview();
+  }
+
+  async function confirmImportReview() {
+    const items = importReviewMode === "step" ? importSteps.flatMap((step) => step.items) : importDrafts;
+    const unresolvedIds = importReviewItems
+      .map((review) => review.item.id)
+      .filter((id) => !importReviewActions[id]);
+
+    if (unresolvedIds.length > 0) {
+      setUnresolvedImportReviewIds(unresolvedIds);
+      setImportErrors([`Resolve all imported foods before confirming. ${unresolvedIds.length} row${unresolvedIds.length === 1 ? "" : "s"} still need Apply or Reject.`]);
+      window.setTimeout(() => {
+        document.querySelector(".import-review-row.is-unresolved")?.scrollIntoView({ block: "center", behavior: "smooth" });
+      }, 0);
+      return;
+    }
+
+    const rejectedIds = new Set(
+      Object.entries(importReviewActions)
+        .filter(([, action]) => action === "rejected")
+        .map(([id]) => id)
+    );
+    const appliedItems = items.filter((item) => !rejectedIds.has(item.id));
+    const appliedSelections = Object.fromEntries(
+      appliedItems.map((item) => [item.id, importReviewAppliedSelections[item.id] ?? importReviewSelections[item.id] ?? "new"])
+    );
+
+    setIsResolvingImport(true);
+    try {
+      const result = await buildImportFoodBatchResolver(appliedItems, customFoods, recipes, appliedSelections);
+      if (result.reviewItems.length > 0) {
+        primeImportReview(result.reviewItems, importReviewMode ?? "preview");
+        return;
+      }
+      importFoodBatchResolverRef.current = result.resolver;
+      setImportReviewItems([]);
+      setImportReviewSelections({});
+      setImportReviewAppliedSelections({});
+      setImportReviewActions({});
+      setUnresolvedImportReviewIds([]);
+      setImportReviewMode(null);
+      finalizeFoodLogImport(result.resolver, appliedItems);
+    } catch (error) {
+      appendDebugLog("import-review-resolution-failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      setImportErrors([`Could not resolve reviewed matches: ${error instanceof Error ? error.message : String(error)}`]);
+    } finally {
+      setIsResolvingImport(false);
+    }
+  }
+
+  function updateImportReviewSelection(itemId: string, value: string) {
+    setImportReviewSelections((current) => ({ ...current, [itemId]: value }));
+    setImportReviewAppliedSelections((current) => {
+      if (!(itemId in current)) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+    setImportReviewActions((current) => {
+      if (!(itemId in current)) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+    setUnresolvedImportReviewIds((current) => current.filter((id) => id !== itemId));
+    setImportErrors([]);
+  }
+
+  function applyImportReviewToSimilar(item: FoodLogImportDraft) {
+    const selected = importReviewSelections[item.id] ?? "new";
+    setImportReviewSelections((current) => ({
+      ...current,
+      [item.id]: selected,
+    }));
+    setImportReviewAppliedSelections((current) => ({
+      ...current,
+      [item.id]: selected,
+    }));
+    setImportReviewActions((current) => ({ ...current, [item.id]: "applied" }));
+    setUnresolvedImportReviewIds((current) => current.filter((id) => id !== item.id));
+    setImportErrors([]);
+  }
+
+  function rejectImportReviewItem(item: FoodLogImportDraft) {
+    setImportReviewActions((current) => ({ ...current, [item.id]: "rejected" }));
+    setImportReviewAppliedSelections((current) => {
+      if (!(item.id in current)) return current;
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
+    setUnresolvedImportReviewIds((current) => current.filter((id) => id !== item.id));
+    setImportErrors([]);
   }
 
   function getDayExportData() {
@@ -1748,6 +2397,44 @@ function App() {
     setProfileSaveStatus("");
     setIsProfileWizardOpen(true);
     setAppView("profile");
+  }
+
+  function clearFoodDebugData() {
+    const logKeysToDelete: string[] = [];
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key?.startsWith("log-")) logKeysToDelete.push(key);
+    }
+
+    logKeysToDelete.forEach((key) => localStorage.removeItem(key));
+    localStorage.removeItem("customFoods");
+    localStorage.removeItem("recipes");
+    localStorage.removeItem("completedDays");
+    localStorage.removeItem("topFoods");
+    importCandidateCache.clear();
+    importUsdaCandidateCache.clear();
+
+    setLog([]);
+    setCustomFoods([]);
+    setRecipes([]);
+    setCompletedDays([]);
+    setTopFoods([]);
+    setImportStatus("Debug clear complete. Food logs, custom foods, and recipes were removed.");
+    setImportErrors([]);
+    setImportDrafts([]);
+    setImportSteps([]);
+    setImportStepResults({ confirmed: 0, skipped: 0 });
+    setImportReviewItems([]);
+    setImportReviewSelections({});
+    setImportReviewAppliedSelections({});
+    setImportReviewActions({});
+    setUnresolvedImportReviewIds([]);
+    setImportResolutionProgress(null);
+    setIsResolvingImport(false);
+    appendDebugLog("debug-food-data-cleared", {
+      logKeysDeleted: logKeysToDelete.length,
+    });
   }
 
   function loadGoogleIdentityScript() {
@@ -1894,7 +2581,7 @@ function App() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error(await getGoogleDriveRequestError(response, "file download"));
-      loadFoodLogImportText(await response.text(), fileName);
+      await loadFoodLogImportText(await response.text(), fileName);
       setDriveImportStatus("");
       setIsDriveImportOpen(false);
       setIsExportPanelOpen(false);
@@ -2804,6 +3491,18 @@ function startEditWeightEntry(entry: WeightEntry) {
         removeImportDraft,
         removeImportWeightEntry,
         confirmFoodLogImport,
+        importReviewItems,
+        importReviewSelections,
+        importReviewAppliedSelections,
+        importReviewActions,
+        unresolvedImportReviewIds,
+        importResolutionProgress,
+        updateImportReviewSelection,
+        applyImportReviewToSimilar,
+        rejectImportReviewItem,
+        confirmImportReview,
+        isResolvingImport,
+        clearFoodDebugData,
         closeImportPreview,
         isExportPanelOpen,
         setIsExportPanelOpen,

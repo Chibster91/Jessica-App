@@ -6,8 +6,8 @@
 
 .panel {
   background: #1E2026;
-  border: 1px solid #343845;
-  border-radius: 18px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 1.5rem;
   margin: 1rem 0;
 }
@@ -32,7 +32,15 @@
 
 input, button, textarea {
   padding: 0.6rem 0.8rem;
-  border-radius: 10px;
+  border-radius: var(--control-radius);
+}
+
+input,
+select,
+textarea {
+  background: var(--surface-2);
+  border: var(--ui-border);
+  color: var(--fg);
 }
 
 .grid {
@@ -48,6 +56,7 @@ input, button, textarea {
   box-sizing: border-box;
   text-align: left;
   background: #262932;
+  border: var(--ui-border);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -58,8 +67,8 @@ input, button, textarea {
 }
 
 .food-card.selected {
-  border-color: #B46CFF;
-  background: #262932;
+  border-color: var(--border);
+  background: var(--accent-bg);
 }
 
 .food-card-meta-row {
@@ -160,7 +169,8 @@ input, button, textarea {
 
 .tab-row button {
   background: #262932;
-  border: 1px solid #343845;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
 }
 
 .tab-row button.active {
@@ -211,8 +221,8 @@ input, button, textarea {
 .scan-food-panel {
   display: grid;
   gap: 0.5rem;
-  border: 1px solid #343845;
-  border-radius: 8px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 0.75rem;
 }
 
@@ -227,8 +237,8 @@ input, button, textarea {
   justify-content: center;
   min-height: 2.75rem;
   padding: 0.6rem 0.8rem;
-  border: 1px solid #343845;
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   background: #262932;
   color: #F2F2F0;
   font-weight: 600;
@@ -280,7 +290,7 @@ input, button, textarea {
   overflow: auto;
   margin: 0;
   padding: 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--ui-radius);
   background: #262932;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -332,7 +342,7 @@ input, button, textarea {
 .recipe-totals {
   display: grid;
   gap: 0.25rem;
-  border-top: 1px solid #343845;
+  border-top: var(--ui-border);
   padding-top: 0.75rem;
 }
 
@@ -348,11 +358,12 @@ input, button, textarea {
   justify-content: space-between;
   gap: 1rem;
   text-align: left;
+  border: var(--ui-border);
 }
 
 .ingredient-picker button.selected {
-  background: #262932;
-  border-color: #B46CFF;
+  background: var(--accent-bg);
+  border-color: var(--border);
 }
 
 .ingredient-confirm {
@@ -360,8 +371,8 @@ input, button, textarea {
   align-items: end;
   gap: 0.5rem;
   grid-template-columns: minmax(0, 1fr) 6rem auto auto;
-  border: 1px solid #343845;
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 0.75rem;
 }
 
@@ -431,6 +442,22 @@ input, button, textarea {
   width: 100%;
 }
 
+.primary-button,
+.form-actions button:first-of-type:not(.secondary-button):not(.danger-button),
+.floating-actions button:not(.secondary-button):not(.danger-button),
+.search-row button,
+.ingredient-confirm button:first-of-type:not(.secondary-button):not(.danger-button),
+.add-food-button,
+.wz-next-btn {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-md, 10px);
+  color: #fff;
+  font-weight: 700;
+  padding: 14px;
+  box-shadow: none;
+}
+
 button:disabled,
 input:disabled {
   opacity: 0.65;
@@ -445,6 +472,22 @@ input:disabled {
 
 .secondary-button {
   margin-top: 0.75rem;
+  background: var(--surface-2);
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
+  color: var(--fg);
+  font-weight: 700;
+}
+
+.form-actions button:not(:first-of-type):not(.primary-button):not(.danger-button),
+.floating-actions button.secondary-button,
+.weight-form .secondary-button,
+.pf-dlg-foot button.secondary-button {
+  background: var(--surface-2);
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
+  color: var(--fg);
+  font-weight: 700;
 }
 
 /* Bottom navigation */
@@ -454,7 +497,7 @@ input:disabled {
   left: 0;
   right: 0;
   background: #15161A;
-  border-top: 1px solid #343845;
+  border-top: var(--ui-border);
   display: flex;
   justify-content: space-around;
   padding: 0.4rem 1rem;
@@ -472,7 +515,7 @@ input:disabled {
   color: #B7BCC7;
   font-size: 0.72rem;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   transition: color 0.15s;
 }
 
@@ -530,7 +573,8 @@ input:disabled {
 .health-tabs button {
   min-height: 2.5rem;
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg-2);
   font-weight: 800;
 }
@@ -607,7 +651,7 @@ input:disabled {
 .pf-dlg-foot {
   margin-top: auto;
   padding: var(--popup-footer-space) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   background: var(--surface);
 }
 
@@ -666,8 +710,24 @@ input:disabled {
   background: rgba(22, 24, 28, 0.28);
 }
 
-:root[data-theme="light"] .food-card.selected,
 :root[data-theme="light"] .tab-row button.active,
 :root[data-theme="light"] .health-tabs button.active {
   border-color: var(--accent);
+}
+
+:root[data-theme="light"] .food-card.selected,
+:root[data-theme="light"] .ingredient-picker button.selected {
+  border-color: var(--border);
+}
+
+:root[data-theme="light"] .primary-button,
+:root[data-theme="light"] .form-actions button:first-of-type:not(.secondary-button):not(.danger-button),
+:root[data-theme="light"] .floating-actions button:not(.secondary-button):not(.danger-button),
+:root[data-theme="light"] .search-row button,
+:root[data-theme="light"] .ingredient-confirm button:first-of-type:not(.secondary-button):not(.danger-button),
+:root[data-theme="light"] .add-food-button,
+:root[data-theme="light"] .wz-next-btn {
+  background: var(--accent);
+  border: 0;
+  color: #fff;
 }

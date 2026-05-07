@@ -18,7 +18,7 @@
 .daily-nutrition-summary div {
   display: grid;
   gap: 0.25rem;
-  border-top: 1px solid #343845;
+  border-top: var(--ui-border);
   padding-top: 0.75rem;
 }
 
@@ -29,7 +29,7 @@
 }
 
 .meal-group {
-  border-top: 1px solid #343845;
+  border-top: var(--ui-border);
   padding-top: 0.75rem;
 }
 
@@ -225,8 +225,8 @@ button {
   max-width: 100%;
   height: auto;
   max-height: calc(100svh - 2rem);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
   padding: clamp(0.85rem, 4vw, 1.5rem);
   padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
 }
@@ -238,7 +238,7 @@ button {
 
 .library-detail {
   border-left: 0;
-  border-top: 1px solid #343845;
+  border-top: var(--ui-border);
   padding-left: 0;
   padding-top: 1rem;
 }
@@ -398,13 +398,162 @@ button {
   gap: 0.75rem;
 }
 
+.import-review-popover {
+  width: min(900px, 100%);
+  min-height: min(560px, calc(100svh - 2rem));
+}
+
+.import-review-list {
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+  overflow: auto;
+}
+
+.import-review-day,
+.import-review-meal {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.import-review-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--fg);
+  font-size: 0.95rem;
+  padding: 0 0.1rem;
+}
+
+.import-review-day-header span,
+.import-review-meal-name {
+  color: var(--fg-2);
+  font-size: 0.8rem;
+}
+
+.import-review-meal-name {
+  margin: 0;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.import-review-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
+  padding: 0.75rem;
+}
+
+.import-review-row.is-applied {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.import-review-row.is-rejected {
+  opacity: 0.62;
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--surface));
+}
+
+.import-review-row.is-unresolved {
+  border-color: #fca5a5;
+  box-shadow: 0 0 0 2px rgba(252, 165, 165, 0.16);
+}
+
+.import-review-main {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.import-review-imported,
+.import-review-match,
+.import-review-meta {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.import-review-imported strong {
+  color: var(--fg);
+  font-size: 0.98rem;
+  line-height: 1.25;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.import-review-imported span,
+.import-review-meta {
+  color: var(--fg-2);
+  font-size: 0.8rem;
+}
+
+.import-review-row select {
+  width: 100%;
+  min-height: 2.55rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-review-row .secondary-button {
+  margin-top: 0;
+  width: auto;
+  min-width: 5.5rem;
+  align-self: center;
+  padding-inline: 1rem;
+}
+
+.import-review-row .secondary-button.is-applied {
+  color: #171921;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.import-review-row .secondary-button.is-rejected {
+  color: #171921;
+  background: #fca5a5;
+  border-color: #fca5a5;
+}
+
+.import-resolving-popover {
+  min-height: auto;
+}
+
+@media (max-width: 680px) {
+  .import-review-row {
+    grid-template-columns: 1fr;
+  }
+
+  .import-review-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .import-review-row .secondary-button {
+    justify-self: stretch;
+    width: 100%;
+  }
+}
+
 .import-preview-item {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.6rem;
   padding: 0.75rem;
-  border: 1px solid #343845;
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
 }
 
 .import-preview-item label {
@@ -454,8 +603,8 @@ button {
   align-items: center;
   gap: 0.75rem;
   padding: 0.6rem 0.75rem;
-  border: 1px solid #343845;
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
 }
 
 .import-weight-date {
@@ -511,7 +660,7 @@ button {
   font-size: 0.85rem;
   color: var(--fg-2);
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   border-radius: 20px;
   padding: 0.15rem 0.6rem;
 }
@@ -543,7 +692,7 @@ button {
   gap: 0.5rem;
   align-items: baseline;
   padding: 0.3rem 0;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--ui-border);
 }
 
 .import-step-food-row:last-child {
@@ -589,8 +738,8 @@ button {
   gap: 0.25rem;
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #343845;
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   background: #262932;
   color: #F2F2F0;
   text-align: left;
@@ -632,8 +781,8 @@ button {
 .serving-unit-tabs button {
   min-height: 2.25rem;
   padding: 0.35rem 0.25rem;
-  border: 1px solid #343845;
-  border-radius: 9px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   background: #262932;
   color: #B7BCC7;
   font-size: 0.75rem;
@@ -761,8 +910,8 @@ button {
   width: min(560px, 100%);
   height: auto;
   max-height: 90svh;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: var(--popup-border);
+  border-radius: var(--popup-radius);
 }
 
   .modal-results {
@@ -810,7 +959,7 @@ button {
   }
 
   .library-detail {
-    border-left: 1px solid #343845;
+    border-left: var(--ui-border);
     border-top: 0;
     padding-left: 1.5rem;
     padding-top: 0;
@@ -832,11 +981,11 @@ button {
 }
 .log-date-row > button {
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   color: var(--fg);
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -890,10 +1039,10 @@ button {
   right: 8px;
   z-index: 10;
   background: var(--surface-2, #23263a);
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow);
   min-width: 130px;
   display: grid;
 }
@@ -908,6 +1057,9 @@ button {
   font-size: 0.9rem;
 }
 .log-menu-dropdown button:hover { background: var(--surface); }
+.log-menu-dropdown .danger-menu-item {
+  color: #fca5a5;
+}
 
 .import-inline-status,
 .import-inline-errors {
@@ -924,8 +1076,8 @@ button {
   align-items: center;
   padding: 14px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 18px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
 }
 
 .log-calorie-stat {
@@ -987,7 +1139,7 @@ button {
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   padding-top: 10px;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   margin-top: 4px;
 }
 .log-meal-breakdown button {
@@ -1018,7 +1170,7 @@ button {
   display: flex;
   gap: 14px;
   padding-top: 8px;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   font-size: 0.78rem;
   flex-wrap: wrap;
 }
@@ -1067,8 +1219,8 @@ button {
 }
 .log-meal-card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 18px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 12px 14px;
   display: grid;
   gap: 10px;
@@ -1104,15 +1256,15 @@ button {
   display: grid;
   gap: 0.25rem;
   padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   background: var(--surface);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.36);
+  box-shadow: var(--shadow);
 }
 .meal-settings-menu button {
   min-height: 2.5rem;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   background: var(--surface-2);
   color: var(--fg);
   text-align: left;
@@ -1141,17 +1293,17 @@ button {
   display: grid;
   gap: 0.25rem;
   padding: 0.35rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   background: var(--surface);
-  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow);
 }
 
 .food-ctx-menu button {
   min-height: 2.75rem;
   padding: 0 0.75rem;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   background: var(--surface-2);
   color: var(--fg);
   text-align: left;
@@ -1169,8 +1321,8 @@ button {
 .food-ctx-meal-options button {
   min-height: 2.75rem;
   padding: 0 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   background: var(--surface-2);
   color: var(--fg);
   text-align: left;
@@ -1181,8 +1333,8 @@ button {
 .floating-date-input {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   background: var(--surface-2);
   color: var(--fg);
   font-size: 1rem;
@@ -1219,8 +1371,8 @@ button {
   align-items: center;
   gap: 10px;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 8px 10px;
   cursor: pointer;
   width: 100%;
@@ -1231,7 +1383,7 @@ button {
   user-select: none;
 }
 .log-food-row:hover {
-  border-color: var(--fg-2, #5a5e7a);
+  border-color: var(--border);
 }
 .log-food-row:active {
   opacity: 0.75;
@@ -1298,17 +1450,16 @@ button {
   justify-content: stretch;
 }
 .log-add-food-button {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--accent);
+  background: var(--accent);
+  border: 0;
+  color: #fff;
   font: inherit;
-  font-weight: 600;
-  padding: 8px;
+  font-weight: 700;
+  padding: 14px;
   width: 100%;
   border-radius: 10px;
   cursor: pointer;
 }
-.log-add-food-button:hover { border-color: var(--accent); }
 
 .add-food-screen {
   position: fixed;
@@ -1339,7 +1490,7 @@ button {
   top: 0;
   z-index: 2;
   background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--ui-border);
   padding: calc(3rem + env(safe-area-inset-top)) 1rem 0.75rem;
 }
 
@@ -1352,7 +1503,7 @@ button {
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   border-radius: 50%;
   background: var(--surface);
   color: var(--fg-2);
@@ -1403,7 +1554,7 @@ button {
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   border-radius: var(--radius-pill, 999px);
   padding: 4px;
   margin-bottom: 8px;
@@ -1498,6 +1649,16 @@ button {
   color: var(--fg);
 }
 
+:root[data-theme="light"] .log-add-food-button,
+:root[data-theme="light"] .search-row button,
+:root[data-theme="light"] .floating-actions button:not(.secondary-button):not(.danger-button),
+:root[data-theme="light"] .form-actions button:first-of-type:not(.secondary-button):not(.danger-button),
+:root[data-theme="light"] .ingredient-confirm button:first-of-type:not(.secondary-button):not(.danger-button) {
+  background: var(--accent);
+  border: 0;
+  color: #fff;
+}
+
 .modal-backdrop,
 .floating-overlay {
   align-items: center;
@@ -1528,6 +1689,6 @@ button {
 .floating-popover .floating-actions {
   margin-top: auto;
   padding: var(--popup-footer-space) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   background: var(--surface);
 }

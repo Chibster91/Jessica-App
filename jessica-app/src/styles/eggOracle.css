@@ -26,8 +26,8 @@
 
 .eo-est-card {
   background: var(--surface);
-  border: 1px solid var(--accent-border, var(--border));
-  border-radius: 11px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 8px 8px 9px;
   display: grid;
   gap: 3px;
@@ -72,8 +72,8 @@
 
 .eo-cal-arrow {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg);
   font-size: 1.2rem;
   line-height: 1;
@@ -101,8 +101,8 @@
 /* Calendar cells */
 .eo-cell {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -188,8 +188,8 @@
 
 .eo-stat-card {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 0.65rem 0.75rem;
 }
 
@@ -234,7 +234,7 @@
 
 .eo-close-btn {
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   border-radius: 50%;
   color: var(--fg-2);
   cursor: pointer;
@@ -257,7 +257,7 @@
   gap: 0.75rem;
   margin-top: 1.25rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
 }
 
 .eo-log-section {
@@ -286,8 +286,8 @@
 
 .eo-toggle-btn {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 9px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg-2);
   cursor: pointer;
   display: flex;
@@ -320,8 +320,8 @@
 /* Notes textarea */
 .eo-notes {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg);
   font-family: var(--sans);
   font-size: 0.875rem;
@@ -338,8 +338,8 @@
 /* Export box */
 .eo-export-box {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   margin-top: 0.75rem;
   padding: 0.75rem;
   display: grid;
@@ -354,8 +354,8 @@
 
 .eo-export-text {
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg-2);
   font-family: var(--mono);
   font-size: 0.7rem;
@@ -399,7 +399,7 @@
 .eo-modal {
   height: auto;
   max-height: min(640px, calc(100svh - 2rem));
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -449,7 +449,7 @@
 .eo-modal-foot {
   margin-top: auto;
   padding: var(--popup-footer-space) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   background: var(--surface);
 }
 

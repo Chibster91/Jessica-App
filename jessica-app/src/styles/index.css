@@ -20,7 +20,10 @@
   --danger-border: rgba(248, 113, 113, 0.4);
   --social-bg: rgba(38, 41, 50, 0.55);
   --shadow: rgba(0, 0, 0, 0.28) 0 10px 24px;
-  --popup-border: 1px solid var(--border);
+  --ui-border: 1px solid var(--border);
+  --ui-radius: 12px;
+  --control-radius: 10px;
+  --popup-border: var(--ui-border);
   --popup-radius: 12px;
   --popup-padding: clamp(1rem, 4vw, 1.5rem);
   --popup-gap: 0.75rem;
@@ -142,7 +145,7 @@ code {
 @media (min-width: 720px) {
   #root {
     width: min(1126px, 100%);
-    border-inline: 1px solid var(--border);
+    border-inline: var(--ui-border);
   }
 }
 

@@ -18,8 +18,8 @@
 
 .targets-grid div {
   background: #262932;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   display: grid;
   gap: 0.3rem;
   min-width: 0;
@@ -70,7 +70,7 @@
 .wizard-close {
   align-items: center;
   background: #1b1e26;
-  border: 1px solid #343845;
+  border: var(--ui-border);
   border-radius: 999px;
   color: #B7BCC7;
   display: inline-flex;
@@ -87,8 +87,8 @@
 .profile-wizard-progress button {
   align-items: center;
   background: #262932;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   color: #B7BCC7;
   display: grid;
   gap: 0.35rem;
@@ -246,9 +246,9 @@
 .profile-weight-row span {
   align-items: center;
   background: #1b1e26;
-  border: 1px solid #343845;
+  border: var(--ui-border);
   border-left: 0;
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
   color: #B7BCC7;
   display: flex;
   font-size: 0.82rem;
@@ -284,15 +284,15 @@
   gap: 0.35rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   background: #1b1e26;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 0.3rem;
 }
 
 .segmented-control button {
   background: transparent;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--control-radius);
   color: #B7BCC7;
   min-height: 2.4rem;
   padding: 0.55rem 0.75rem;
@@ -352,8 +352,8 @@
 .profile-toggle-row {
   align-items: center;
   background: #262932;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -362,7 +362,7 @@
 
 .toggle-pill {
   background: #1b1e26;
-  border: 1px solid #343845;
+  border: var(--ui-border);
   border-radius: 999px;
   color: #B7BCC7;
   min-width: 4.25rem;
@@ -383,8 +383,8 @@
 
 .profile-summary-card > div {
   background: #262932;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   display: grid;
   gap: 0.3rem;
   min-width: 0;
@@ -408,7 +408,7 @@
 }
 
 .profile-summary-card .profile-target {
-  border-color: #B46CFF;
+  border-color: var(--border);
   box-shadow: inset 0 0 0 1px rgba(180, 108, 255, 0.18);
 }
 
@@ -429,8 +429,8 @@
 
 .profile-macro-total {
   background: #262932;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   color: #B7BCC7;
   margin: 0;
   padding: 0.8rem 1rem;
@@ -443,8 +443,8 @@
 
 .profile-toast {
   background: rgba(180, 108, 255, 0.16);
-  border: 1px solid rgba(180, 108, 255, 0.45);
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   color: #f3e8ff;
   margin: 0;
   padding: 0.8rem 1rem;
@@ -454,8 +454,8 @@
 .profile-save-bar {
   align-items: center;
   background: rgba(23, 25, 33, 0.92);
-  border: 1px solid #343845;
-  border-radius: 16px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   bottom: calc(5rem + env(safe-area-inset-bottom));
   display: grid;
   gap: 0.75rem;
@@ -536,7 +536,7 @@
   width: 100%;
   box-sizing: border-box;
   padding: 0.6rem 0.8rem;
-  border-radius: 10px;
+  border-radius: var(--control-radius);
 }
 
 .compound-input-row {
@@ -555,8 +555,8 @@
   display: grid;
   gap: 0.25rem;
   background: #262932;
-  border: 1px solid #343845;
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 0.85rem 1rem;
 }
 
@@ -582,7 +582,7 @@
 .option-card {
   min-height: 3.25rem;
   background: #262932;
-  border: 1px solid #343845;
+  border: var(--ui-border);
   color: #F2F2F0;
   font-weight: 600;
   white-space: normal;
@@ -652,8 +652,8 @@
 
 .pf-edit-btn {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg);
   font: inherit;
   font-size: 0.82rem;
@@ -666,7 +666,7 @@
 }
 
 .pf-edit-btn:hover {
-  border-color: var(--accent);
+  border-color: var(--border);
   color: var(--accent);
 }
 
@@ -679,8 +679,8 @@
 
 .pf-derived {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 10px;
   text-align: center;
 }
@@ -716,9 +716,8 @@
 
 .pf-macro {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--macro-c, var(--accent));
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 10px;
   text-align: center;
 }
@@ -740,7 +739,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   font-size: 0.9rem;
 }
 
@@ -766,7 +765,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 11px 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   font-size: 0.9rem;
   cursor: pointer;
   user-select: none;
@@ -842,8 +841,8 @@
 .pf-dlg-summary {
   text-align: left;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 10px 12px;
   color: var(--fg-2);
   font-size: 0.82rem;
@@ -869,8 +868,8 @@
   width: 100%;
   box-sizing: border-box;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg);
   font: inherit;
   font-family: var(--mono);
@@ -889,7 +888,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   padding: 12px 20px 20px;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
 }
 
 .pf-dlg-foot button {
@@ -1030,8 +1029,8 @@
 
 .wz-3btn-item {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   color: var(--fg);
   cursor: pointer;
   display: flex;
@@ -1071,8 +1070,8 @@
 /* Read-only computed input */
 .wz-readonly-input {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  border: var(--ui-border);
+  border-radius: var(--control-radius);
   color: var(--fg-2);
   cursor: default;
   padding: 0.6rem 0.8rem;
@@ -1108,7 +1107,7 @@
 }
 
 .profile-manual-calorie-editor {
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   display: grid;
   gap: 0.65rem;
   margin-top: 0.75rem;
@@ -1137,9 +1136,9 @@
 .profile-manual-calorie-input span {
   align-items: center;
   background: var(--surface-2);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   border-left: 0;
-  border-radius: 0 10px 10px 0;
+  border-radius: 0 var(--control-radius) var(--control-radius) 0;
   color: var(--fg-2);
   display: flex;
   font-size: 0.78rem;
@@ -1162,8 +1161,8 @@
 
 .wz-live-tile {
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
   padding: 0.8rem 0.9rem;
 }
 
@@ -1298,7 +1297,7 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 4px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--ui-border);
   border-radius: var(--radius-pill, 999px);
   padding: 4px;
   margin-bottom: 1rem;
@@ -1400,6 +1399,6 @@
 .pf-dlg-foot {
   margin-top: auto;
   padding: var(--popup-footer-space) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: var(--ui-border);
   background: var(--surface);
 }
