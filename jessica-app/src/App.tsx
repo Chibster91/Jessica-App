@@ -77,6 +77,7 @@ import {
   searchUsdaFoodsWithSynonyms,
   searchFoodsGrouped,
   fetchUsdaFoodDetail,
+  type SearchResultGroup,
   type Food,
   type RecipeIngredient,
   type Recipe,
@@ -181,6 +182,7 @@ type ImportCandidateIndexEntry = {
 
 type ImportFoodBatchResolverOptions = {
   forceReviewAll?: boolean;
+  manualCandidates?: Record<string, ImportFoodCandidate>;
   onProgress?: (progress: ImportResolutionProgress) => void;
 };
 
@@ -409,6 +411,10 @@ function normalizeImportMatchName(value: string) {
     .join(" ");
 }
 
+function normalizeImportName(name: string) {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
 function levenshteinDistance(a: string, b: string) {
   const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
   const current = Array.from({ length: b.length + 1 }, () => 0);
@@ -436,6 +442,72 @@ function tokenSortSimilarityNormalized(left: string, right: string) {
   const shared = [...leftTokens].filter((token) => rightTokens.has(token)).length;
   const containment = shared / Math.max(1, Math.min(leftTokens.size, rightTokens.size));
   return Math.max(Math.round(ratio), Math.round(containment * 100));
+}
+
+const importModifierTokens = new Set([
+  "strawberry",
+  "honey",
+  "peanut",
+  "chocolate",
+  "vanilla",
+  "maple",
+  "barbecue",
+  "bbq",
+  "garlic",
+  "butter",
+  "cheese",
+  "cheddar",
+  "sweet",
+  "sour",
+  "spicy",
+  "hot",
+  "mild",
+  "plain",
+  "flavor",
+  "flavored",
+]);
+
+const importPreparedCoreTokens = new Set([
+  "yogurt",
+  "protein",
+  "powder",
+  "bar",
+  "sauce",
+  "dressing",
+  "twist",
+  "chip",
+  "cracker",
+  "cereal",
+  "pasta",
+  "noodle",
+  "tuna",
+  "salad",
+  "sandwich",
+  "soup",
+  "meal",
+  "bowl",
+  "wrap",
+]);
+
+function getImportNameTokens(normalizedName: string) {
+  return normalizedName.split(" ").filter(Boolean);
+}
+
+function hasIngredientOnlyCandidateMismatch(importedNormalizedName: string, candidateNormalizedName: string) {
+  const importedTokens = getImportNameTokens(importedNormalizedName);
+  const candidateTokens = getImportNameTokens(candidateNormalizedName);
+  if (importedTokens.length <= 1 || candidateTokens.length === 0) return false;
+
+  const sharedTokens = candidateTokens.filter((token) => importedTokens.includes(token));
+  if (sharedTokens.length === 0) return false;
+
+  const importedCoreTokens = importedTokens.filter((token) => !importModifierTokens.has(token));
+  const importedHasPreparedCore = importedCoreTokens.some((token) => importPreparedCoreTokens.has(token));
+  const candidateIsOnlyModifier = candidateTokens.every((token) => importModifierTokens.has(token));
+  const candidateMissesPreparedCore = importedHasPreparedCore &&
+    !candidateTokens.some((token) => importedCoreTokens.includes(token));
+
+  return candidateIsOnlyModifier || candidateMissesPreparedCore;
 }
 
 function getHouseholdServingGrams(basis: ImportServingBasis, foodName: string): number | null {
@@ -558,6 +630,7 @@ function getImportFoodCandidate(
 ): ImportFoodCandidate | null {
   const nameSimilarity = tokenSortSimilarityNormalized(importedNormalizedName, candidateNormalizedName);
   if (nameSimilarity < 75) return null;
+  if (hasIngredientOnlyCandidateMismatch(importedNormalizedName, candidateNormalizedName)) return null;
 
   const importedBasis = parseImportServingBasis(imported.food.servingSize);
   const candidateBasis = parseImportServingBasis(food.servingSize);
@@ -792,7 +865,11 @@ async function buildImportFoodBatchResolver(
     for (const item of group.items) {
       const imported = buildImportFoodFromDraft(item, -(nextFoodId++));
       const decision = decisions[item.id];
-      const candidate = decision && decision !== "new" ? candidates.find((match) => match.key === decision) : null;
+      const manualCandidate = options.manualCandidates?.[item.id];
+      const candidate = decision && decision !== "new"
+        ? candidates.find((match) => match.key === decision) ??
+          (manualCandidate?.key === decision ? manualCandidate : null)
+        : null;
       if (candidate) {
         byDraftId.set(item.id, resolveImportItemFromCandidate(item, imported, candidate));
         continue;
@@ -1049,6 +1126,13 @@ function App() {
   const [importReviewSelections, setImportReviewSelections] = useState<Record<string, string>>({});
   const [importReviewAppliedSelections, setImportReviewAppliedSelections] = useState<Record<string, string>>({});
   const [importReviewActions, setImportReviewActions] = useState<Record<string, ImportReviewAction>>({});
+  const [importReviewManualCandidates, setImportReviewManualCandidates] = useState<Record<string, ImportFoodCandidate>>({});
+  const [rememberedImportMatches, setRememberedImportMatches] = useState<Record<string, ImportFoodCandidate>>({});
+  const [importReviewRememberedRows, setImportReviewRememberedRows] = useState<Record<string, boolean>>({});
+  const [importReviewManualTarget, setImportReviewManualTarget] = useState<FoodLogImportDraft | null>(null);
+  const [importReviewManualQuery, setImportReviewManualQuery] = useState("");
+  const [importReviewManualGroups, setImportReviewManualGroups] = useState<SearchResultGroup[]>([]);
+  const [isImportReviewManualSearching, setIsImportReviewManualSearching] = useState(false);
   const [unresolvedImportReviewIds, setUnresolvedImportReviewIds] = useState<string[]>([]);
   const [importResolutionProgress, setImportResolutionProgress] = useState<ImportResolutionProgress | null>(null);
   const [importReviewMode, setImportReviewMode] = useState<ImportReviewMode | null>(null);
@@ -1871,6 +1955,12 @@ function App() {
       setImportReviewSelections({});
       setImportReviewAppliedSelections({});
       setImportReviewActions({});
+      setImportReviewManualCandidates({});
+      setRememberedImportMatches({});
+      setImportReviewRememberedRows({});
+      setImportReviewManualTarget(null);
+      setImportReviewManualQuery("");
+      setImportReviewManualGroups([]);
       setUnresolvedImportReviewIds([]);
       setImportResolutionProgress(null);
 
@@ -1952,6 +2042,12 @@ function App() {
     setImportReviewSelections({});
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setImportReviewManualCandidates({});
+    setRememberedImportMatches({});
+    setImportReviewRememberedRows({});
+    setImportReviewManualTarget(null);
+    setImportReviewManualQuery("");
+    setImportReviewManualGroups([]);
     setUnresolvedImportReviewIds([]);
     setImportResolutionProgress(null);
     setImportReviewMode(null);
@@ -1969,6 +2065,12 @@ function App() {
     setImportReviewSelections({});
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setImportReviewManualCandidates({});
+    setRememberedImportMatches({});
+    setImportReviewRememberedRows({});
+    setImportReviewManualTarget(null);
+    setImportReviewManualQuery("");
+    setImportReviewManualGroups([]);
     setUnresolvedImportReviewIds([]);
     setImportResolutionProgress(null);
     setImportReviewMode(null);
@@ -2037,12 +2139,35 @@ function App() {
   }
 
   function primeImportReview(reviewItems: ImportReviewItem[], mode: ImportReviewMode) {
-    setImportReviewItems(reviewItems);
+    const nextManualCandidates: Record<string, ImportFoodCandidate> = {};
+    const nextRememberedRows: Record<string, boolean> = {};
+    const nextReviewItems = reviewItems.map((review) => {
+      const remembered = rememberedImportMatches[normalizeImportName(review.item.name)];
+      if (!remembered) return review;
+
+      const candidate = buildManualImportCandidate(review.item, remembered.food);
+      nextManualCandidates[review.item.id] = candidate;
+      nextRememberedRows[review.item.id] = true;
+      return {
+        ...review,
+        candidates: [
+          candidate,
+          ...review.candidates.filter((existing) => existing.key !== candidate.key),
+        ],
+      };
+    });
+
+    setImportReviewItems(nextReviewItems);
     setImportReviewSelections(Object.fromEntries(
-      reviewItems.map((review) => [review.item.id, getDefaultImportReviewSelection(review)])
+      nextReviewItems.map((review) => [review.item.id, nextManualCandidates[review.item.id]?.key ?? getDefaultImportReviewSelection(review)])
     ));
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setImportReviewManualCandidates(nextManualCandidates);
+    setImportReviewRememberedRows(nextRememberedRows);
+    setImportReviewManualTarget(null);
+    setImportReviewManualQuery("");
+    setImportReviewManualGroups([]);
     setUnresolvedImportReviewIds([]);
     setImportReviewMode(mode);
     setImportStatus(`${reviewItems.length} imported food${reviewItems.length === 1 ? "" : "s"} need match review.`);
@@ -2202,7 +2327,9 @@ function App() {
 
     setIsResolvingImport(true);
     try {
-      const result = await buildImportFoodBatchResolver(appliedItems, customFoods, recipes, appliedSelections);
+      const result = await buildImportFoodBatchResolver(appliedItems, customFoods, recipes, appliedSelections, {
+        manualCandidates: importReviewManualCandidates,
+      });
       if (result.reviewItems.length > 0) {
         primeImportReview(result.reviewItems, importReviewMode ?? "preview");
         return;
@@ -2212,6 +2339,12 @@ function App() {
       setImportReviewSelections({});
       setImportReviewAppliedSelections({});
       setImportReviewActions({});
+      setImportReviewManualCandidates({});
+      setRememberedImportMatches({});
+      setImportReviewRememberedRows({});
+      setImportReviewManualTarget(null);
+      setImportReviewManualQuery("");
+      setImportReviewManualGroups([]);
       setUnresolvedImportReviewIds([]);
       setImportReviewMode(null);
       finalizeFoodLogImport(result.resolver, appliedItems);
@@ -2239,22 +2372,82 @@ function App() {
       delete next[itemId];
       return next;
     });
+    setImportReviewRememberedRows((current) => {
+      if (!(itemId in current)) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
     setUnresolvedImportReviewIds((current) => current.filter((id) => id !== itemId));
     setImportErrors([]);
   }
 
+  function getImportReviewCandidateForSelection(item: FoodLogImportDraft, selected: string) {
+    const review = importReviewItems.find((reviewItem) => reviewItem.item.id === item.id);
+    return review?.candidates.find((candidate) => candidate.key === selected) ??
+      (importReviewManualCandidates[item.id]?.key === selected ? importReviewManualCandidates[item.id] : null);
+  }
+
   function applyImportReviewToSimilar(item: FoodLogImportDraft) {
     const selected = importReviewSelections[item.id] ?? "new";
-    setImportReviewSelections((current) => ({
-      ...current,
-      [item.id]: selected,
-    }));
-    setImportReviewAppliedSelections((current) => ({
-      ...current,
-      [item.id]: selected,
-    }));
-    setImportReviewActions((current) => ({ ...current, [item.id]: "applied" }));
-    setUnresolvedImportReviewIds((current) => current.filter((id) => id !== item.id));
+    const selectedCandidate = selected === "new" ? null : getImportReviewCandidateForSelection(item, selected);
+    const rememberedKey = normalizeImportName(item.name);
+    const defaultSelectionById = new Map(
+      importReviewItems.map((review) => [review.item.id, getDefaultImportReviewSelection(review)])
+    );
+    const candidatesById: Record<string, ImportFoodCandidate> = {};
+    const selectionById: Record<string, string> = { [item.id]: selected };
+    const appliedById: Record<string, string> = { [item.id]: selected };
+    const actionById: Record<string, ImportReviewAction> = { [item.id]: "applied" };
+    const rememberedRowsById: Record<string, boolean> = {};
+
+    if (selectedCandidate) {
+      for (const review of importReviewItems) {
+        if (review.item.id === item.id) continue;
+        if (normalizeImportName(review.item.name) !== rememberedKey) continue;
+        if (importReviewActions[review.item.id]) continue;
+
+        const currentSelection = importReviewSelections[review.item.id];
+        const defaultSelection = defaultSelectionById.get(review.item.id);
+        const isUnchanged = currentSelection === undefined || currentSelection === defaultSelection || importReviewRememberedRows[review.item.id];
+        if (!isUnchanged) continue;
+
+        const candidate = buildManualImportCandidate(review.item, selectedCandidate.food);
+        candidatesById[review.item.id] = candidate;
+        selectionById[review.item.id] = candidate.key;
+        appliedById[review.item.id] = candidate.key;
+        actionById[review.item.id] = "applied";
+        rememberedRowsById[review.item.id] = true;
+      }
+    }
+
+    if (selectedCandidate) {
+      setRememberedImportMatches((current) => ({ ...current, [rememberedKey]: selectedCandidate }));
+      setImportReviewManualCandidates((current) => ({ ...current, ...candidatesById }));
+      setImportReviewItems((current) =>
+        current.map((review) =>
+          candidatesById[review.item.id]
+            ? {
+                ...review,
+                candidates: [
+                  candidatesById[review.item.id],
+                  ...review.candidates.filter((existing) => existing.key !== candidatesById[review.item.id].key),
+                ],
+              }
+            : review
+        )
+      );
+    }
+
+    setImportReviewSelections((current) => ({ ...current, ...selectionById }));
+    setImportReviewAppliedSelections((current) => ({ ...current, ...appliedById }));
+    setImportReviewActions((current) => ({ ...current, ...actionById }));
+    setImportReviewRememberedRows((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return { ...next, ...rememberedRowsById };
+    });
+    setUnresolvedImportReviewIds((current) => current.filter((id) => !(id in actionById)));
     setImportErrors([]);
   }
 
@@ -2266,8 +2459,140 @@ function App() {
       delete next[item.id];
       return next;
     });
+    setImportReviewRememberedRows((current) => {
+      if (!(item.id in current)) return current;
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
     setUnresolvedImportReviewIds((current) => current.filter((id) => id !== item.id));
     setImportErrors([]);
+  }
+
+  function getManualImportMatchSource(food: Food): ImportMatchSource {
+    if (recipes.some((recipe) => recipe.id === food.id)) return "recipe";
+    if (customFoods.some((customFood) => customFood.id === food.id)) return "custom";
+    return food.dataType === "local" ? "local" : "usda";
+  }
+
+  function buildManualImportCandidate(item: FoodLogImportDraft, food: Food): ImportFoodCandidate {
+    const source = getManualImportMatchSource(food);
+    const imported = buildImportFoodFromDraft(item, -Date.now());
+    const importedBasis = parseImportServingBasis(imported.food.servingSize);
+    const candidateBasis = parseImportServingBasis(food.servingSize);
+    const ratio = importFoodUnitRatio(importedBasis, candidateBasis, imported.food.name, food.name);
+    const autoCandidate = getImportFoodCandidate(imported, food, source);
+    const key = `manual:${source}:${food.id}`;
+
+    return {
+      key,
+      source,
+      sourceLabel: autoCandidate?.sourceLabel ?? (source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "USDA"),
+      food,
+      score: autoCandidate?.score ?? 0,
+      confidence: autoCandidate?.confidence ?? "medium",
+      quantity: ratio !== null ? imported.quantity * ratio : getFoodQuantityRatio(imported.food, food),
+      nameSimilarity: autoCandidate?.nameSimilarity ?? tokenSortSimilarityNormalized(normalizeImportMatchName(imported.food.name), normalizeImportMatchName(food.name)),
+      unitCompatible: autoCandidate?.unitCompatible ?? ratio !== null,
+      nutritionEdge: autoCandidate?.nutritionEdge ?? false,
+    };
+  }
+
+  function openImportReviewManualSearch(item: FoodLogImportDraft) {
+    setImportReviewManualTarget(item);
+    setImportReviewManualQuery(item.name);
+    setImportReviewManualGroups([]);
+    setImportErrors([]);
+  }
+
+  function closeImportReviewManualSearch() {
+    setImportReviewManualTarget(null);
+    setImportReviewManualQuery("");
+    setImportReviewManualGroups([]);
+    setIsImportReviewManualSearching(false);
+  }
+
+  async function searchImportReviewManualFoods() {
+    const query = importReviewManualQuery.trim();
+    if (!query) return;
+
+    setIsImportReviewManualSearching(true);
+    try {
+      setImportReviewManualGroups(await searchFoodsGrouped(query, customFoods, getRecentFoods(selectedDate), recipes));
+    } catch (error) {
+      appendDebugLog("import-review-manual-search-failed", {
+        query,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      setImportErrors([`Manual search failed: ${error instanceof Error ? error.message : String(error)}`]);
+    } finally {
+      setIsImportReviewManualSearching(false);
+    }
+  }
+
+  function selectImportReviewManualFood(food: Food) {
+    if (!importReviewManualTarget) return;
+
+    const item = importReviewManualTarget;
+    const rememberedKey = normalizeImportName(item.name);
+    const defaultSelectionById = new Map(
+      importReviewItems.map((review) => [review.item.id, getDefaultImportReviewSelection(review)])
+    );
+    const matchingReviews = importReviewItems.filter((review) => {
+      if (normalizeImportName(review.item.name) !== rememberedKey) return false;
+      if (review.item.id === item.id) return true;
+      if (importReviewActions[review.item.id]) return false;
+
+      const currentSelection = importReviewSelections[review.item.id];
+      const defaultSelection = defaultSelectionById.get(review.item.id);
+      return currentSelection === undefined || currentSelection === defaultSelection || importReviewRememberedRows[review.item.id];
+    });
+    const candidatesById = Object.fromEntries(
+      matchingReviews.map((review) => [review.item.id, buildManualImportCandidate(review.item, food)])
+    );
+    const selectionById = Object.fromEntries(
+      Object.entries(candidatesById).map(([id, candidate]) => [id, candidate.key])
+    );
+    const rememberedRowsById = Object.fromEntries(
+      matchingReviews
+        .filter((review) => review.item.id !== item.id)
+        .map((review) => [review.item.id, true])
+    );
+
+    setRememberedImportMatches((current) => ({ ...current, [rememberedKey]: buildManualImportCandidate(item, food) }));
+    setImportReviewManualCandidates((current) => ({ ...current, ...candidatesById }));
+    setImportReviewItems((current) =>
+      current.map((review) =>
+        candidatesById[review.item.id]
+          ? {
+              ...review,
+              candidates: [
+                candidatesById[review.item.id],
+                ...review.candidates.filter((existing) => existing.key !== candidatesById[review.item.id].key),
+              ],
+            }
+          : review
+      )
+    );
+    setImportReviewSelections((current) => ({ ...current, ...selectionById }));
+    setImportReviewAppliedSelections((current) => {
+      const next = { ...current };
+      Object.keys(candidatesById).forEach((id) => delete next[id]);
+      return next;
+    });
+    setImportReviewActions((current) => {
+      const next = { ...current };
+      Object.keys(candidatesById).forEach((id) => delete next[id]);
+      return next;
+    });
+    setImportReviewRememberedRows((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return { ...next, ...rememberedRowsById };
+    });
+    setUnresolvedImportReviewIds((current) => current.filter((id) => !(id in candidatesById)));
+    setImportErrors([]);
+    closeImportReviewManualSearch();
   }
 
   function getDayExportData() {
@@ -2429,6 +2754,12 @@ function App() {
     setImportReviewSelections({});
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setImportReviewManualCandidates({});
+    setRememberedImportMatches({});
+    setImportReviewRememberedRows({});
+    setImportReviewManualTarget(null);
+    setImportReviewManualQuery("");
+    setImportReviewManualGroups([]);
     setUnresolvedImportReviewIds([]);
     setImportResolutionProgress(null);
     setIsResolvingImport(false);
@@ -3495,11 +3826,21 @@ function startEditWeightEntry(entry: WeightEntry) {
         importReviewSelections,
         importReviewAppliedSelections,
         importReviewActions,
+        importReviewRememberedRows,
+        importReviewManualTarget,
+        importReviewManualQuery,
+        setImportReviewManualQuery,
+        importReviewManualGroups,
+        isImportReviewManualSearching,
         unresolvedImportReviewIds,
         importResolutionProgress,
         updateImportReviewSelection,
         applyImportReviewToSimilar,
         rejectImportReviewItem,
+        openImportReviewManualSearch,
+        closeImportReviewManualSearch,
+        searchImportReviewManualFoods,
+        selectImportReviewManualFood,
         confirmImportReview,
         isResolvingImport,
         clearFoodDebugData,
