@@ -12,6 +12,7 @@ import {
   getBrandDisplayName,
   getIngredientCalories,
   type AmountUnit,
+  type Food,
   type FoodLogImportDraft
 } from "../appSupport";
 import "../styles/log.css";
@@ -41,10 +42,35 @@ type ImportStep = {
   items: FoodLogImportDraft[];
   weightEntry: { weightLb: number } | null;
 };
+type ImportReviewCandidateUi = {
+  key: string;
+  sourceLabel: string;
+  food: Food;
+};
+type ImportReviewUi = {
+  item: FoodLogImportDraft;
+  candidates: ImportReviewCandidateUi[];
+};
+type ImportReviewMealGroupUi = {
+  meal: string;
+  reviews: ImportReviewUi[];
+};
+type ImportReviewDateGroupUi = {
+  date: string;
+  meals: ImportReviewMealGroupUi[];
+};
+type ImportReviewRowGroupUi = {
+  key: string;
+  reviews: ImportReviewUi[];
+};
+type ImportManualGroupUi = {
+  label: string;
+  foods: Food[];
+};
 
 export function LogView(props: LogViewProps) {
   const {
-    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, isLogMenuOpen, setIsLogMenuOpen, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, visibleMealCategories, getCategoryTotals, scrollToMeal, log, expandedMeals, mealCardRefs, toggleMeal, mealMenuCategory, setMealMenuCategory, openSaveMealAsRecipe, setMealToDelete, suppressNextClickRef, openEditFoodItem, setContextMenuItem, setContextMenuY, longPressRef, getItemCalories, logTapProbe, openAddFood, handleFinishToggle, pendingCategory, tapProbeProps, activeAddFoodTab, setActiveAddFoodTab, modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, selectedFoodDetail, selectedPortion, isLoadingDetail, selectFood, recentFoods, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm, isCustomFormOpen, customFoodScanInputRef, isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError, customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, setIsCustomFormOpen, filteredCustomFoods, recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, recipeForm, setRecipeForm, recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods, isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity, confirmRecipeIngredient, setPendingRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe, setIsRecipeFormOpen, filteredRecipes, closeAddFood, detailError, servingBasisText, amountUnit, portionOptions, selectedPortionValue, setSelectedPortionValue, quantity, setQuantity, portionAmount, setPortionAmount, setAmountUnit, allowedAmountUnits, selectedPortionCalories, addSelectedFood, canAddSelectedFood, setSelectedFood, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, rejectImportReviewItem, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, mealToSaveAsRecipe, mealRecipeName, setMealRecipeName, saveMealAsRecipe, setMealToSaveAsRecipe, mealToDelete, confirmDeleteMeal, itemToEdit, editItemAmountUnit, editItemAmount, setEditItemAmount, setEditItemAmountUnit, getEditAmountUnits, saveEditedFoodItem, setItemToEdit, itemToRemove, confirmRemoveFood, setItemToRemove, contextMenuItem, contextMenuY, moveToMealItem, setMoveToMealItem, moveItemToMeal, moveToDayItem, setMoveToDayItem, setMoveToDayDate, setMoveToDayStep, moveToDayStep, moveToDayDate, moveItemToDifferentDay, bottomNav
+    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, isLogMenuOpen, setIsLogMenuOpen, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, visibleMealCategories, getCategoryTotals, scrollToMeal, log, expandedMeals, mealCardRefs, toggleMeal, mealMenuCategory, setMealMenuCategory, openSaveMealAsRecipe, setMealToDelete, suppressNextClickRef, openEditFoodItem, setContextMenuItem, setContextMenuY, longPressRef, getItemCalories, logTapProbe, openAddFood, handleFinishToggle, pendingCategory, tapProbeProps, activeAddFoodTab, setActiveAddFoodTab, modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, selectedFoodDetail, selectedPortion, isLoadingDetail, selectFood, recentFoods, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm, isCustomFormOpen, customFoodScanInputRef, isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError, customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, setIsCustomFormOpen, filteredCustomFoods, recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, recipeForm, setRecipeForm, recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods, isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity, confirmRecipeIngredient, setPendingRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe, setIsRecipeFormOpen, filteredRecipes, closeAddFood, detailError, servingBasisText, amountUnit, portionOptions, selectedPortionValue, setSelectedPortionValue, quantity, setQuantity, portionAmount, setPortionAmount, setAmountUnit, allowedAmountUnits, selectedPortionCalories, addSelectedFood, canAddSelectedFood, setSelectedFood, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, rejectImportReviewItem, expandImportReviewGroup, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, mealToSaveAsRecipe, mealRecipeName, setMealRecipeName, saveMealAsRecipe, setMealToSaveAsRecipe, mealToDelete, confirmDeleteMeal, itemToEdit, editItemAmountUnit, editItemAmount, setEditItemAmount, setEditItemAmountUnit, getEditAmountUnits, saveEditedFoodItem, setItemToEdit, itemToRemove, confirmRemoveFood, setItemToRemove, contextMenuItem, contextMenuY, moveToMealItem, setMoveToMealItem, moveItemToMeal, moveToDayItem, setMoveToDayItem, setMoveToDayDate, setMoveToDayStep, moveToDayStep, moveToDayDate, moveItemToDifferentDay, bottomNav
   } = props;
   const sortedRecentFoods = [...recentFoods].sort((a, b) => {
     const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
@@ -86,7 +112,7 @@ export function LogView(props: LogViewProps) {
     if (activeAddFoodTab === "search") searchModalFood();
   }
 
-  const importReviewDateGroups: any[] = importReviewItems.reduce((dateGroups: any[], review: any) => {
+  const importReviewDateGroups: ImportReviewDateGroupUi[] = importReviewItems.reduce((dateGroups: ImportReviewDateGroupUi[], review: ImportReviewUi) => {
     let dateGroup = dateGroups.find((group) => group.date === review.item.date);
     if (!dateGroup) {
       dateGroup = { date: review.item.date, meals: [] };
@@ -94,7 +120,7 @@ export function LogView(props: LogViewProps) {
     }
 
     const mealName = review.item.meal || "Meal";
-    let mealGroup = dateGroup.meals.find((group: any) => group.meal === mealName);
+    let mealGroup = dateGroup.meals.find((group) => group.meal === mealName);
     if (!mealGroup) {
       mealGroup = { meal: mealName, reviews: [] };
       dateGroup.meals.push(mealGroup);
@@ -102,6 +128,23 @@ export function LogView(props: LogViewProps) {
     mealGroup.reviews.push(review);
     return dateGroups;
   }, []);
+  const getImportReviewNameKey = (name: string) => name.trim().toLowerCase().replace(/\s+/g, " ");
+  const getImportReviewActionLabel = (action: string) => action === "applied" ? "Applied" : "Rejected";
+  const getImportReviewRowGroups = (reviews: ImportReviewUi[]) => reviews.reduce((groups: ImportReviewRowGroupUi[], review) => {
+    const key = getImportReviewNameKey(review.item.name);
+    let group = groups.find((entry) => entry.key === key);
+    if (!group) {
+      group = { key, reviews: [] };
+      groups.push(group);
+    }
+    group.reviews.push(review);
+    return groups;
+  }, []);
+  const getCollapsedReviewAction = (reviews: ImportReviewUi[]) => {
+    const actions = reviews.map((review) => importReviewActions[review.item.id]).filter(Boolean);
+    if (actions.length !== reviews.length) return "";
+    return actions.every((action) => action === actions[0]) ? actions[0] : "";
+  };
 
   return (
     <main className="app">
@@ -1172,90 +1215,108 @@ export function LogView(props: LogViewProps) {
             )}
 
             <div className="import-review-list">
-              {importReviewDateGroups.map((dateGroup: any) => (
+              {importReviewDateGroups.map((dateGroup) => (
                 <section className="import-review-day" key={dateGroup.date}>
                   <div className="import-review-day-header">
                     <strong>{formatEntryDate(dateGroup.date)}</strong>
-                    <span>{dateGroup.meals.reduce((count: number, meal: any) => count + meal.reviews.length, 0)} foods</span>
+                    <span>{dateGroup.meals.reduce((count, meal) => count + meal.reviews.length, 0)} foods</span>
                   </div>
-                  {dateGroup.meals.map((mealGroup: any) => (
+                  {dateGroup.meals.map((mealGroup) => (
                     <div className="import-review-meal" key={`${dateGroup.date}-${mealGroup.meal}`}>
                       <p className="import-review-meal-name">{mealGroup.meal}</p>
-                      {mealGroup.reviews.map((review: any) => {
-                        const selectedMatch = importReviewSelections[review.item.id] ?? review.candidates[0]?.key ?? "new";
-                        const action = importReviewActions[review.item.id];
-                        const isApplied = action === "applied" && importReviewAppliedSelections[review.item.id] === selectedMatch;
-                        const isRejected = action === "rejected";
-                        const isUnresolved = unresolvedImportReviewIds.includes(review.item.id);
+                      {getImportReviewRowGroups(mealGroup.reviews).map((reviewGroup) => {
+                        const collapsedAction = getCollapsedReviewAction(reviewGroup.reviews);
+                        const isCollapsed = collapsedAction && !expandedImportReviewGroups[reviewGroup.key];
 
-                        return (
-                          <div
-                            className={`import-review-row${isApplied ? " is-applied" : ""}${isRejected ? " is-rejected" : ""}${isUnresolved ? " is-unresolved" : ""}`}
-                            key={review.item.id}
-                          >
-                            <div className="import-review-main">
-                              <div className="import-review-imported">
-                                <strong>{review.item.name}</strong>
-                                <span>
-                                  {review.item.calories} cal · P {review.item.protein || "0"}g / C {review.item.carbs || "0"}g / F {review.item.fat || "0"}g
-                                </span>
-                                <span>{review.item.serving && `${review.item.serving} · `}{review.item.quantity || "1"} serving{review.item.quantity === "1" ? "" : "s"}</span>
-                              </div>
-                              <label className="import-review-match">
-                                Match
-                                <div className="import-review-match-control">
-                                  <select
-                                    value={selectedMatch}
-                                    onChange={(event) => updateImportReviewSelection(review.item.id, event.target.value)}
-                                  >
-                                    {review.candidates.map((candidate: any) => (
-                                      <option key={candidate.key} value={candidate.key}>
-                                        {candidate.food.name} · {candidate.sourceLabel} · {candidate.food.servingSize} · {candidate.food.calories} cal · P {Number(candidate.food.protein.toFixed(1))} / C {Number(candidate.food.carbs.toFixed(1))} / F {Number(candidate.food.fat.toFixed(1))} · {candidate.confidence}
-                                      </option>
-                                    ))}
-                                    <option value="new">Create as new custom food</option>
-                                  </select>
-                                  <button
-                                    type="button"
-                                    className="import-review-search-button"
-                                    aria-label={`Search override for ${review.item.name}`}
-                                    onClick={() => openImportReviewManualSearch(review.item)}
-                                  >
-                                    ⌕
-                                  </button>
-                                </div>
-                              </label>
-                              <div className="import-review-meta">
-                                {importReviewRememberedRows[review.item.id] && (
-                                  <span className="import-review-remembered-label">Matched from earlier selection</span>
-                                )}
-                                {review.candidates.length > 0 ? review.candidates.slice(0, 3).map((candidate: any) => (
-                                  <span key={candidate.key}>
-                                    {candidate.sourceLabel}: {candidate.nameSimilarity}% · {candidate.confidence}
+                        if (isCollapsed) {
+                          const firstReview = reviewGroup.reviews[0];
+                          return (
+                            <button
+                              type="button"
+                              className="import-review-collapsed-row"
+                              key={reviewGroup.key}
+                              onClick={() => expandImportReviewGroup(firstReview.item)}
+                            >
+                              <span>{firstReview.item.name}</span>
+                              <strong>
+                                {getImportReviewActionLabel(collapsedAction)}
+                                {reviewGroup.reviews.length > 1 && ` (×${reviewGroup.reviews.length})`}
+                              </strong>
+                            </button>
+                          );
+                        }
+
+                        return reviewGroup.reviews.map((review) => {
+                          const selectedMatch = importReviewSelections[review.item.id] ?? review.candidates[0]?.key ?? "new";
+                          const action = importReviewActions[review.item.id];
+                          const isApplied = action === "applied" && importReviewAppliedSelections[review.item.id] === selectedMatch;
+                          const isRejected = action === "rejected";
+                          const isUnresolved = unresolvedImportReviewIds.includes(review.item.id);
+
+                          return (
+                            <div
+                              className={`import-review-row${isApplied ? " is-applied" : ""}${isRejected ? " is-rejected" : ""}${isUnresolved ? " is-unresolved" : ""}`}
+                              key={review.item.id}
+                            >
+                              <div className="import-review-main">
+                                <div className="import-review-imported">
+                                  <strong>{review.item.name}</strong>
+                                  <span>
+                                    {review.item.calories} cal · P {review.item.protein || "0"}g / C {review.item.carbs || "0"}g / F {review.item.fat || "0"}g
                                   </span>
-                                )) : <span>No existing matches found.</span>}
+                                  <span>{review.item.serving && `${review.item.serving} · `}{review.item.quantity || "1"} serving{review.item.quantity === "1" ? "" : "s"}</span>
+                                </div>
+                                <label className="import-review-match">
+                                  Match
+                                  <div className="import-review-match-control">
+                                    <select
+                                      value={selectedMatch}
+                                      onChange={(event) => updateImportReviewSelection(review.item.id, event.target.value)}
+                                    >
+                                      {review.candidates.map((candidate) => (
+                                        <option key={candidate.key} value={candidate.key}>
+                                          {getFoodDisplayName(candidate.food)} · {candidate.sourceLabel} · {candidate.food.servingSize} · {candidate.food.calories} cal · P {Number(candidate.food.protein.toFixed(1))} / C {Number(candidate.food.carbs.toFixed(1))} / F {Number(candidate.food.fat.toFixed(1))}
+                                        </option>
+                                      ))}
+                                      <option value="new">Create as new custom food</option>
+                                    </select>
+                                    <button
+                                      type="button"
+                                      className="import-review-search-button"
+                                      aria-label={`Search override for ${review.item.name}`}
+                                      onClick={() => openImportReviewManualSearch(review.item)}
+                                    >
+                                      ⌕
+                                    </button>
+                                  </div>
+                                </label>
+                                <div className="import-review-meta">
+                                  {importReviewRememberedRows[review.item.id] && (
+                                    <span className="import-review-remembered-label">Matched from earlier selection</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="import-review-actions">
+                                <button
+                                  type="button"
+                                  className={`secondary-button${isApplied ? " is-applied" : ""}`}
+                                  aria-pressed={isApplied}
+                                  onClick={() => applyImportReviewToSimilar(review.item)}
+                                >
+                                  {isApplied ? "Applied" : "Apply"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`secondary-button danger-menu-item${isRejected ? " is-rejected" : ""}`}
+                                  aria-pressed={isRejected}
+                                  onClick={() => rejectImportReviewItem(review.item)}
+                                >
+                                  {isRejected ? "Rejected" : "Reject"}
+                                </button>
                               </div>
                             </div>
-                            <div className="import-review-actions">
-                              <button
-                                type="button"
-                                className={`secondary-button${isApplied ? " is-applied" : ""}`}
-                                aria-pressed={isApplied}
-                                onClick={() => applyImportReviewToSimilar(review.item)}
-                              >
-                                {isApplied ? "Applied" : "Apply"}
-                              </button>
-                              <button
-                                type="button"
-                                className={`secondary-button danger-menu-item${isRejected ? " is-rejected" : ""}`}
-                                aria-pressed={isRejected}
-                                onClick={() => rejectImportReviewItem(review.item)}
-                              >
-                                {isRejected ? "Rejected" : "Reject"}
-                              </button>
-                            </div>
-                          </div>
-                        );
+                          );
+                        });
                       })}
                     </div>
                   ))}
@@ -1309,10 +1370,10 @@ export function LogView(props: LogViewProps) {
               {importReviewManualGroups.length === 0 && (
                 <p className="empty-meal">Search local foods, custom foods, recipes, and USDA foods.</p>
               )}
-              {importReviewManualGroups.map((group: any) => (
+              {(importReviewManualGroups as ImportManualGroupUi[]).map((group) => (
                 <section className="import-manual-result-group" key={group.label}>
                   <h3>{group.label}</h3>
-                  {group.foods.map((food: any) => (
+                  {group.foods.map((food) => (
                     <button
                       type="button"
                       className="import-manual-result-row"

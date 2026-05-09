@@ -464,6 +464,35 @@ button {
   box-shadow: 0 0 0 2px rgba(252, 165, 165, 0.16);
 }
 
+.import-review-collapsed-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: var(--ui-border);
+  border-radius: var(--ui-radius);
+  padding: 0.7rem 0.75rem;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--surface-2) 72%, var(--surface));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.import-review-collapsed-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-review-collapsed-row strong {
+  flex: 0 0 auto;
+  color: var(--fg-2);
+  font-size: 0.85rem;
+}
+
 .import-review-main {
   display: grid;
   gap: 0.65rem;

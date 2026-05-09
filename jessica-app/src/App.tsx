@@ -166,6 +166,9 @@ type ImportFoodCandidate = {
   nameSimilarity: number;
   unitCompatible: boolean;
   nutritionEdge: boolean;
+  specificityCoverage: number;
+  genericPenalty: number;
+  isGenericMatch: boolean;
 };
 
 type ImportReviewItem = {
@@ -398,17 +401,47 @@ function buildImportFoodFromDraft(item: FoodLogImportDraft, id: number): ImportF
 }
 
 function normalizeImportMatchName(value: string) {
-  return normalizeImportKeyPart(value)
+  return canonicalizeImportTokenSequence(normalizeImportKeyPart(value)
     .split(" ")
-    .map((word) => {
-      if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
-      if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
-      if (word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
-      return word;
-    })
-    .filter(Boolean)
+    .map(singularizeImportToken)
+    .filter(Boolean))
     .sort()
     .join(" ");
+}
+
+function singularizeImportToken(word: string) {
+  if (word === "cookies") return "cookie";
+  if (word.length > 3 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (word.length > 3 && word.endsWith("es")) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s")) return word.slice(0, -1);
+  return word;
+}
+
+function canonicalizeImportTokenSequence(tokens: string[]) {
+  const canonical: string[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const next = tokens[index + 1];
+
+    if (token === "cheezits" || token === "cheezit") {
+      canonical.push("cheez", "it");
+      continue;
+    }
+    if (token === "cheez" && (next === "its" || next === "it")) {
+      canonical.push("cheez", "it");
+      index += 1;
+      continue;
+    }
+    if (token === "its") {
+      canonical.push("it");
+      continue;
+    }
+
+    canonical.push(token);
+  }
+
+  return canonical;
 }
 
 function normalizeImportName(name: string) {
@@ -489,8 +522,188 @@ const importPreparedCoreTokens = new Set([
   "wrap",
 ]);
 
+const importReversePreparedTokens = new Set([
+  "bar",
+  "cream",
+  "drink",
+  "isolate",
+  "mix",
+  "powder",
+  "protein",
+  "shake",
+  "smoothie",
+  "whey",
+  "yogurt",
+]);
+
+const importCoreFoodTokens = new Set([
+  "bagel",
+  "bar",
+  "bean",
+  "beef",
+  "bread",
+  "burrito",
+  "cake",
+  "cereal",
+  "cheese",
+  "chicken",
+  "chip",
+  "coffee",
+  "cookie",
+  "cracker",
+  "cream",
+  "dressing",
+  "egg",
+  "fish",
+  "granola",
+  "juice",
+  "meal",
+  "milk",
+  "muffin",
+  "noodle",
+  "oat",
+  "oatmeal",
+  "pasta",
+  "pork",
+  "potato",
+  "powder",
+  "protein",
+  "rice",
+  "salad",
+  "salmon",
+  "sandwich",
+  "sauce",
+  "shake",
+  "smoothie",
+  "soup",
+  "tea",
+  "tuna",
+  "turkey",
+  "wrap",
+  "yogurt",
+]);
+
+const importStopTokens = new Set([
+  "a",
+  "an",
+  "and",
+  "by",
+  "for",
+  "from",
+  "in",
+  "of",
+  "or",
+  "per",
+  "the",
+  "to",
+  "with",
+  "without",
+]);
+
+const importWeakSpecificityTokens = new Set([
+  "added",
+  "brown",
+  "diet",
+  "fat",
+  "flavor",
+  "flavored",
+  "free",
+  "fresh",
+  "instant",
+  "light",
+  "low",
+  "lower",
+  "maple",
+  "natural",
+  "organic",
+  "original",
+  "plain",
+  "reduced",
+  "sugar",
+  "sweetened",
+  "unsweetened",
+]);
+
+const importCoreEquivalentGroups = [
+  ["oat", "oatmeal"],
+  ["chip", "cracker"],
+  ["shake", "smoothie"],
+];
+
+function getRawImportTokens(name: string) {
+  return canonicalizeImportTokenSequence(normalizeImportKeyPart(name)
+    .split(" ")
+    .map(singularizeImportToken)
+    .filter(Boolean));
+}
+
+function getMeaningfulImportTokens(name: string) {
+  return getRawImportTokens(name).filter((token) => !importStopTokens.has(token));
+}
+
+function getSpecificImportTokens(tokens: string[]) {
+  return tokens.filter((token) => !importWeakSpecificityTokens.has(token));
+}
+
 function getImportNameTokens(normalizedName: string) {
   return normalizedName.split(" ").filter(Boolean);
+}
+
+function areEquivalentImportCoreTokens(left: string, right: string) {
+  if (left === right) return true;
+  return importCoreEquivalentGroups.some((group) => group.includes(left) && group.includes(right));
+}
+
+function hasCompatibleCoreFood(importedTokens: string[], candidateTokens: string[]) {
+  const importedCoreTokens = importedTokens.filter((token) => importCoreFoodTokens.has(token));
+  if (importedCoreTokens.length === 0) return true;
+
+  const candidateCoreTokens = candidateTokens.filter((token) => importCoreFoodTokens.has(token));
+  return importedCoreTokens.some((importedToken) =>
+    candidateCoreTokens.some((candidateToken) => areEquivalentImportCoreTokens(importedToken, candidateToken))
+  );
+}
+
+function getImportSpecificityCoverage(importedTokens: string[], candidateTokens: string[]) {
+  const importedSpecificTokens = Array.from(new Set(getSpecificImportTokens(importedTokens)));
+  if (importedSpecificTokens.length === 0) return 1;
+
+  const candidateTokenSet = new Set(candidateTokens);
+  const matched = importedSpecificTokens.filter((token) => candidateTokenSet.has(token)).length;
+  return matched / importedSpecificTokens.length;
+}
+
+function getCandidateSpecificityCoverage(importedTokens: string[], candidateTokens: string[]) {
+  const candidateSpecificTokens = Array.from(new Set(getSpecificImportTokens(candidateTokens)));
+  if (candidateSpecificTokens.length === 0) return 1;
+
+  const importedTokenSet = new Set(importedTokens);
+  const matched = candidateSpecificTokens.filter((token) => importedTokenSet.has(token)).length;
+  return matched / candidateSpecificTokens.length;
+}
+
+function hasUnsupportedPreparedSpecificity(importedTokens: string[], candidateTokens: string[]) {
+  const importedTokenSet = new Set(importedTokens);
+  const importedPreparedTokens = importedTokens.filter((token) => importReversePreparedTokens.has(token));
+  const candidatePreparedTokens = candidateTokens.filter((token) => importReversePreparedTokens.has(token));
+
+  if (importedPreparedTokens.length > 0) return false;
+  return candidatePreparedTokens.some((token) => !importedTokenSet.has(token));
+}
+
+function isGenericImportCandidate(importedTokens: string[], candidateTokens: string[], specificityCoverage: number) {
+  const importedSpecificCount = new Set(getSpecificImportTokens(importedTokens)).size;
+  const candidateSpecificCount = new Set(getSpecificImportTokens(candidateTokens)).size;
+  if (importedSpecificCount >= 5 && candidateSpecificCount <= 3 && specificityCoverage < 0.55) return true;
+  return importedSpecificCount >= 2 && candidateSpecificCount < importedSpecificCount && specificityCoverage < 0.75;
+}
+
+function getImportCandidateRankScore(candidate: ImportFoodCandidate) {
+  const sourceBonus: Record<ImportMatchSource, number> = { local: 30, custom: 24, recipe: 18, usda: 0 };
+  return candidate.nameSimilarity +
+    candidate.specificityCoverage * 35 +
+    sourceBonus[candidate.source] -
+    candidate.genericPenalty;
 }
 
 function hasIngredientOnlyCandidateMismatch(importedNormalizedName: string, candidateNormalizedName: string) {
@@ -612,13 +825,26 @@ function isWithinImportTolerance(imported: number, candidate: number, limit: num
   return Math.abs(imported - candidate) <= tolerance;
 }
 
-function getToleranceRatio(imported: number, candidate: number, limit: number, percent: number) {
-  const tolerance = imported > limit ? Math.abs(imported) * percent : limit === 50 ? 5 : 1;
-  return tolerance > 0 ? Math.abs(imported - candidate) / tolerance : 0;
-}
-
 function comparableMacroValue(value: number | undefined) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function getCalorieScaledImportQuantity(imported: ImportFoodResolution, food: Pick<Food, "calories" | "name" | "servingSize">) {
+  if (!Number.isFinite(food.calories) || food.calories <= 0) {
+    return getFoodQuantityRatio(imported.food, food);
+  }
+
+  const importedTotalCalories = parseDecimalInput(imported.importAudit.calories);
+  if (Number.isFinite(importedTotalCalories) && importedTotalCalories > 0) {
+    return importedTotalCalories / food.calories;
+  }
+
+  const reconstructedTotalCalories = imported.food.calories * imported.quantity;
+  if (Number.isFinite(reconstructedTotalCalories) && reconstructedTotalCalories > 0) {
+    return reconstructedTotalCalories / food.calories;
+  }
+
+  return getFoodQuantityRatio(imported.food, food);
 }
 
 function getImportFoodCandidate(
@@ -629,78 +855,55 @@ function getImportFoodCandidate(
   candidateNormalizedName = normalizeImportMatchName(food.name)
 ): ImportFoodCandidate | null {
   const nameSimilarity = tokenSortSimilarityNormalized(importedNormalizedName, candidateNormalizedName);
-  if (nameSimilarity < 75) return null;
+  if (nameSimilarity < 65) return null;
   if (hasIngredientOnlyCandidateMismatch(importedNormalizedName, candidateNormalizedName)) return null;
+
+  const importedTokens = getMeaningfulImportTokens(imported.food.name);
+  const candidateTokens = getMeaningfulImportTokens(food.name);
+  if (!hasCompatibleCoreFood(importedTokens, candidateTokens)) return null;
+  if (hasUnsupportedPreparedSpecificity(importedTokens, candidateTokens)) return null;
 
   const importedBasis = parseImportServingBasis(imported.food.servingSize);
   const candidateBasis = parseImportServingBasis(food.servingSize);
   const ratio = importFoodUnitRatio(importedBasis, candidateBasis, imported.food.name, food.name);
-  const equivalentServingBasis = importedBasis.unitLabel === candidateBasis.unitLabel || ratio !== null;
   const unitCompatible = ratio !== null;
-  const scale = ratio ?? 1;
-  const candidateCalories = food.calories * scale;
-  const macroPairs: Array<[number | null, number | null, number, number]> = [
-    [comparableMacroValue(imported.food.protein), comparableMacroValue(food.protein), 5, 0.1],
-    [comparableMacroValue(imported.food.carbs), comparableMacroValue(food.carbs), 5, 0.1],
-    [comparableMacroValue(imported.food.fat), comparableMacroValue(food.fat), 5, 0.1],
-  ];
-  const comparableMacros = macroPairs
-    .map(([importedValue, candidateValue, limit, percent]) =>
-      importedValue !== null && candidateValue !== null
-        ? { importedValue, candidateValue: candidateValue * scale, limit, percent }
-        : null
-    )
-    .filter((pair): pair is { importedValue: number; candidateValue: number; limit: number; percent: number } => pair !== null);
-
-  const tight = !unitCompatible;
-  const calorieOk = isWithinImportTolerance(imported.food.calories, candidateCalories, 50, tight ? 0.025 : 0.05);
-  const macrosOk = comparableMacros.every(({ importedValue, candidateValue, limit, percent }) =>
-    isWithinImportTolerance(importedValue, candidateValue, limit, tight ? percent / 2 : percent)
-  );
-  const looseCalorieOk = isWithinImportTolerance(imported.food.calories, candidateCalories, 50, 0.1);
-  const isPossibleLowConfidence =
-    nameSimilarity >= 90 ||
-    (nameSimilarity >= 75 && looseCalorieOk);
-  if (!unitCompatible && (nameSimilarity < 95 || (!calorieOk && !isPossibleLowConfidence))) return null;
-  if ((!calorieOk || !macrosOk) && !isPossibleLowConfidence) return null;
-
-  const edge = getToleranceRatio(imported.food.calories, candidateCalories, 50, 0.05) >= 0.85 ||
-    comparableMacros.some(({ importedValue, candidateValue, limit, percent }) =>
-      getToleranceRatio(importedValue, candidateValue, limit, percent) >= 0.85
-    );
+  const specificityCoverage = getImportSpecificityCoverage(importedTokens, candidateTokens);
+  const candidateSpecificityCoverage = getCandidateSpecificityCoverage(importedTokens, candidateTokens);
+  const isGenericMatch = isGenericImportCandidate(importedTokens, candidateTokens, specificityCoverage);
+  const genericPenalty = (isGenericMatch ? 35 : 0) + (candidateSpecificityCoverage < 0.35 ? 20 : 0);
   const confidence: ImportConfidenceTier =
-    calorieOk && macrosOk
-      ? nameSimilarity >= 90 && !edge && equivalentServingBasis ? "high" : "medium"
-      : "low";
+    nameSimilarity >= 90 ? "high" : nameSimilarity >= 75 ? "medium" : "low";
   const sourceOrder: Record<ImportMatchSource, number> = { local: 4, custom: 3, recipe: 2, usda: 1 };
+  const score = nameSimilarity * 100 + sourceOrder[source];
 
   return {
     key: `${source}:${food.id}`,
     source,
     sourceLabel: source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "USDA",
     food,
-    score: nameSimilarity * 100 + sourceOrder[source],
+    score,
     confidence,
-    quantity: unitCompatible && ratio !== null ? imported.quantity * ratio : getFoodQuantityRatio(imported.food, food),
+    quantity: getCalorieScaledImportQuantity(imported, food),
     nameSimilarity,
     unitCompatible,
-    nutritionEdge: edge,
+    nutritionEdge: false,
+    specificityCoverage,
+    genericPenalty,
+    isGenericMatch,
   };
 }
 
 function rankImportCandidates(candidates: ImportFoodCandidate[]) {
-  const confidenceOrder: Record<ImportConfidenceTier, number> = { high: 3, medium: 2, low: 1 };
-  const sourceOrder: Record<ImportMatchSource, number> = { local: 4, custom: 3, recipe: 2, usda: 1 };
   return [...candidates].sort((a, b) =>
-    confidenceOrder[b.confidence] - confidenceOrder[a.confidence] ||
-    b.score - a.score ||
-    sourceOrder[b.source] - sourceOrder[a.source]
+    getImportCandidateRankScore(b) - getImportCandidateRankScore(a) ||
+    b.nameSimilarity - a.nameSimilarity ||
+    b.score - a.score
   );
 }
 
 function getDefaultImportReviewSelection(review: ImportReviewItem) {
   const top = review.candidates[0];
-  return top && top.confidence !== "low" ? top.key : "new";
+  return top ? top.key : "new";
 }
 
 const importCandidateCache = new Map<string, ImportFoodCandidate[]>();
@@ -784,12 +987,9 @@ function resolveImportItemFromCandidate(
   imported: ImportFoodResolution,
   candidate: ImportFoodCandidate
 ): ImportFoodResolution {
-  const importedBasis = parseImportServingBasis(imported.food.servingSize);
-  const candidateBasis = parseImportServingBasis(candidate.food.servingSize);
-  const ratio = importFoodUnitRatio(importedBasis, candidateBasis, imported.food.name, candidate.food.name);
   return {
     food: candidate.food,
-    quantity: ratio !== null ? imported.quantity * ratio : getFoodQuantityRatio(imported.food, candidate.food),
+    quantity: getCalorieScaledImportQuantity(imported, candidate.food),
     importAudit: makeImportAudit(item, candidate.sourceLabel, candidate.food.id, candidate.confidence),
   };
 }
@@ -838,8 +1038,8 @@ async function buildImportFoodBatchResolver(
     let candidates = importCandidateCache.get(uniqueKey);
     if (!candidates) {
       const baseCandidates = buildImportCandidatesFromIndex(group.imported, baseCandidateIndex);
-      const hasGoodBaseCandidate = baseCandidates.some((candidate) => candidate.confidence !== "low");
-      if (hasGoodBaseCandidate) {
+      const bestBaseCandidate = baseCandidates[0];
+      if (bestBaseCandidate && !bestBaseCandidate.isGenericMatch) {
         candidates = baseCandidates;
       } else {
         const usdaFoods = await getUsdaImportCandidates(group.item.name);
@@ -1126,6 +1326,7 @@ function App() {
   const [importReviewSelections, setImportReviewSelections] = useState<Record<string, string>>({});
   const [importReviewAppliedSelections, setImportReviewAppliedSelections] = useState<Record<string, string>>({});
   const [importReviewActions, setImportReviewActions] = useState<Record<string, ImportReviewAction>>({});
+  const [expandedImportReviewGroups, setExpandedImportReviewGroups] = useState<Record<string, boolean>>({});
   const [importReviewManualCandidates, setImportReviewManualCandidates] = useState<Record<string, ImportFoodCandidate>>({});
   const [rememberedImportMatches, setRememberedImportMatches] = useState<Record<string, ImportFoodCandidate>>({});
   const [importReviewRememberedRows, setImportReviewRememberedRows] = useState<Record<string, boolean>>({});
@@ -1955,6 +2156,7 @@ function App() {
       setImportReviewSelections({});
       setImportReviewAppliedSelections({});
       setImportReviewActions({});
+      setExpandedImportReviewGroups({});
       setImportReviewManualCandidates({});
       setRememberedImportMatches({});
       setImportReviewRememberedRows({});
@@ -2042,6 +2244,7 @@ function App() {
     setImportReviewSelections({});
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setExpandedImportReviewGroups({});
     setImportReviewManualCandidates({});
     setRememberedImportMatches({});
     setImportReviewRememberedRows({});
@@ -2065,6 +2268,7 @@ function App() {
     setImportReviewSelections({});
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setExpandedImportReviewGroups({});
     setImportReviewManualCandidates({});
     setRememberedImportMatches({});
     setImportReviewRememberedRows({});
@@ -2163,6 +2367,7 @@ function App() {
     ));
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setExpandedImportReviewGroups({});
     setImportReviewManualCandidates(nextManualCandidates);
     setImportReviewRememberedRows(nextRememberedRows);
     setImportReviewManualTarget(null);
@@ -2339,6 +2544,7 @@ function App() {
       setImportReviewSelections({});
       setImportReviewAppliedSelections({});
       setImportReviewActions({});
+      setExpandedImportReviewGroups({});
       setImportReviewManualCandidates({});
       setRememberedImportMatches({});
       setImportReviewRememberedRows({});
@@ -2359,26 +2565,29 @@ function App() {
   }
 
   function updateImportReviewSelection(itemId: string, value: string) {
-    setImportReviewSelections((current) => ({ ...current, [itemId]: value }));
+    const item = importReviewItems.find((review) => review.item.id === itemId)?.item;
+    const groupItems = item ? getImportReviewGroupItems(item) : [];
+    const groupIds = groupItems.length > 0 ? groupItems.map((groupItem) => groupItem.id) : [itemId];
+    const groupUpdates = Object.fromEntries(groupIds.map((id) => [id, value]));
+
+    setImportReviewSelections((current) => ({ ...current, ...groupUpdates }));
     setImportReviewAppliedSelections((current) => {
-      if (!(itemId in current)) return current;
       const next = { ...current };
-      delete next[itemId];
+      groupIds.forEach((id) => delete next[id]);
       return next;
     });
     setImportReviewActions((current) => {
-      if (!(itemId in current)) return current;
       const next = { ...current };
-      delete next[itemId];
+      groupIds.forEach((id) => delete next[id]);
       return next;
     });
     setImportReviewRememberedRows((current) => {
-      if (!(itemId in current)) return current;
       const next = { ...current };
-      delete next[itemId];
+      groupIds.forEach((id) => delete next[id]);
       return next;
     });
-    setUnresolvedImportReviewIds((current) => current.filter((id) => id !== itemId));
+    if (item) setExpandedImportReviewGroups((current) => ({ ...current, [getImportReviewGroupKey(item)]: true }));
+    setUnresolvedImportReviewIds((current) => current.filter((id) => !groupIds.includes(id)));
     setImportErrors([]);
   }
 
@@ -2388,36 +2597,44 @@ function App() {
       (importReviewManualCandidates[item.id]?.key === selected ? importReviewManualCandidates[item.id] : null);
   }
 
+  function getImportReviewGroupKey(item: FoodLogImportDraft) {
+    return normalizeImportName(item.name);
+  }
+
+  function getImportReviewGroupItems(item: FoodLogImportDraft) {
+    const groupKey = getImportReviewGroupKey(item);
+    return importReviewItems
+      .map((review) => review.item)
+      .filter((reviewItem) => getImportReviewGroupKey(reviewItem) === groupKey);
+  }
+
+  function expandImportReviewGroup(item: FoodLogImportDraft) {
+    setExpandedImportReviewGroups((current) => ({ ...current, [getImportReviewGroupKey(item)]: true }));
+  }
+
   function applyImportReviewToSimilar(item: FoodLogImportDraft) {
     const selected = importReviewSelections[item.id] ?? "new";
     const selectedCandidate = selected === "new" ? null : getImportReviewCandidateForSelection(item, selected);
     const rememberedKey = normalizeImportName(item.name);
-    const defaultSelectionById = new Map(
-      importReviewItems.map((review) => [review.item.id, getDefaultImportReviewSelection(review)])
-    );
     const candidatesById: Record<string, ImportFoodCandidate> = {};
-    const selectionById: Record<string, string> = { [item.id]: selected };
-    const appliedById: Record<string, string> = { [item.id]: selected };
-    const actionById: Record<string, ImportReviewAction> = { [item.id]: "applied" };
+    const groupItems = getImportReviewGroupItems(item);
+    const selectionById: Record<string, string> = {};
+    const appliedById: Record<string, string> = {};
+    const actionById: Record<string, ImportReviewAction> = {};
     const rememberedRowsById: Record<string, boolean> = {};
 
-    if (selectedCandidate) {
-      for (const review of importReviewItems) {
-        if (review.item.id === item.id) continue;
-        if (normalizeImportName(review.item.name) !== rememberedKey) continue;
-        if (importReviewActions[review.item.id]) continue;
+    for (const groupItem of groupItems) {
+      actionById[groupItem.id] = "applied";
 
-        const currentSelection = importReviewSelections[review.item.id];
-        const defaultSelection = defaultSelectionById.get(review.item.id);
-        const isUnchanged = currentSelection === undefined || currentSelection === defaultSelection || importReviewRememberedRows[review.item.id];
-        if (!isUnchanged) continue;
-
-        const candidate = buildManualImportCandidate(review.item, selectedCandidate.food);
-        candidatesById[review.item.id] = candidate;
-        selectionById[review.item.id] = candidate.key;
-        appliedById[review.item.id] = candidate.key;
-        actionById[review.item.id] = "applied";
-        rememberedRowsById[review.item.id] = true;
+      if (selectedCandidate && groupItem.id !== item.id) {
+        const candidate = buildManualImportCandidate(groupItem, selectedCandidate.food);
+        candidatesById[groupItem.id] = candidate;
+        selectionById[groupItem.id] = candidate.key;
+        appliedById[groupItem.id] = candidate.key;
+        rememberedRowsById[groupItem.id] = true;
+      } else {
+        selectionById[groupItem.id] = selected;
+        appliedById[groupItem.id] = selected;
       }
     }
 
@@ -2447,25 +2664,27 @@ function App() {
       delete next[item.id];
       return { ...next, ...rememberedRowsById };
     });
+    setExpandedImportReviewGroups((current) => ({ ...current, [rememberedKey]: false }));
     setUnresolvedImportReviewIds((current) => current.filter((id) => !(id in actionById)));
     setImportErrors([]);
   }
 
   function rejectImportReviewItem(item: FoodLogImportDraft) {
-    setImportReviewActions((current) => ({ ...current, [item.id]: "rejected" }));
+    const groupKey = getImportReviewGroupKey(item);
+    const rejectedById = Object.fromEntries(getImportReviewGroupItems(item).map((groupItem) => [groupItem.id, "rejected" as const]));
+    setImportReviewActions((current) => ({ ...current, ...rejectedById }));
     setImportReviewAppliedSelections((current) => {
-      if (!(item.id in current)) return current;
       const next = { ...current };
-      delete next[item.id];
+      Object.keys(rejectedById).forEach((id) => delete next[id]);
       return next;
     });
     setImportReviewRememberedRows((current) => {
-      if (!(item.id in current)) return current;
       const next = { ...current };
-      delete next[item.id];
+      Object.keys(rejectedById).forEach((id) => delete next[id]);
       return next;
     });
-    setUnresolvedImportReviewIds((current) => current.filter((id) => id !== item.id));
+    setExpandedImportReviewGroups((current) => ({ ...current, [groupKey]: false }));
+    setUnresolvedImportReviewIds((current) => current.filter((id) => !(id in rejectedById)));
     setImportErrors([]);
   }
 
@@ -2482,6 +2701,10 @@ function App() {
     const candidateBasis = parseImportServingBasis(food.servingSize);
     const ratio = importFoodUnitRatio(importedBasis, candidateBasis, imported.food.name, food.name);
     const autoCandidate = getImportFoodCandidate(imported, food, source);
+    const importedTokens = getMeaningfulImportTokens(imported.food.name);
+    const candidateTokens = getMeaningfulImportTokens(food.name);
+    const specificityCoverage = autoCandidate?.specificityCoverage ?? getImportSpecificityCoverage(importedTokens, candidateTokens);
+    const isGenericMatch = autoCandidate?.isGenericMatch ?? isGenericImportCandidate(importedTokens, candidateTokens, specificityCoverage);
     const key = `manual:${source}:${food.id}`;
 
     return {
@@ -2491,10 +2714,13 @@ function App() {
       food,
       score: autoCandidate?.score ?? 0,
       confidence: autoCandidate?.confidence ?? "medium",
-      quantity: ratio !== null ? imported.quantity * ratio : getFoodQuantityRatio(imported.food, food),
+      quantity: getCalorieScaledImportQuantity(imported, food),
       nameSimilarity: autoCandidate?.nameSimilarity ?? tokenSortSimilarityNormalized(normalizeImportMatchName(imported.food.name), normalizeImportMatchName(food.name)),
       unitCompatible: autoCandidate?.unitCompatible ?? ratio !== null,
       nutritionEdge: autoCandidate?.nutritionEdge ?? false,
+      specificityCoverage,
+      genericPenalty: autoCandidate?.genericPenalty ?? (isGenericMatch ? 35 : 0),
+      isGenericMatch,
     };
   }
 
@@ -2535,17 +2761,9 @@ function App() {
 
     const item = importReviewManualTarget;
     const rememberedKey = normalizeImportName(item.name);
-    const defaultSelectionById = new Map(
-      importReviewItems.map((review) => [review.item.id, getDefaultImportReviewSelection(review)])
-    );
     const matchingReviews = importReviewItems.filter((review) => {
       if (normalizeImportName(review.item.name) !== rememberedKey) return false;
-      if (review.item.id === item.id) return true;
-      if (importReviewActions[review.item.id]) return false;
-
-      const currentSelection = importReviewSelections[review.item.id];
-      const defaultSelection = defaultSelectionById.get(review.item.id);
-      return currentSelection === undefined || currentSelection === defaultSelection || importReviewRememberedRows[review.item.id];
+      return true;
     });
     const candidatesById = Object.fromEntries(
       matchingReviews.map((review) => [review.item.id, buildManualImportCandidate(review.item, food)])
@@ -2590,6 +2808,7 @@ function App() {
       delete next[item.id];
       return { ...next, ...rememberedRowsById };
     });
+    setExpandedImportReviewGroups((current) => ({ ...current, [rememberedKey]: true }));
     setUnresolvedImportReviewIds((current) => current.filter((id) => !(id in candidatesById)));
     setImportErrors([]);
     closeImportReviewManualSearch();
@@ -2754,6 +2973,7 @@ function App() {
     setImportReviewSelections({});
     setImportReviewAppliedSelections({});
     setImportReviewActions({});
+    setExpandedImportReviewGroups({});
     setImportReviewManualCandidates({});
     setRememberedImportMatches({});
     setImportReviewRememberedRows({});
@@ -3826,6 +4046,7 @@ function startEditWeightEntry(entry: WeightEntry) {
         importReviewSelections,
         importReviewAppliedSelections,
         importReviewActions,
+        expandedImportReviewGroups,
         importReviewRememberedRows,
         importReviewManualTarget,
         importReviewManualQuery,
@@ -3837,6 +4058,7 @@ function startEditWeightEntry(entry: WeightEntry) {
         updateImportReviewSelection,
         applyImportReviewToSimilar,
         rejectImportReviewItem,
+        expandImportReviewGroup,
         openImportReviewManualSearch,
         closeImportReviewManualSearch,
         searchImportReviewManualFoods,
