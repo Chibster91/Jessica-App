@@ -1,3 +1,5 @@
+import foodIconMappingConfig from "./assets/icons/food_icon_mapping.json";
+
 type Food = {
   id: number;
   name: string;
@@ -366,126 +368,15 @@ const googleDriveClientIdKey = "googleDriveClientId";
 const oauthPendingActionKey = "oauthPendingAction";
 const googleDriveScope = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly";
 const googleIdentityScriptUrl = "https://accounts.google.com/gsi/client";
-const iconBaseUrl = `${import.meta.env.BASE_URL}Icons/`;
-
-const foodIconRules: [string, string][] = [
-  ["apple", "apple.svg"],
-  ["avocado", "avocado.svg"],
-  ["bacon", "bacon.svg"],
-  ["banana", "banana.svg"],
-  ["blueberry", "blueberries.svg"],
-  ["blueberries", "blueberries.svg"],
-  ["broccoli", "broccoli.svg"],
-  ["cabbage", "cabbage.svg"],
-  ["carrot", "carrot.svg"],
-  ["cherry", "cherry.svg"],
-  ["cherries", "cherry.svg"],
-  ["chicken", "chicken-leg.svg"],
-  ["coconut", "coconut.svg"],
-  ["corn", "corn.svg"],
-  ["cucumber", "cucumber.svg"],
-  ["fish", "fish.svg"],
-  ["garlic", "garlic.svg"],
-  ["grape", "grapes.svg"],
-  ["grapes", "grapes.svg"],
-  ["kiwi", "kiwi.svg"],
-  ["kale", "lettuce.svg"],
-  ["lemon", "lemon.svg"],
-  ["lettuce", "lettuce.svg"],
-  ["lime", "lime.svg"],
-  ["mango", "mango.svg"],
-  ["mushroom", "mushroom.svg"],
-  ["onion", "onion.svg"],
-  ["orange", "orange.svg"],
-  ["peach", "peach.svg"],
-  ["pear", "pear.svg"],
-  ["pineapple", "pineapple.svg"],
-  ["potato", "potato.svg"],
-  ["raspberry", "raspberry.svg"],
-  ["sausage", "sausage.svg"],
-  ["shrimp", "shrimp.svg"],
-  ["oyster", "shrimp.svg"],
-  ["seafood", "shrimp.svg"],
-  ["strawberry", "strawberry.svg"],
-  ["tomato", "tomato.svg"],
-  ["watermelon", "watermelon.svg"],
-  ["bread", "bread.svg"],
-  ["toast", "bread.svg"],
-  ["bun", "bread.svg"],
-  ["roll", "bread.svg"],
-  ["bagel", "bread.svg"],
-  // Nuts, seeds & nut butters — must come BEFORE "egg" to avoid category-name false match
-  ["almond", "generic-meat.svg"],
-  ["almonds", "generic-meat.svg"],
-  ["walnut", "generic-meat.svg"],
-  ["walnuts", "generic-meat.svg"],
-  ["pecan", "generic-meat.svg"],
-  ["pecans", "generic-meat.svg"],
-  ["cashew", "generic-meat.svg"],
-  ["cashews", "generic-meat.svg"],
-  ["pistachio", "generic-meat.svg"],
-  ["pistachios", "generic-meat.svg"],
-  ["peanut", "generic-meat.svg"],
-  ["peanuts", "generic-meat.svg"],
-  ["hazelnut", "generic-meat.svg"],
-  ["hazelnuts", "generic-meat.svg"],
-  ["macadamia", "generic-meat.svg"],
-  ["sunflower seed", "generic-meat.svg"],
-  ["sunflower seeds", "generic-meat.svg"],
-  ["pumpkin seed", "generic-meat.svg"],
-  ["pumpkin seeds", "generic-meat.svg"],
-  ["chia seed", "generic-meat.svg"],
-  ["chia seeds", "generic-meat.svg"],
-  ["flaxseed", "generic-meat.svg"],
-  ["flaxseeds", "generic-meat.svg"],
-  ["sesame seed", "generic-meat.svg"],
-  ["sesame seeds", "generic-meat.svg"],
-  ["nut butter", "generic-meat.svg"],
-  // Grains & starches
-  ["rice", "bread.svg"],
-  ["oat", "bread.svg"],
-  ["quinoa", "bread.svg"],
-  ["barley", "bread.svg"],
-  ["wheat", "bread.svg"],
-  ["pasta", "bread.svg"],
-  ["noodle", "bread.svg"],
-  ["tortilla", "bread.svg"],
-  ["cracker", "bread.svg"],
-  ["cereal", "bread.svg"],
-  // Eggs — matched on name only (category "Nuts & Seeds & Eggs" would false-match otherwise)
-  ["egg", "egg.svg"],
-  ["eggs", "egg.svg"],
-  ["milk", "milk.svg"],
-  ["cheese", "cheese.svg"],
-  ["yogurt", "yogurt.svg"],
-  ["yoghurt", "yogurt.svg"],
-  ["dairy", "dairy.svg"],
-  ["dessert", "dessert.svg"],
-  ["cake", "dessert.svg"],
-  ["cookie", "dessert.svg"],
-  ["ice cream", "dessert.svg"],
-  ["brownie", "dessert.svg"],
-  ["oil", "oil.svg"],
-  ["butter", "oil.svg"],
-  ["mayo", "oil.svg"],
-  ["mayonnaise", "oil.svg"],
-  ["ranch", "oil.svg"],
-  ["sauce", "oil.svg"],
-  ["dressing", "oil.svg"],
-  ["drink", "drink.svg"],
-  ["coffee", "drink.svg"],
-  ["tea", "drink.svg"],
-  ["juice", "drink.svg"],
-  ["soda", "drink.svg"],
-  ["water", "drink.svg"],
-  ["vegetable", "Vegetable.svg"],
-  ["vegetables", "Vegetable.svg"],
-  ["veggie", "Vegetable.svg"],
-  ["veggies", "Vegetable.svg"],
-  ["fruit", "generic-fruit.svg"],
-  ["meat", "generic-meat.svg"],
-  ["meal", "Meal.svg"],
-];
+const fallbackFoodIcon = "fork_and_knife_with_plate.svg";
+const foodIconAssetUrls = import.meta.glob("./assets/icons/*.svg", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+const foodIconRules = (foodIconMappingConfig.mapping as [string, string][])
+  .map(([keyword, filename]) => [keyword.toLowerCase(), filename] as [string, string])
+  .sort(([left], [right]) => right.length - left.length);
 
 const emptyCustomFoodForm: CustomFoodForm = {
   name: "",
@@ -819,38 +710,17 @@ function escapeRegExp(value: string) {
 }
 
 function matchesFoodIconKeyword(text: string, keyword: string) {
-  return new RegExp(`(^|[^a-z0-9])${escapeRegExp(keyword)}([^a-z0-9]|$)`, "i").test(text);
+  return text.toLowerCase().includes(keyword.toLowerCase());
+}
+
+function getFoodIconAssetUrl(filename: string) {
+  return foodIconAssetUrls[`./assets/icons/${filename}`] ?? foodIconAssetUrls[`./assets/icons/${fallbackFoodIcon}`];
 }
 
 function getFoodIconUrl(food: Pick<Food, "name" | "brand" | "category" | "dataType">) {
-  // Build search texts. We intentionally search name+brand FIRST and separately from
-  // category, to avoid the category string "Nuts & Seeds & Eggs" triggering the egg icon
-  // on almonds or pumpkin seeds.
-  const nameAndBrand = [food.name, food.brand]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  const categoryText = [food.category, food.dataType]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  // Priority 1: exact name/brand match (catches "Eggs, whole", "Almond", etc.)
-  const matchByName = foodIconRules.find(([kw]) => matchesFoodIconKeyword(nameAndBrand, kw));
-  if (matchByName) return `${iconBaseUrl}${matchByName[1]}`;
-
-  // Priority 2: category match — but ONLY for broad/generic category keywords,
-  // not specific food names that could appear as false positives in category strings.
-  // We skip "egg"/"eggs" here so the category "Nuts & Seeds & Eggs" doesn't win.
-  const categoryOnlyKeywords = new Set([
-    "vegetable", "vegetables", "veggie", "veggies",
-    "fruit", "meat", "meal", "dairy", "seafood",
-  ]);
-  const matchByCategory = foodIconRules.find(
-    ([kw]) => categoryOnlyKeywords.has(kw) && matchesFoodIconKeyword(categoryText, kw)
-  );
-
-  return `${iconBaseUrl}${matchByCategory?.[1] ?? "Meal.svg"}`;
+  const name = food.name.toLowerCase();
+  const match = foodIconRules.find(([keyword]) => matchesFoodIconKeyword(name, keyword));
+  return getFoodIconAssetUrl(match?.[1] ?? fallbackFoodIcon);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2566,4 +2436,4 @@ function getConfiguredGoogleClientId() {
 }
 
 export type { Food, RecipeIngredient, Recipe, SearchResultGroup, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, WeightImportEntry, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, OAuthPendingAction, MealCategory, ImportedFoodAudit, LogItem, SavedLogItem };
-export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, iconBaseUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getFoodServingDisplay, getFoodSearchServingDisplay, getFoodSearchCalorieDisplay, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, getAllLocalFoods, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms, searchFoodsGrouped };
+export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getFoodServingDisplay, getFoodSearchServingDisplay, getFoodSearchCalorieDisplay, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, getAllLocalFoods, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms, searchFoodsGrouped };
