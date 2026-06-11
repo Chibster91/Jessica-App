@@ -100,6 +100,10 @@ type PortionOption = {
   value: string;
   label: string;
   gramWeight: number;
+  amount?: number;
+  unitLabel?: string;
+  displayLabel?: string;
+  helperText?: string;
 };
 
 type AddFoodTab = "search" | "recent" | "custom" | "recipes";
@@ -1313,6 +1317,10 @@ function formatGramWeight(gramWeight: number) {
   return Number.isInteger(gramWeight) ? `${gramWeight}g` : `${Number(gramWeight.toFixed(1))}g`;
 }
 
+function formatGramWeightWithSpace(gramWeight: number) {
+  return Number.isInteger(gramWeight) ? `${gramWeight} g` : `${Number(gramWeight.toFixed(1))} g`;
+}
+
 function getLocalPortionUnit(food: Food) {
   return parseServingSize(food.servingSize)?.unit === "ml" ? "ml" : "g";
 }
@@ -1329,8 +1337,7 @@ function getPortionLabel(portion: FoodPortion, foodName: string) {
   const gramWeight = portion.gramWeight ?? 0;
 
   if (modifier) {
-    const label = [amount || "1", modifier, foodName].join(" ");
-    return `${label} (${formatGramWeight(gramWeight)})`;
+    return [amount || "1", modifier, foodName].filter(Boolean).join(" ");
   }
 
   if (amount && measure) {
@@ -1344,16 +1351,144 @@ function getPortionLabel(portion: FoodPortion, foodName: string) {
   return formatGramWeight(gramWeight);
 }
 
-function getPortionOptions(detail: FoodDetail | null, foodName = ""): PortionOption[] {
-  return (
-    detail?.foodPortions
-      ?.map((portion, index) => ({
-        value: String(portion.id ?? index),
-        label: getPortionLabel(portion, foodName),
-        gramWeight: portion.gramWeight ?? 0,
-      }))
-      .filter((portion) => portion.gramWeight > 0) ?? []
+function parseHouseholdServingText(text: string | null | undefined) {
+  const cleaned = cleanPortionText(
+    text
+      ?.replace(/\([^)]*\b(?:g|gram|grams|ml|milliliter|milliliters|oz|ounce|ounces)\b[^)]*\)/gi, "")
+      .replace(/\babout\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim()
   );
+  if (!cleaned) return null;
+
+  const match = cleaned.match(/^(\d+(?:\.\d+)?|\d+\s*\/\s*\d+)\s+(.+)$/);
+  if (!match) {
+    return {
+      amount: 1,
+      label: cleaned,
+      unitLabel: cleaned,
+    };
+  }
+
+  const amount = match[1].includes("/")
+    ? match[1].split("/").map(Number).reduce((numerator, denominator) => denominator ? numerator / denominator : 0)
+    : Number(match[1]);
+  const unitLabel = match[2].trim();
+
+  if (!Number.isFinite(amount) || amount <= 0 || !unitLabel) return null;
+
+  return {
+    amount,
+    label: `${formatPortionAmount(amount)} ${unitLabel}`.trim(),
+    unitLabel,
+  };
+}
+
+function normalizePortionLabelForMatching(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(one|about)\b/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function isRawGramPortionLabel(value: string) {
+  return /^\d+(?:\.\d+)?\s*(g|gram|grams)$/i.test(value.trim());
+}
+
+function getServingBasisGramWeight(detail: FoodDetail | null) {
+  const basis = parseServingSize(detail?.servingSize, detail?.servingSizeUnit ?? "");
+  if (!basis) return null;
+
+  if (basis.unit === "g") return basis.amount;
+  if (basis.unit === "oz") return basis.amount * 28.349523125;
+
+  return null;
+}
+
+function toPortionOption(portion: FoodPortion, index: number, foodName: string): PortionOption | null {
+  const gramWeight = portion.gramWeight ?? 0;
+  if (!Number.isFinite(gramWeight) || gramWeight <= 0) return null;
+
+  const label = getPortionLabel(portion, foodName);
+  if (!label || isRawGramPortionLabel(label) || normalizePortionLabelForMatching(label) === "g") return null;
+
+  const parsed = parseHouseholdServingText(label);
+  const displayLabel =
+    parsed && parsed.amount === 1
+      ? `${parsed.unitLabel} (${formatGramWeightWithSpace(gramWeight)})`
+      : `${label} (${formatGramWeightWithSpace(gramWeight)})`;
+
+  return {
+    value: String(portion.id ?? index),
+    label,
+    gramWeight,
+    amount: parsed?.amount,
+    unitLabel: parsed?.amount === 1 ? parsed.unitLabel : label,
+    displayLabel,
+    helperText: `${label} = ${formatGramWeightWithSpace(gramWeight)}`,
+  };
+}
+
+function getPreferredHouseholdPortion(detail: FoodDetail | null, foodName = ""): PortionOption | undefined {
+  const portionOptions =
+    detail?.foodPortions
+      ?.map((portion, index) => toPortionOption(portion, index, foodName))
+      .filter((portion): portion is PortionOption => Boolean(portion)) ?? [];
+  const household = parseHouseholdServingText(detail?.householdServingFullText);
+  const basisGramWeight = getServingBasisGramWeight(detail);
+
+  if (household && basisGramWeight !== null) {
+    return {
+      value: "__household_serving",
+      label: household.label,
+      gramWeight: basisGramWeight,
+      amount: household.amount,
+      unitLabel: household.amount === 1 ? household.unitLabel : household.label,
+      displayLabel: household.amount === 1
+        ? `${household.unitLabel} (${formatGramWeightWithSpace(basisGramWeight)})`
+        : `${household.label} (${formatGramWeightWithSpace(basisGramWeight)})`,
+      helperText: `${household.label} = ${formatGramWeightWithSpace(basisGramWeight)}`,
+    };
+  }
+
+  if (household) {
+    const normalizedHousehold = normalizePortionLabelForMatching(household.label);
+    const matchingPortion = portionOptions.find((portion) => {
+      const normalizedLabel = normalizePortionLabelForMatching(portion.label);
+      return normalizedLabel === normalizedHousehold ||
+        normalizedLabel.includes(normalizedHousehold) ||
+        normalizedHousehold.includes(normalizedLabel);
+    });
+    if (matchingPortion) return matchingPortion;
+  }
+
+  return portionOptions.find((portion) => {
+    const normalized = normalizePortionLabelForMatching(portion.label);
+    return normalized !== "g" && normalized !== "gram" && normalized !== "grams" && !isRawGramPortionLabel(portion.label);
+  });
+}
+
+function getPortionOptions(detail: FoodDetail | null, foodName = ""): PortionOption[] {
+  const portions =
+    detail?.foodPortions
+      ?.map((portion, index) => toPortionOption(portion, index, foodName))
+      .filter((portion): portion is PortionOption => Boolean(portion)) ?? [];
+  const preferredPortion = getPreferredHouseholdPortion(detail, foodName);
+
+  if (!preferredPortion) return portions;
+
+  const preferredLabel = normalizePortionLabelForMatching(preferredPortion.label);
+  return [
+    preferredPortion,
+    ...portions.filter((portion) => {
+      const sameLabel = normalizePortionLabelForMatching(portion.label) === preferredLabel;
+      const sameValue = portion.value === preferredPortion.value;
+      return !sameLabel && !sameValue;
+    }),
+  ];
 }
 
 function getEnergyCaloriesPer100Units(detail: FoodDetail | null) {
@@ -1508,17 +1643,8 @@ function getFoodForSelectedPortion(
   portion: PortionOption | undefined,
   amount: number
 ): Food {
-  const localScale =
-    hasUsableSearchNutrition(food) && Number.isFinite(amount) && amount > 0
-      ? getScaleFromServingBasis(food, amount)
-      : null;
-
-  if (localScale !== null) {
-    return scaleFoodNutrition(food, localScale, formatLocalPortionAmount(food, amount));
-  }
-
   if (portion && detail) {
-    const servingSize = `${portion.label} (${portion.gramWeight}g)`;
+    const servingSize = portion.displayLabel ?? `${portion.label} (${formatGramWeightWithSpace(portion.gramWeight)})`;
     const portionScale = getScaleFromServingBasis(food, portion.gramWeight);
     const portionFood =
       portionScale !== null
@@ -1529,6 +1655,15 @@ function getFoodForSelectedPortion(
       ...portionFood,
       calories: getCaloriesPerServing(food, detail, portion),
     };
+  }
+
+  const localScale =
+    hasUsableSearchNutrition(food) && Number.isFinite(amount) && amount > 0
+      ? getScaleFromServingBasis(food, amount)
+      : null;
+
+  if (localScale !== null) {
+    return scaleFoodNutrition(food, localScale, formatLocalPortionAmount(food, amount));
   }
 
   if (detail) {
@@ -1600,7 +1735,7 @@ function getModalResultCalories(
     return {
       calories: getCaloriesPerServing(food, selectedFoodDetail, selectedPortion),
       servingSize: selectedPortion
-        ? `${selectedPortion.label} (${selectedPortion.gramWeight}g)`
+        ? selectedPortion.displayLabel ?? `${selectedPortion.label} (${formatGramWeightWithSpace(selectedPortion.gramWeight)})`
         : getServingSizeLabel(selectedFoodDetail, food),
       isLoading: false,
     };
@@ -2057,6 +2192,12 @@ function getRecipeTotals(ingredients: RecipeIngredient[]) {
   );
 }
 
+// Custom foods/recipes use negative IDs to stay distinct from USDA FDC IDs.
+// -Date.now() alone collides when two items are created in the same millisecond.
+function createNegativeFoodId(): number {
+  return -(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+}
+
 function parseRecipe(form: RecipeForm, ingredients: RecipeIngredient[]): Recipe | null {
   const name = form.name.trim();
   const servingSize = form.servingSize.trim();
@@ -2067,7 +2208,7 @@ function parseRecipe(form: RecipeForm, ingredients: RecipeIngredient[]): Recipe 
   const totals = getRecipeTotals(ingredients);
 
   return {
-    id: -Date.now(),
+    id: createNegativeFoodId(),
     name: name.endsWith("- Recipe") ? name : `${name} - Recipe`,
     brand: "Recipe",
     servingSize: `${servingSize} ${servingUnit}`,
@@ -2134,7 +2275,7 @@ function parseCustomFood(form: CustomFoodForm): Food | null {
   }
 
   return {
-    id: -Date.now(),
+    id: createNegativeFoodId(),
     name,
     brand: form.brand.trim() || null,
     servingSize: `${servingSize} ${servingUnit}`,
@@ -2407,7 +2548,7 @@ function getWeightRangeStartDate(range: WeightRange, referenceDate: string) {
   };
 
   date.setMonth(date.getMonth() - monthOffsets[range]);
-  return date.toISOString().slice(0, 10);
+  return getLocalDateString(date);
 }
 
 function getWeightRangeLabel(range: WeightRange) {
@@ -2436,4 +2577,4 @@ function getConfiguredGoogleClientId() {
 }
 
 export type { Food, RecipeIngredient, Recipe, SearchResultGroup, FoodPortion, FoodNutrient, FoodDetail, PortionOption, AddFoodTab, AppView, FoodLibraryTab, Sex, ActivityLevel, GoalType, GoalRate, ProfileActivityLevel, ProfileUnits, MacroMode, MacroPreset, HeightUnit, WeightUnit, LibrarySelection, CalculatorInputs, TopFoodEntry, Goals, Profile, ProfileForm, ProfileCalculation, WeightRange, WeightEntry, WeightForm, CustomFoodForm, FoodLogImportDraft, WeightImportEntry, FoodLogImportResult, ScannedNutritionFields, RecipeForm, AmountUnit, MeasuredAmountUnit, DebugLogEntry, GoogleTokenResponse, GoogleTokenClient, GoogleAccounts, GoogleDriveUploadResponse, GoogleDriveFile, GoogleDriveFileListResponse, OAuthPendingAction, MealCategory, ImportedFoodAudit, LogItem, SavedLogItem };
-export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getFoodServingDisplay, getFoodSearchServingDisplay, getFoodSearchCalorieDisplay, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, getConfiguredGoogleClientId, getAllLocalFoods, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms, searchFoodsGrouped };
+export { mealCategories, poundsPerKilogram, debugLogKey, googleDriveClientIdKey, oauthPendingActionKey, googleDriveScope, googleIdentityScriptUrl, foodIconRules, emptyCustomFoodForm, emptyRecipeForm, defaultCalculatorInputs, profileActivityMultipliers, profileActivityLabels, profileActivityOptions, profilePaceOptions, profileWizardSteps, macroPresets, maxHeightInches, maxHeightCm, minProfileHeightCm, maxProfileHeightCm, minProfileWeightKg, maxProfileWeightKg, brandSynonyms, appendDebugLog, getStorageArray, setStorageJson, verifyStorageCount, getSavedLog, getSavedCustomFoods, saveCustomFoods, getSavedRecipes, getSavedWeightEntries, saveWeightEntries, getSavedCompletedDays, saveCompletedDays, getSavedTopFoods, saveTopFoods, escapeRegExp, matchesFoodIconKeyword, getFoodIconUrl, isRecord, readStringField, readOptionalNumberField, isValidLogDate, validateImportDraft, buildImportDraft, parseFoodLogImportJson, normalizeMealName, getMealCategoriesForLog, getSavedGoals, getSavedProfile, toProfileActivityLevel, toCalculatorActivityLevel, kgToLb, lbToKg, cmToTotalInches, formatProfileNumber, profileToForm, profileFormFromLegacyGoals, getProfileHeightCm, getProfileWeightKg, getProfileGoalWeightKg, calculateProfile, getProfileValidationErrors, profileFormToProfile, profileToGoals, calculatorInputsToForm, saveRecipes, shiftDate, getLocalDateString, getDateRangeEnding, cleanPortionText, formatPortionAmount, formatGramWeight, getLocalPortionUnit, formatLocalPortionAmount, getPortionLabel, getPreferredHouseholdPortion, getPortionOptions, getEnergyCaloriesPer100Units, getLabelCaloriesPerServing, parseServingSize, isGramUnit, normalizeAmountUnit, getMeasuredServingBasis, convertAmountToBasisUnit, getScaleFromServingBasis, getServingSizeBasis, hasUsableSearchNutrition, getServingSizeLabel, scaleFoodNutrition, foodFromDetailNutrition, getFoodForSelectedPortion, getCaloriesPerServing, getModalResultCalories, getFoodServingDisplay, getFoodSearchServingDisplay, getFoodSearchCalorieDisplay, getRecentFoods, matchesFoodQuery, normalizeSearchText, getSearchTokens, getSearchSynonyms, getFoodSearchScore, rankSearchResults, detectMilkType, formatDisplayName, getFoodDisplayName, getBrandDisplayName, getIngredientCalories, getIngredientMacro, getRecipeTotals, parseRecipe, foodToCustomFoodForm, recipeToRecipeForm, parseCustomFood, normalizeOcrText, parseOcrNumber, formatScannedNumber, getNutritionLine, extractNutritionAmount, extractCalories, extractServingSize, parseNutritionLabelText, formatMacro, getMacroGoals, getHeightCm, getWeekDates, formatShortDate, formatEntryDate, formatWeekOf, getDayLetter, getShortDayName, formatDateRange, formatWeightValue, formatHeightValue, convertWeightValue, formatWeightValueInUnit, roundToIncrement, getNiceWeightStep, getWeightTickLabel, sortWeightEntriesNewestFirst, sortWeightEntriesOldestFirst, getPreferredWeightUnit, getWeightRangeStartDate, getWeightRangeLabel, parseDecimalInput, createClientId, createNegativeFoodId, getConfiguredGoogleClientId, getAllLocalFoods, fetchUsdaFoods, fetchUsdaFoodDetail, searchUsdaFoodsWithSynonyms, searchFoodsGrouped };

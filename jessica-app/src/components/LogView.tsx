@@ -111,6 +111,15 @@ export function LogView(props: LogViewProps) {
   function submitAddFoodSearch() {
     if (activeAddFoodTab === "search") searchModalFood();
   }
+  function getSelectedPortionCalorieTarget() {
+    if (amountUnit !== "serving" || !selectedPortion) return "this amount";
+
+    const servings = Number(quantity);
+    if (!Number.isFinite(servings) || servings <= 0) return selectedPortion.label;
+    if (servings === 1) return selectedPortion.unitLabel ? `1 ${selectedPortion.unitLabel}` : selectedPortion.label;
+
+    return `${servings} x ${selectedPortion.label}`;
+  }
 
   const importReviewDateGroups: ImportReviewDateGroupUi[] = importReviewItems.reduce((dateGroups: ImportReviewDateGroupUi[], review: ImportReviewUi) => {
     let dateGroup = dateGroups.find((group) => group.date === review.item.date);
@@ -1031,7 +1040,7 @@ export function LogView(props: LogViewProps) {
 
 <div className="amount-row">
   <label className="floating-field amount-field">
-    {amountUnit === "serving" ? "Servings" : "Amount"}
+    {amountUnit === "serving" && selectedPortion ? "Amount" : amountUnit === "serving" ? "Servings" : "Amount"}
     <input
       type="text"
       inputMode="decimal"
@@ -1052,7 +1061,7 @@ export function LogView(props: LogViewProps) {
     >
       {allowedAmountUnits.map((unit) => (
         <option key={unit} value={unit}>
-          {unit}
+          {unit === "serving" && selectedPortion?.unitLabel ? selectedPortion.unitLabel : unit}
         </option>
       ))}
     </select>
@@ -1061,7 +1070,7 @@ export function LogView(props: LogViewProps) {
 
             {selectedPortionCalories !== null && (
               <p className="modal-hint">
-                {selectedPortionCalories.toLocaleString()} cal for this amount
+                {selectedPortionCalories.toLocaleString()} cal for {getSelectedPortionCalorieTarget()}
               </p>
             )}
 
