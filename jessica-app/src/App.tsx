@@ -132,13 +132,8 @@ import {
   type ImportReviewMode,
   type ImportFoodCandidate,
   type ImportReviewItem,
+  type ImportDayStep,
 } from "./importMatching";
-
-interface ImportDayStep {
-  date: string;
-  items: FoodLogImportDraft[];
-  weightEntry: WeightImportEntry | null;
-}
 
 type ThemeMode = "dark" | "light";
 

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { FoodLibraryView } from "./FoodLibraryView";
 import { HomeView } from "./HomeView";
-import { LogView } from "./LogView";
+import { LogView, type LogViewProps } from "./LogView";
 import { ProfileView } from "./ProfileView";
 import { WeightView } from "./WeightView";
 import CycleView from "./CycleView";
@@ -15,7 +15,7 @@ type AppViewRouterProps = {
   profileProps: any;
   weightProps: any;
   libraryProps: any;
-  logProps: any;
+  logProps: Omit<LogViewProps, "bottomNav">;
 };
 
 export function AppViewRouter({

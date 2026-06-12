@@ -8,8 +8,15 @@ import {
   type Food,
   type Recipe,
   type FoodLogImportDraft,
+  type WeightImportEntry,
   type LogItem,
 } from "./appSupport";
+
+export interface ImportDayStep {
+  date: string;
+  items: FoodLogImportDraft[];
+  weightEntry: WeightImportEntry | null;
+}
 
 export type ImportFoodResolution = {
   food: Food;
