@@ -45,73 +45,94 @@ export type WorkerFood = {
 
 const detailCache = new Map<string, DetailCacheEntry>();
 
+type WorkerEnv = Env & { USDA_API_KEY?: unknown };
+
+const ALLOWED_ORIGINS = new Set([
+  "https://chibster91.github.io",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "http://127.0.0.1:4173",
+]);
+
 export default {
-  async fetch(request: Request, env: any): Promise<Response> {
-    const url = new URL(request.url);
-    if (url.pathname === "/detail") {
-      return handleDetail(url, env);
+  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
+    const response = await routeRequest(request, env);
+    const origin = request.headers.get("Origin");
+    if (origin && ALLOWED_ORIGINS.has(origin)) {
+      response.headers.set("Access-Control-Allow-Origin", origin);
+      response.headers.append("Vary", "Origin");
     }
 
-    const query = url.searchParams.get("query") || "egg";
-    const apiKey = getUsdaApiKey(env);
-    if (!apiKey) {
-      return missingUsdaApiKey();
-    }
-
-    let resultSets: any[];
-    try {
-      resultSets = await Promise.all(expandSearchRequests(query).map((request) => searchUsdaFoods(request, apiKey)));
-    } catch (error) {
-      if (isUsdaRequestError(error)) {
-        return json(
-          {
-            error: error.message,
-            status: error.status,
-            detail: error.detail,
-          },
-          error.status
-        );
-      }
-
-      throw error;
-    }
-    // Filter raw USDA results before any scoring or mapping
-    const dataFoods = resultSets
-      .flatMap((data: FdcSearchResponse) => data.foods ?? [])
-      .filter((food: FdcSearchResultFood) => !isExperimentalFood(food));
-
-    const seen = new Set<number | string>();
-
-    const foods: WorkerFood[] = dataFoods
-      .map((food: FdcSearchResultFood) => {
-        return {
-          id: food.fdcId,
-          name: food.description,
-          brand: food.brandOwner ?? null,
-          category: food.foodCategory ?? null,
-          ingredients: food.ingredients ?? null,
-          dataType: food.dataType,
-          servingSize: "Details required",
-          calories: 0,
-          protein: 0,
-          carbs: 0,
-          fat: 0,
-          isSearchPreview: true,
-        };
-      })
-      .filter((food: WorkerFood) => !isExperimentalFood(food))
-      .sort((a: WorkerFood, b: WorkerFood) => rankSearchResult(b, query) - rankSearchResult(a, query))
-      .filter((food: WorkerFood) => {
-        const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, SEARCH_RESULT_LIMIT);
-
-    return json(foods);
+    return response;
   },
 };
+
+async function routeRequest(request: Request, env: WorkerEnv): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname === "/detail") {
+    return handleDetail(url, env);
+  }
+
+  const query = url.searchParams.get("query") || "egg";
+  const apiKey = getUsdaApiKey(env);
+  if (!apiKey) {
+    return missingUsdaApiKey();
+  }
+
+  let resultSets: FdcSearchResponse[];
+  try {
+    resultSets = await Promise.all(expandSearchRequests(query).map((request) => searchUsdaFoods(request, apiKey)));
+  } catch (error) {
+    if (isUsdaRequestError(error)) {
+      return json(
+        {
+          error: error.message,
+          status: error.status,
+          detail: error.detail,
+        },
+        error.status
+      );
+    }
+
+    throw error;
+  }
+  // Filter raw USDA results before any scoring or mapping
+  const dataFoods = resultSets
+    .flatMap((data: FdcSearchResponse) => data.foods ?? [])
+    .filter((food: FdcSearchResultFood) => !isExperimentalFood(food));
+
+  const seen = new Set<number | string>();
+
+  const foods: WorkerFood[] = dataFoods
+    .map((food: FdcSearchResultFood) => {
+      return {
+        id: food.fdcId,
+        name: food.description,
+        brand: food.brandOwner ?? null,
+        category: food.foodCategory ?? null,
+        ingredients: food.ingredients ?? null,
+        dataType: food.dataType,
+        servingSize: "Details required",
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        isSearchPreview: true,
+      };
+    })
+    .filter((food: WorkerFood) => !isExperimentalFood(food))
+    .sort((a: WorkerFood, b: WorkerFood) => rankSearchResult(b, query) - rankSearchResult(a, query))
+    .filter((food: WorkerFood) => {
+      const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, SEARCH_RESULT_LIMIT);
+
+  return json(foods);
+}
 
 async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<FdcSearchResponse> {
   const searchUrl = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
@@ -135,7 +156,7 @@ async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<
   return r.json() as Promise<FdcSearchResponse>;
 }
 
-async function handleDetail(url: URL, env: any): Promise<Response> {
+async function handleDetail(url: URL, env: WorkerEnv): Promise<Response> {
   const id = url.searchParams.get("id");
   if (!id) {
     return json({ error: "Missing required id query parameter." }, 400);
@@ -492,7 +513,7 @@ function getSearchWords(value: string): string[] {
   return value.split(/\s+/).filter((word) => word.length > 1);
 }
 
-function getUsdaApiKey(env: any): string | null {
+function getUsdaApiKey(env: WorkerEnv): string | null {
   return typeof env.USDA_API_KEY === "string" && env.USDA_API_KEY
     ? env.USDA_API_KEY
     : null;
@@ -523,7 +544,6 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: {
       "content-type": "application/json",
-      "Access-Control-Allow-Origin": "*",
     },
   });
 }
