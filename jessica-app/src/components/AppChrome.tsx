@@ -4,9 +4,11 @@ type AppChromeProps = {
   appView: AppView;
   onNavigate: (view: AppView) => void;
   onOpenLibrary: () => void;
+  isDebugMode: boolean;
   isDebugPanelOpen: boolean;
   debugLogText: string;
   debugCopyStatus: string;
+  onOpenDebugPanel: () => void;
   onCloseDebugPanel: () => void;
   onCopyDebugLog: () => void;
   onClearDebugLog: () => void;
@@ -21,9 +23,11 @@ export function AppChrome({
   appView,
   onNavigate,
   onOpenLibrary,
+  isDebugMode,
   isDebugPanelOpen,
   debugLogText,
   debugCopyStatus,
+  onOpenDebugPanel,
   onCloseDebugPanel,
   onCopyDebugLog,
   onClearDebugLog,
@@ -87,6 +91,26 @@ export function AppChrome({
     <span>Profile</span>
   </button>
 </nav>
+      {isDebugMode && !isDebugPanelOpen && (
+        <button
+          type="button"
+          onClick={onOpenDebugPanel}
+          aria-label="Open debug log"
+          style={{
+            position: "fixed",
+            right: "0.75rem",
+            bottom: "4.5rem",
+            zIndex: 50,
+            opacity: 0.65,
+            borderRadius: "50%",
+            width: "2.5rem",
+            height: "2.5rem",
+            padding: 0,
+          }}
+        >
+          🐞
+        </button>
+      )}
       {isDebugPanelOpen && (
         <div className="modal-backdrop debug-backdrop" role="presentation">
           <div className="modal debug-panel" role="dialog" aria-modal="true" aria-labelledby="debug-panel-title">

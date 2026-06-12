@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useMemo, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/home.css";
 import {
   convertWeightValue,
@@ -51,17 +51,21 @@ export function HomeView({
   startingWeightEntry,
   weightUnit
 }: HomeViewProps) {
-    const weekDates = getWeekDates(selectedDate);
-    const weekStats = weekDates.map((date) => {
-      const dayLog = date === selectedDate ? log : getSavedLog(date);
-      return {
-        date,
-        calories: dayLog.reduce((s, item) => s + Math.round(item.calories * (item.quantity ?? 1)), 0),
-        protein: dayLog.reduce((s, item) => s + item.protein * (item.quantity ?? 1), 0),
-        carbs: dayLog.reduce((s, item) => s + item.carbs * (item.quantity ?? 1), 0),
-        fat: dayLog.reduce((s, item) => s + item.fat * (item.quantity ?? 1), 0),
-      };
-    });
+    const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
+    const weekStats = useMemo(
+      () =>
+        weekDates.map((date) => {
+          const dayLog = date === selectedDate ? log : getSavedLog(date);
+          return {
+            date,
+            calories: dayLog.reduce((s, item) => s + Math.round(item.calories * (item.quantity ?? 1)), 0),
+            protein: dayLog.reduce((s, item) => s + item.protein * (item.quantity ?? 1), 0),
+            carbs: dayLog.reduce((s, item) => s + item.carbs * (item.quantity ?? 1), 0),
+            fat: dayLog.reduce((s, item) => s + item.fat * (item.quantity ?? 1), 0),
+          };
+        }),
+      [weekDates, selectedDate, log]
+    );
 
     const goalCal = goals?.calories ?? 0;
     const maxDayCalories = Math.max(...weekStats.map((d) => d.calories), 1);
@@ -84,7 +88,9 @@ export function HomeView({
     const remaining = displayGoalCal - displayStats.calories;
 
     const totalMacroGrams = displayStats.fat + displayStats.carbs + displayStats.protein;
-    const macroPieSlices = [
+    const macroPieSlices = useMemo(
+      () =>
+        [
       { label: "Protein", value: displayStats.protein, color: "var(--macro-protein)" },
       { label: "Carbs", value: displayStats.carbs, color: "var(--macro-carbs)" },
       { label: "Fat", value: displayStats.fat, color: "var(--macro-fat)" },
@@ -129,6 +135,8 @@ export function HomeView({
         labelX: number;
         labelY: number;
       }[]
+    ),
+      [displayStats.protein, displayStats.carbs, displayStats.fat, totalMacroGrams]
     );
 
     const completedStreak = getCompletedStreak();

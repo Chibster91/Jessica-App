@@ -1,8 +1,8 @@
 import {
+  useMemo,
   type CSSProperties,
   type Dispatch,
   type ReactNode,
-  type RefObject,
   type SetStateAction,
   type SyntheticEvent,
 } from "react";
@@ -14,27 +14,27 @@ import {
   getFoodDisplayName,
   getFoodServingDisplay,
   getFoodIconUrl,
+  getItemCalories,
+  getLogCategoryTotals,
+  getMealCategoriesForLog,
   getModalResultCalories,
   getFoodSearchCalorieDisplay,
   getBrandDisplayName,
   getIngredientCalories,
-  type AddFoodTab,
   type AmountUnit,
-  type CustomFoodForm,
   type Food,
-  type FoodDetail,
   type FoodLogImportDraft,
   type Goals,
   type GoogleDriveFile,
   type LogItem,
   type MealCategory,
-  type PortionOption,
   type Recipe,
-  type RecipeForm,
-  type RecipeIngredient,
   type SearchResultGroup,
+  type TopFoodEntry,
   type WeightImportEntry,
 } from "../appSupport";
+import { useAddFoodModal } from "../hooks/useAddFoodModal";
+import { useLogItemActions } from "../hooks/useLogItemActions";
 import {
   type ImportDayStep,
   type ImportResolutionProgress,
@@ -64,114 +64,26 @@ export interface LogViewProps {
   changeSelectedDate: (date: string) => void;
   handleFinishToggle: () => void;
 
-  // log menu / panel toggles
-  isLogMenuOpen: boolean;
-  setIsLogMenuOpen: Dispatch<SetStateAction<boolean>>;
+  // panel toggles owned by App-level hooks (import flow / Drive backup)
   setIsImportDayOpen: Dispatch<SetStateAction<boolean>>;
   setExportStatus: Dispatch<SetStateAction<string>>;
   setIsExportPanelOpen: Dispatch<SetStateAction<boolean>>;
 
-  // meal cards
-  visibleMealCategories: MealCategory[];
-  getCategoryTotals: (category: MealCategory) => MacroTotals;
-  scrollToMeal: (category: MealCategory) => void;
+  // day log data (meal-card and dialog state lives in useLogItemActions)
   log: LogItem[];
-  expandedMeals: Record<MealCategory, boolean>;
-  mealCardRefs: RefObject<Partial<Record<MealCategory, HTMLElement | null>>>;
-  toggleMeal: (category: MealCategory) => void;
-  mealMenuCategory: MealCategory | null;
-  setMealMenuCategory: Dispatch<SetStateAction<MealCategory | null>>;
-  openSaveMealAsRecipe: (category: MealCategory) => void;
-  setMealToDelete: Dispatch<SetStateAction<MealCategory | null>>;
-  suppressNextClickRef: RefObject<string | null>;
-  openEditFoodItem: (item: LogItem) => void;
-  setContextMenuItem: Dispatch<SetStateAction<LogItem | null>>;
-  setContextMenuY: Dispatch<SetStateAction<number>>;
-  longPressRef: RefObject<{ logId: string; timer: ReturnType<typeof setTimeout> } | null>;
-  getItemCalories: (item: LogItem) => number;
-  openAddFood: (category: MealCategory) => void;
-  pendingCategory: MealCategory | null;
+
+  // add-food modal data dependencies (state itself lives in useAddFoodModal)
+  setLog: Dispatch<SetStateAction<LogItem[]>>;
+  customFoods: Food[];
+  setCustomFoods: Dispatch<SetStateAction<Food[]>>;
+  recipes: Recipe[];
+  setRecipes: Dispatch<SetStateAction<Recipe[]>>;
+  recentFoods: RecentFood[];
+  setTopFoods: Dispatch<SetStateAction<TopFoodEntry[]>>;
 
   // tap debug probes
   logTapProbe: (name: string, phase: string, event: SyntheticEvent<HTMLElement>) => void;
-  tapProbeProps: (name: string) => TapProbeHandlers;
-
-  // add-food modal: search & recent
-  activeAddFoodTab: AddFoodTab;
-  setActiveAddFoodTab: Dispatch<SetStateAction<AddFoodTab>>;
-  modalQuery: string;
-  setModalQuery: Dispatch<SetStateAction<string>>;
-  searchModalFood: () => Promise<void>;
-  modalFoods: Food[];
-  selectedFood: Food | null;
-  selectedFoodDetail: FoodDetail | null;
-  selectedPortion: PortionOption | undefined;
-  isLoadingDetail: boolean;
-  selectFood: (food: Food) => Promise<void>;
-  recentFoods: RecentFood[];
-  selectLocalFood: (food: Food) => void;
-
-  // add-food modal: custom foods
-  customQuery: string;
-  setCustomQuery: Dispatch<SetStateAction<string>>;
-  openCustomFoodForm: () => void;
-  isCustomFormOpen: boolean;
-  customFoodScanInputRef: RefObject<HTMLInputElement | null>;
-  isScanningCustomFood: boolean;
-  scanCustomFoodLabel: (file: File | undefined) => Promise<void>;
-  customFoodOcrError: string;
-  customFoodOcrText: string;
-  customFoodForm: CustomFoodForm;
-  setCustomFoodForm: Dispatch<SetStateAction<CustomFoodForm>>;
-  customFoodSaveError: string;
-  createCustomFood: () => void;
-  setIsCustomFormOpen: Dispatch<SetStateAction<boolean>>;
-  filteredCustomFoods: Food[];
-
-  // add-food modal: recipes
-  recipeQuery: string;
-  setRecipeQuery: Dispatch<SetStateAction<string>>;
-  openRecipeForm: () => void;
-  isRecipeFormOpen: boolean;
-  recipeForm: RecipeForm;
-  setRecipeForm: Dispatch<SetStateAction<RecipeForm>>;
-  recipeTotals: MacroTotals;
-  recipeIngredientQuery: string;
-  setRecipeIngredientQuery: Dispatch<SetStateAction<string>>;
-  searchRecipeIngredientFoods: () => Promise<void>;
-  isSearchingRecipeIngredients: boolean;
-  recipeIngredientOptions: Food[];
-  pendingRecipeIngredient: Food | null;
-  selectRecipeIngredient: (food: Food) => Promise<void>;
-  pendingRecipeIngredientQuantity: string;
-  setPendingRecipeIngredientQuantity: Dispatch<SetStateAction<string>>;
-  confirmRecipeIngredient: () => void;
-  setPendingRecipeIngredient: Dispatch<SetStateAction<Food | null>>;
-  recipeIngredients: RecipeIngredient[];
-  updateRecipeIngredientQuantity: (foodId: number, quantity: string) => void;
-  removeRecipeIngredient: (foodId: number) => void;
-  createRecipe: () => void;
-  setIsRecipeFormOpen: Dispatch<SetStateAction<boolean>>;
-  filteredRecipes: Recipe[];
-
-  // add-food modal: portion picker
-  closeAddFood: () => void;
-  detailError: string;
-  servingBasisText: string;
-  amountUnit: AmountUnit;
-  portionOptions: PortionOption[];
-  selectedPortionValue: string;
-  setSelectedPortionValue: Dispatch<SetStateAction<string>>;
-  quantity: string;
-  setQuantity: Dispatch<SetStateAction<string>>;
-  portionAmount: string;
-  setPortionAmount: Dispatch<SetStateAction<string>>;
-  setAmountUnit: Dispatch<SetStateAction<AmountUnit>>;
-  allowedAmountUnits: AmountUnit[];
-  selectedPortionCalories: number | null;
-  addSelectedFood: () => void;
-  canAddSelectedFood: boolean;
-  setSelectedFood: Dispatch<SetStateAction<Food | null>>;
+  tapProbeProps: (name: string) => Partial<TapProbeHandlers>;
 
   // import wizard
   importStatus: string;
@@ -236,40 +148,6 @@ export interface LogViewProps {
   driveImportStatus: string;
   driveImportFiles: GoogleDriveFile[];
   importGoogleDriveFile: (file: GoogleDriveFile) => Promise<void>;
-
-  // meal dialogs (save-as-recipe / delete)
-  mealToSaveAsRecipe: MealCategory | null;
-  mealRecipeName: string;
-  setMealRecipeName: Dispatch<SetStateAction<string>>;
-  saveMealAsRecipe: () => void;
-  setMealToSaveAsRecipe: Dispatch<SetStateAction<MealCategory | null>>;
-  mealToDelete: MealCategory | null;
-  confirmDeleteMeal: () => void;
-
-  // item dialogs (edit / remove / context menu / move)
-  itemToEdit: LogItem | null;
-  editItemAmountUnit: AmountUnit;
-  editItemAmount: string;
-  setEditItemAmount: Dispatch<SetStateAction<string>>;
-  setEditItemAmountUnit: Dispatch<SetStateAction<AmountUnit>>;
-  getEditAmountUnits: (item: LogItem | null) => AmountUnit[];
-  saveEditedFoodItem: () => void;
-  setItemToEdit: Dispatch<SetStateAction<LogItem | null>>;
-  itemToRemove: LogItem | null;
-  confirmRemoveFood: () => void;
-  setItemToRemove: Dispatch<SetStateAction<LogItem | null>>;
-  contextMenuItem: LogItem | null;
-  contextMenuY: number;
-  moveToMealItem: LogItem | null;
-  setMoveToMealItem: Dispatch<SetStateAction<LogItem | null>>;
-  moveItemToMeal: (item: LogItem, targetCategory: MealCategory) => void;
-  moveToDayItem: LogItem | null;
-  setMoveToDayItem: Dispatch<SetStateAction<LogItem | null>>;
-  setMoveToDayDate: Dispatch<SetStateAction<string>>;
-  setMoveToDayStep: Dispatch<SetStateAction<"date" | "meal">>;
-  moveToDayStep: "date" | "meal";
-  moveToDayDate: string;
-  moveItemToDifferentDay: (item: LogItem, targetDate: string, targetCategory: MealCategory) => void;
 }
 type ImportReviewCandidateUi = {
   key: string;
@@ -299,8 +177,37 @@ type ImportManualGroupUi = {
 
 export function LogView(props: LogViewProps) {
   const {
-    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, isLogMenuOpen, setIsLogMenuOpen, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, visibleMealCategories, getCategoryTotals, scrollToMeal, log, expandedMeals, mealCardRefs, toggleMeal, mealMenuCategory, setMealMenuCategory, openSaveMealAsRecipe, setMealToDelete, suppressNextClickRef, openEditFoodItem, setContextMenuItem, setContextMenuY, longPressRef, getItemCalories, logTapProbe, openAddFood, handleFinishToggle, pendingCategory, tapProbeProps, activeAddFoodTab, setActiveAddFoodTab, modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, selectedFoodDetail, selectedPortion, isLoadingDetail, selectFood, recentFoods, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm, isCustomFormOpen, customFoodScanInputRef, isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError, customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, setIsCustomFormOpen, filteredCustomFoods, recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, recipeForm, setRecipeForm, recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods, isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity, confirmRecipeIngredient, setPendingRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe, setIsRecipeFormOpen, filteredRecipes, closeAddFood, detailError, servingBasisText, amountUnit, portionOptions, selectedPortionValue, setSelectedPortionValue, quantity, setQuantity, portionAmount, setPortionAmount, setAmountUnit, allowedAmountUnits, selectedPortionCalories, addSelectedFood, canAddSelectedFood, setSelectedFood, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, rejectImportReviewItem, expandImportReviewGroup, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, mealToSaveAsRecipe, mealRecipeName, setMealRecipeName, saveMealAsRecipe, setMealToSaveAsRecipe, mealToDelete, confirmDeleteMeal, itemToEdit, editItemAmountUnit, editItemAmount, setEditItemAmount, setEditItemAmountUnit, getEditAmountUnits, saveEditedFoodItem, setItemToEdit, itemToRemove, confirmRemoveFood, setItemToRemove, contextMenuItem, contextMenuY, moveToMealItem, setMoveToMealItem, moveItemToMeal, moveToDayItem, setMoveToDayItem, setMoveToDayDate, setMoveToDayStep, moveToDayStep, moveToDayDate, moveItemToDifferentDay, bottomNav
+    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, rejectImportReviewItem, expandImportReviewGroup, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
   } = props;
+  const {
+    mealCardRefs, longPressRef, suppressNextClickRef, isLogMenuOpen, setIsLogMenuOpen, expandedMeals, toggleMeal,
+    scrollToMeal, mealMenuCategory, setMealMenuCategory, mealToSaveAsRecipe, setMealToSaveAsRecipe, mealRecipeName,
+    setMealRecipeName, openSaveMealAsRecipe, saveMealAsRecipe, mealToDelete, setMealToDelete, confirmDeleteMeal,
+    contextMenuItem, setContextMenuItem, contextMenuY, setContextMenuY, moveToMealItem, setMoveToMealItem,
+    moveItemToMeal, moveToDayItem, setMoveToDayItem, moveToDayDate, setMoveToDayDate, moveToDayStep, setMoveToDayStep,
+    moveItemToDifferentDay, itemToEdit, setItemToEdit, editItemAmount, setEditItemAmount, editItemAmountUnit,
+    setEditItemAmountUnit, getEditAmountUnits, openEditFoodItem, saveEditedFoodItem, itemToRemove, setItemToRemove,
+    confirmRemoveFood,
+  } = useLogItemActions({ selectedDate, log, setLog, recipes, setRecipes });
+  const visibleMealCategories = useMemo(() => getMealCategoriesForLog(log), [log]);
+  function getCategoryTotals(category: MealCategory) {
+    return getLogCategoryTotals(log, category);
+  }
+  const {
+    customFoodScanInputRef, openAddFood, closeAddFood, pendingCategory, activeAddFoodTab, setActiveAddFoodTab,
+    modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, setSelectedFood, selectedFoodDetail,
+    selectedPortion, isLoadingDetail, selectFood, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm,
+    isCustomFormOpen, setIsCustomFormOpen, isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError,
+    customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, filteredCustomFoods,
+    recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, setIsRecipeFormOpen, recipeForm, setRecipeForm,
+    recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods,
+    isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, setPendingRecipeIngredient,
+    selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity,
+    confirmRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe,
+    filteredRecipes, detailError, servingBasisText, amountUnit, setAmountUnit, portionOptions, selectedPortionValue,
+    setSelectedPortionValue, quantity, setQuantity, portionAmount, setPortionAmount, allowedAmountUnits,
+    selectedPortionCalories, addSelectedFood, canAddSelectedFood,
+  } = useAddFoodModal({ selectedDate, log, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods });
   const sortedRecentFoods = [...recentFoods].sort((a, b) => {
     const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
     if (dateCompare !== 0) return dateCompare;

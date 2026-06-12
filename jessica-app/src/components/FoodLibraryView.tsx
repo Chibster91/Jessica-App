@@ -6,106 +6,74 @@ import {
   getFoodIconUrl,
   getFoodServingDisplay,
   getIngredientCalories,
-  type CustomFoodForm,
   type Food,
-  type FoodLibraryTab,
-  type LibrarySelection,
-  type Recipe,
-  type RecipeForm,
-  type RecipeIngredient
+  type Recipe
 } from "../appSupport";
+import { useFoodLibrary } from "../hooks/useFoodLibrary";
+
+type RecentFood = Food & { loggedCount: number; lastLoggedDate: string };
 
 type FoodLibraryViewProps = {
   bottomNav: ReactNode;
-  foodLibraryTab: FoodLibraryTab;
-  setFoodLibraryTab: Dispatch<SetStateAction<FoodLibraryTab>>;
-  libraryQuery: string;
-  setLibraryQuery: Dispatch<SetStateAction<string>>;
-  librarySelection: LibrarySelection | null;
-  setLibrarySelection: Dispatch<SetStateAction<LibrarySelection | null>>;
-  cancelLibraryEditing: () => void;
-  createLibraryCustomFood: () => void;
-  createLibraryRecipe: () => void;
-  libraryRecentFoods: Array<Food & { loggedCount?: number; lastLoggedDate?: string }>;
-  libraryCustomFoods: Food[];
-  libraryRecipes: Recipe[];
-  isCreatingLibraryCustomFood: boolean;
-  isCreatingLibraryRecipe: boolean;
-  editingCustomFoodId: number | null;
-  editingRecipeId: number | null;
-  editCustomFood: (food: Food) => void;
-  deleteCustomFood: (foodId: number) => void;
-  libraryCustomFoodForm: CustomFoodForm;
-  setLibraryCustomFoodForm: Dispatch<SetStateAction<CustomFoodForm>>;
-  saveNewLibraryCustomFood: () => void;
-  saveLibraryCustomFood: () => void;
-  editRecipe: (recipe: Recipe) => void;
-  deleteRecipe: (recipeId: number) => void;
-  libraryRecipeForm: RecipeForm;
-  setLibraryRecipeForm: Dispatch<SetStateAction<RecipeForm>>;
-  recipeIngredientQuery: string;
-  setRecipeIngredientQuery: Dispatch<SetStateAction<string>>;
-  searchRecipeIngredientFoods: () => void;
-  recipeIngredientOptions: Food[];
-  pendingRecipeIngredient: Food | null;
-  selectRecipeIngredient: (food: Food) => void | Promise<void>;
-  isSearchingRecipeIngredients: boolean;
-  pendingRecipeIngredientQuantity: string;
-  setPendingRecipeIngredientQuantity: Dispatch<SetStateAction<string>>;
-  confirmLibraryRecipeIngredient: () => void;
-  setPendingRecipeIngredient: Dispatch<SetStateAction<Food | null>>;
-  libraryRecipeIngredients: RecipeIngredient[];
-  updateLibraryRecipeIngredientQuantity: (foodId: number, quantity: string) => void;
-  removeLibraryRecipeIngredient: (foodId: number) => void;
-  saveNewLibraryRecipe: () => void;
-  saveLibraryRecipe: () => void;
+  customFoods: Food[];
+  setCustomFoods: Dispatch<SetStateAction<Food[]>>;
+  recipes: Recipe[];
+  setRecipes: Dispatch<SetStateAction<Recipe[]>>;
+  recentFoods: RecentFood[];
 };
 
 export function FoodLibraryView({
   bottomNav,
-  foodLibraryTab,
-  setFoodLibraryTab,
-  libraryQuery,
-  setLibraryQuery,
-  librarySelection,
-  setLibrarySelection,
-  cancelLibraryEditing,
-  createLibraryCustomFood,
-  createLibraryRecipe,
-  libraryRecentFoods,
-  libraryCustomFoods,
-  libraryRecipes,
-  isCreatingLibraryCustomFood,
-  isCreatingLibraryRecipe,
-  editingCustomFoodId,
-  editingRecipeId,
-  editCustomFood,
-  deleteCustomFood,
-  libraryCustomFoodForm,
-  setLibraryCustomFoodForm,
-  saveNewLibraryCustomFood,
-  saveLibraryCustomFood,
-  editRecipe,
-  deleteRecipe,
-  libraryRecipeForm,
-  setLibraryRecipeForm,
-  recipeIngredientQuery,
-  setRecipeIngredientQuery,
-  searchRecipeIngredientFoods,
-  recipeIngredientOptions,
-  pendingRecipeIngredient,
-  selectRecipeIngredient,
-  isSearchingRecipeIngredients,
-  pendingRecipeIngredientQuantity,
-  setPendingRecipeIngredientQuantity,
-  confirmLibraryRecipeIngredient,
-  setPendingRecipeIngredient,
-  libraryRecipeIngredients,
-  updateLibraryRecipeIngredientQuantity,
-  removeLibraryRecipeIngredient,
-  saveNewLibraryRecipe,
-  saveLibraryRecipe
+  customFoods,
+  setCustomFoods,
+  recipes,
+  setRecipes,
+  recentFoods
 }: FoodLibraryViewProps) {
+  const {
+    foodLibraryTab,
+    setFoodLibraryTab,
+    libraryQuery,
+    setLibraryQuery,
+    librarySelection,
+    setLibrarySelection,
+    cancelLibraryEditing,
+    createLibraryCustomFood,
+    createLibraryRecipe,
+    libraryRecentFoods,
+    libraryCustomFoods,
+    libraryRecipes,
+    isCreatingLibraryCustomFood,
+    isCreatingLibraryRecipe,
+    editingCustomFoodId,
+    editingRecipeId,
+    editCustomFood,
+    deleteCustomFood,
+    libraryCustomFoodForm,
+    setLibraryCustomFoodForm,
+    saveNewLibraryCustomFood,
+    saveLibraryCustomFood,
+    editRecipe,
+    deleteRecipe,
+    libraryRecipeForm,
+    setLibraryRecipeForm,
+    recipeIngredientQuery,
+    setRecipeIngredientQuery,
+    searchRecipeIngredientFoods,
+    recipeIngredientOptions,
+    pendingRecipeIngredient,
+    selectRecipeIngredient,
+    isSearchingRecipeIngredients,
+    pendingRecipeIngredientQuantity,
+    setPendingRecipeIngredientQuantity,
+    confirmLibraryRecipeIngredient,
+    setPendingRecipeIngredient,
+    libraryRecipeIngredients,
+    updateLibraryRecipeIngredientQuantity,
+    removeLibraryRecipeIngredient,
+    saveNewLibraryRecipe,
+    saveLibraryRecipe,
+  } = useFoodLibrary({ customFoods, setCustomFoods, recipes, setRecipes, recentFoods });
   return (
     <main className="app">
     

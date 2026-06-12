@@ -11,12 +11,13 @@ import {
   getWeightRangeLabel,
   getWeightTickLabel,
   roundToIncrement,
+  type Goals,
   type WeightEntry,
-  type WeightForm,
   type WeightRange,
   type WeightUnit,
   type Profile
 } from "../appSupport";
+import { useWeightTracking } from "../hooks/useWeightTracking";
 
 type WeightViewProps = {
   bottomNav: ReactNode;
@@ -24,30 +25,25 @@ type WeightViewProps = {
   today: string;
   weightUnit: WeightUnit;
   profile: Profile | null;
-  chartWeightEntries: WeightEntry[];
+  goals: Goals | null;
+  weightEntries: WeightEntry[];
+  setWeightEntries: Dispatch<SetStateAction<WeightEntry[]>>;
   currentWeightEntry: WeightEntry | null;
   startingWeightEntry: WeightEntry | null;
-  weightForm: WeightForm;
-  setWeightForm: Dispatch<SetStateAction<WeightForm>>;
-  weightSaveError: string;
-  setWeightSaveError: Dispatch<SetStateAction<string>>;
-  isWeightFormValid: boolean;
-  editingWeightEntryId: string | null;
-  setEditingWeightEntryId: Dispatch<SetStateAction<string | null>>;
-  saveWeightEntry: () => void;
   tapProbeProps: (name: string) => React.HTMLAttributes<HTMLElement>;
   logTapProbe: (name: string, phase: string, event: SyntheticEvent<HTMLElement>) => void;
-  weightRange: WeightRange;
-  setWeightRange: Dispatch<SetStateAction<WeightRange>>;
-  weightChartPointId: string | null;
-  setWeightChartPointId: Dispatch<SetStateAction<string | null>>;
   sortedWeightEntriesOldest: WeightEntry[];
   sortedWeightEntriesNewest: WeightEntry[];
-  startEditWeightEntry: (entry: WeightEntry) => void;
-  weightEntryToDelete: WeightEntry | null;
-  setWeightEntryToDelete: Dispatch<SetStateAction<WeightEntry | null>>;
-  confirmDeleteWeightEntry: () => void;
 };
+
+const chartWidth = 360;
+const chartHeight = 240;
+const chartLeft = 60;
+const chartRight = 24;
+const chartTop = 18;
+const chartBottom = 48;
+const chartPlotWidth = chartWidth - chartLeft - chartRight;
+const chartPlotHeight = chartHeight - chartTop - chartBottom;
 
 export function WeightView({
   bottomNav,
@@ -55,39 +51,51 @@ export function WeightView({
   today,
   weightUnit,
   profile,
-  chartWeightEntries,
+  goals,
+  weightEntries,
+  setWeightEntries,
   currentWeightEntry,
   startingWeightEntry,
-  weightForm,
-  setWeightForm,
-  weightSaveError,
-  setWeightSaveError,
-  isWeightFormValid,
-  editingWeightEntryId,
-  setEditingWeightEntryId,
-  saveWeightEntry,
   tapProbeProps,
   logTapProbe,
-  weightRange,
-  setWeightRange,
-  weightChartPointId,
-  setWeightChartPointId,
   sortedWeightEntriesOldest,
-  sortedWeightEntriesNewest,
-  startEditWeightEntry,
-  weightEntryToDelete,
-  setWeightEntryToDelete,
-  confirmDeleteWeightEntry
+  sortedWeightEntriesNewest
 }: WeightViewProps) {
+    const {
+      weightForm,
+      setWeightForm,
+      weightSaveError,
+      setWeightSaveError,
+      weightRange,
+      setWeightRange,
+      weightChartPointId,
+      setWeightChartPointId,
+      weightEntryToDelete,
+      setWeightEntryToDelete,
+      editingWeightEntryId,
+      setEditingWeightEntryId,
+      isWeightFormValid,
+      chartWeightEntries,
+      saveWeightEntry,
+      startEditWeightEntry,
+      confirmDeleteWeightEntry,
+    } = useWeightTracking({ today, goals, weightEntries, setWeightEntries, sortedWeightEntriesOldest });
     const displayUnit = weightUnit;
-    const chartWidth = 360;
-    const chartHeight = 240;
-    const chartLeft = 60;
-    const chartRight = 24;
-    const chartTop = 18;
-    const chartBottom = 48;
-    const chartPlotWidth = chartWidth - chartLeft - chartRight;
-    const chartPlotHeight = chartHeight - chartTop - chartBottom;
+    const {
+      chartPoints,
+      chartLinePoints,
+      goalPaceLinePoints,
+      trendLinePoints,
+      chartYAxisTicks,
+      chartYAxisPositions,
+      chartXAxisPositions,
+      chartStep,
+      goalWeight,
+      chartFirstDate,
+      chartMiddleDate,
+      chartLastDate,
+      chartRangeLabel,
+    } = useMemo(() => {
     const chartEntries = chartWeightEntries.map((entry) => ({
       ...entry,
       displayWeight: convertWeightValue(entry.weight, entry.unit, displayUnit),
@@ -212,8 +220,23 @@ export function WeightView({
     const chartFirstDate = chartEntries[0]?.date ?? "";
     const chartMiddleDate = chartEntries[chartXIndexMid]?.date ?? "";
     const chartLastDate = chartEntries[chartEntries.length - 1]?.date ?? "";
-    const chartRangeLabel =
-      chartEntries.length > 0 ? formatDateRange(chartFirstDate, chartLastDate) : "No entries";
+    return {
+      chartPoints,
+      chartLinePoints,
+      goalPaceLinePoints,
+      trendLinePoints,
+      chartYAxisTicks,
+      chartYAxisPositions,
+      chartXAxisPositions,
+      chartStep,
+      goalWeight,
+      chartFirstDate,
+      chartMiddleDate,
+      chartLastDate,
+      chartRangeLabel:
+        chartEntries.length > 0 ? formatDateRange(chartFirstDate, chartLastDate) : "No entries",
+    };
+    }, [chartWeightEntries, profile, startingWeightEntry, displayUnit]);
     const selectedChartPoint =
       chartPoints.find((point) => point.id === weightChartPointId) ?? chartPoints[chartPoints.length - 1] ?? null;
     const summaryCurrentWeight = currentWeightEntry
