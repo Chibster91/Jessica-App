@@ -74,6 +74,7 @@ export function useImportFlow({
   setCompletedDays,
 }: UseImportFlowArgs) {
   const importFoodBatchResolverRef = useRef<ImportFoodBatchResolver | null>(null);
+  const skipCustomFoodLibraryRef = useRef(false);
   const [importDrafts, setImportDrafts] = useState<FoodLogImportDraft[]>([]);
   const [importWeightEntries, setImportWeightEntries] = useState<WeightImportEntry[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -237,6 +238,7 @@ export function useImportFlow({
     setImportResolutionProgress(null);
     setImportReviewMode(null);
     importFoodBatchResolverRef.current = null;
+    skipCustomFoodLibraryRef.current = false;
   }
 
   function clearImportStepper() {
@@ -262,6 +264,7 @@ export function useImportFlow({
     setImportResolutionProgress(null);
     setImportReviewMode(null);
     importFoodBatchResolverRef.current = null;
+    skipCustomFoodLibraryRef.current = false;
   }
 
   function resetImportStateForDebugClear() {
@@ -360,7 +363,9 @@ export function useImportFlow({
       setStorageJson(`log-${date}`, remapLogFoodIds(nextLog, foodRemap));
     }
     remapSavedLogFoodIds(foodRemap);
-    setCustomFoods(dedupedCustomFoods);
+    if (!skipCustomFoodLibraryRef.current) {
+      setCustomFoods(dedupedCustomFoods);
+    }
     setTopFoods((current) => {
       const counts = new Map(current.map((food) => [food.name, food.count]));
       appendedEntries.forEach((entry) => {
@@ -867,11 +872,11 @@ export function useImportFlow({
     const nextApplied: Record<string, string> = {};
 
     for (const review of pending) {
-      const selection = importReviewSelections[review.item.id] ?? review.candidates[0]?.key ?? "new";
       nextActions[review.item.id] = "applied";
-      nextApplied[review.item.id] = selection;
+      nextApplied[review.item.id] = "new";
     }
 
+    skipCustomFoodLibraryRef.current = true;
     setImportReviewActions((current) => ({ ...current, ...nextActions }));
     setImportReviewAppliedSelections((current) => ({ ...current, ...nextApplied }));
     setUnresolvedImportReviewIds([]);
