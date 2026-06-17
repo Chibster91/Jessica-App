@@ -264,10 +264,10 @@ export function ProfileView({
 
         {profileSaveStatus && <p className="profile-toast">{profileSaveStatus}</p>}
 
-        <div className="profile-tabs" role="tablist" aria-label="Profile sections">
+        <div className="health-tabs pf-tabs" role="tablist" aria-label="Profile sections">
           <button
             type="button"
-            className={`profile-tab${profileTab === "info" ? " is-active" : ""}`}
+            className={profileTab === "info" ? "active" : ""}
             onClick={() => setProfileTab("info")}
             role="tab"
             aria-selected={profileTab === "info"}
@@ -276,7 +276,7 @@ export function ProfileView({
           </button>
           <button
             type="button"
-            className={`profile-tab${profileTab === "settings" ? " is-active" : ""}`}
+            className={profileTab === "settings" ? "active" : ""}
             onClick={() => setProfileTab("settings")}
             role="tab"
             aria-selected={profileTab === "settings"}

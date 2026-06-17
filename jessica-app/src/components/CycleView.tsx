@@ -636,11 +636,11 @@ function CalendarPage({ data, monthDate, setMonthDate, onOpenDay }: CalendarPage
       <section className="panel">
         <p className="panel-eyebrow">Legend</p>
         <div className="eo-legend">
-          <div className="eo-legend-item eo-legend--period"><span className="eo-dot eo-dot--period" /> Period</div>
-          <div className="eo-legend-item eo-legend--fertile"><span className="eo-dot eo-dot--fertile" /> Fertile</div>
-          <div className="eo-legend-item"><span className="eo-dot eo-dot--ovulation" /> Ovulation</div>
+          <div className="eo-legend-item"><span className="eo-swatch eo-swatch--period" /> Period</div>
+          <div className="eo-legend-item"><span className="eo-swatch eo-swatch--fertile" /> Fertile</div>
+          <div className="eo-legend-item"><span className="eo-swatch eo-swatch--ovulation" /> Ovulation</div>
           <div className="eo-legend-item"><span className="eo-dot eo-dot--intercourse" /> Intercourse</div>
-          <div className="eo-legend-item"><span className="eo-badge eo-badge--lh">LH</span> Positive OPK</div>
+          <div className="eo-legend-item"><span className="eo-badge eo-badge--lh" style={{ verticalAlign: "middle" }}>LH</span> Positive OPK</div>
           <div className="eo-legend-item"><span className="eo-dot eo-dot--mucus" /> Fertile mucus</div>
         </div>
       </section>
@@ -761,20 +761,38 @@ export default function CycleView({ bottomNav, healthTabs }: CycleViewProps) {
 
   useEffect(() => saveData(data), [data]);
 
-  const cycle = findCycleForDate(data, new Date());
+  const today = new Date();
+  const cycle = findCycleForDate(data, today);
   const fertileVal = `${formatDate(cycle.fertileStart)} – ${formatDate(cycle.fertileEnd)}`;
   const ovVal = formatDate(cycle.ovulationDate);
+
+  const hasData = getCycleStats(data).periodStarts.length > 0;
+  const todayInfo = getDayInfo(data, today);
+  const daysUntilNext = diffDays(today, cycle.nextStart);
+  const heroText = !hasData ? 'Log your first period to get started'
+    : todayInfo.actualPeriod ? 'On your period'
+    : daysUntilNext <= 0 ? 'Period expected'
+    : daysUntilNext === 1 ? 'Period in 1 day'
+    : `Period in ${daysUntilNext} days`;
+  const heroSub = hasData ? `Cycle day ${cycle.cycleDay}` : 'Tap a calendar day to start logging';
 
   return (
     <main className="app eo-app">
       {healthTabs}
-      <div className="top-bar">
-        <div>
+
+      <div className="cyc-hero">
+        <div className="cyc-hero-main">
+          <span className="cyc-hero-big">{heroText}</span>
+          <span className="cyc-hero-sub">{heroSub}</span>
         </div>
       </div>
 
+      <div className="health-tabs" role="tablist" aria-label="Cycle views">
+        <button type="button" className={tab === "calendar" ? "active" : ""} onClick={() => setTab("calendar")} role="tab" aria-selected={tab === "calendar"}>Calendar</button>
+        <button type="button" className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")} role="tab" aria-selected={tab === "stats"}>Stats</button>
+      </div>
+
       <div className="eo-estimates-block">
-        <p className="panel-eyebrow eo-estimates-eyebrow">Current estimates</p>
         <div className="eo-estimates-cards">
           <div className="eo-est-card">
             <div className="eo-est-lbl">Next period</div>
@@ -789,11 +807,6 @@ export default function CycleView({ bottomNav, healthTabs }: CycleViewProps) {
             <div className="eo-est-val">{ovVal}</div>
           </div>
         </div>
-      </div>
-
-      <div className="tab-row eo-tabs">
-        <button type="button" className={tab === "calendar" ? "active" : ""} onClick={() => setTab("calendar")}>Calendar</button>
-        <button type="button" className={tab === "stats" ? "active" : ""} onClick={() => setTab("stats")}>Stats</button>
       </div>
 
       {tab === "calendar" && <CalendarPage data={data} monthDate={monthDate} setMonthDate={setMonthDate} onOpenDay={setSelectedISO} />}

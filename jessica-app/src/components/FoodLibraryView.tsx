@@ -76,150 +76,119 @@ export function FoodLibraryView({
   } = useFoodLibrary({ customFoods, setCustomFoods, recipes, setRecipes, recentFoods });
   return (
     <main className="app">
-    
-            <section className="panel library-layout">
-              <div className="library-main">
-                <div className="tab-row" role="tablist" aria-label="Food library sections">
-                  <button
-                    className={foodLibraryTab === "recent" ? "active" : ""}
-                    type="button"
-                    onClick={() => {
-                      setFoodLibraryTab("recent");
-                      setLibrarySelection(null);
-                      cancelLibraryEditing();
-                    }}
-                    role="tab"
-                    aria-selected={foodLibraryTab === "recent"}
-                  >
-                    Recent
-                  </button>
-                  <button
-                    className={foodLibraryTab === "custom" ? "active" : ""}
-                    type="button"
-                    onClick={() => {
-                      setFoodLibraryTab("custom");
-                      setLibrarySelection(null);
-                      cancelLibraryEditing();
-                    }}
-                    role="tab"
-                    aria-selected={foodLibraryTab === "custom"}
-                  >
-                    Custom
-                  </button>
-                  <button
-                    className={foodLibraryTab === "recipes" ? "active" : ""}
-                    type="button"
-                    onClick={() => {
-                      setFoodLibraryTab("recipes");
-                      setLibrarySelection(null);
-                      cancelLibraryEditing();
-                    }}
-                    role="tab"
-                    aria-selected={foodLibraryTab === "recipes"}
-                  >
-                    Recipes
-                  </button>
-                </div>
-    
-                <div className="search-row">
-                  <input
-                    className="library-search"
-                    value={libraryQuery}
-                    placeholder={`Search ${foodLibraryTab}...`}
-                    onChange={(e) => setLibraryQuery(e.target.value)}
-                  />
-                  {foodLibraryTab === "custom" && (
-                    <button type="button" onClick={createLibraryCustomFood}>
-                      Add custom
-                    </button>
-                  )}
-                  {foodLibraryTab === "recipes" && (
-                    <button type="button" onClick={createLibraryRecipe}>
-                      Add recipe
-                    </button>
-                  )}
-                </div>
-    
-                <div className="library-list">
-                  {foodLibraryTab === "recent" && libraryRecentFoods.length === 0 && (
-                    <p className="empty-meal">No recent foods match this search.</p>
-                  )}
-    
-                  {foodLibraryTab === "recent" &&
-                    libraryRecentFoods.map((food) => (
-                      <button
-                        className={`food-card ${
-                          librarySelection?.food.id === food.id ? "selected" : ""
-                        }`}
-                        key={food.id}
-                        type="button"
-                        onClick={() => setLibrarySelection({ type: "recent", food })}
-                      >
-                        <span className="food-card-title">
-                          <img src={getFoodIconUrl(food)} alt="" />
-                          <strong>{food.name}</strong>
-                        </span>
-                        <span className="food-card-meta-row">
-                          <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
-                          <span className="food-card-cal">{food.calories} cal per {getFoodServingDisplay(food)}</span>
-                        </span>
-                        <span className="food-card-logged">Logged {food.loggedCount ?? 0} times this week</span>
-                      </button>
-                    ))}
+      <div className="lib-screen">
+        <div className="health-tabs" role="tablist" aria-label="Food library sections">
+          <button
+            className={foodLibraryTab === "recent" ? "active" : ""}
+            type="button"
+            onClick={() => { setFoodLibraryTab("recent"); setLibrarySelection(null); cancelLibraryEditing(); }}
+            role="tab" aria-selected={foodLibraryTab === "recent"}
+          >Recent</button>
+          <button
+            className={foodLibraryTab === "custom" ? "active" : ""}
+            type="button"
+            onClick={() => { setFoodLibraryTab("custom"); setLibrarySelection(null); cancelLibraryEditing(); }}
+            role="tab" aria-selected={foodLibraryTab === "custom"}
+          >Custom</button>
+          <button
+            className={foodLibraryTab === "recipes" ? "active" : ""}
+            type="button"
+            onClick={() => { setFoodLibraryTab("recipes"); setLibrarySelection(null); cancelLibraryEditing(); }}
+            role="tab" aria-selected={foodLibraryTab === "recipes"}
+          >Recipes</button>
+        </div>
 
-                  {foodLibraryTab === "custom" && libraryCustomFoods.length === 0 && (
-                    <p className="empty-meal">No custom foods match this search.</p>
-                  )}
-    
-                  {foodLibraryTab === "custom" &&
-                    libraryCustomFoods.map((food) => (
-                      <button
-                        className={`food-card ${
-                          librarySelection?.food.id === food.id ? "selected" : ""
-                        }`}
-                        key={food.id}
-                        type="button"
-                        onClick={() => setLibrarySelection({ type: "custom", food })}
-                      >
-                        <span className="food-card-title">
-                          <img src={getFoodIconUrl(food)} alt="" />
-                          <strong>{food.name}</strong>
-                        </span>
-                        <span className="food-card-meta-row">
-                          <span className="food-card-brand">{getBrandDisplayName(food.brand)}</span>
-                          <span className="food-card-cal">{food.calories} cal per {getFoodServingDisplay(food)}</span>
-                        </span>
-                      </button>
-                    ))}
+        <div className="lib-search-row">
+          <input
+            className="library-search"
+            value={libraryQuery}
+            placeholder={`Search ${foodLibraryTab}...`}
+            onChange={(e) => setLibraryQuery(e.target.value)}
+          />
+        </div>
 
-                  {foodLibraryTab === "recipes" && libraryRecipes.length === 0 && (
-                    <p className="empty-meal">No recipes match this search.</p>
-                  )}
-    
-                  {foodLibraryTab === "recipes" &&
-                    libraryRecipes.map((recipe) => (
-                      <button
-                        className={`food-card ${
-                          librarySelection?.food.id === recipe.id ? "selected" : ""
-                        }`}
-                        key={recipe.id}
-                        type="button"
-                        onClick={() => setLibrarySelection({ type: "recipe", food: recipe })}
-                      >
-                        <span className="food-card-title">
-                          <img src={getFoodIconUrl(recipe)} alt="" />
-                          <strong>{recipe.name}</strong>
-                        </span>
-                        <span className="food-card-meta-row">
-                          <span className="food-card-brand">{recipe.ingredients.length} ingredients</span>
-                          <span className="food-card-cal">{recipe.calories} cal per {getFoodServingDisplay(recipe)}</span>
-                        </span>
-                      </button>
-                    ))}
-                </div>
-              </div>
-    
-              <aside className="library-detail">
+        <div className="library-list">
+          {foodLibraryTab === "custom" && (
+            <button type="button" className="lib-addrow" onClick={createLibraryCustomFood}>
+              <span className="lib-addrow-plus">+</span>
+              <span className="lib-addrow-main">
+                <strong>New food</strong>
+                <span>Add a custom food to your library</span>
+              </span>
+              <span className="lib-addrow-chev">›</span>
+            </button>
+          )}
+          {foodLibraryTab === "recipes" && (
+            <button type="button" className="lib-addrow" onClick={createLibraryRecipe}>
+              <span className="lib-addrow-plus">+</span>
+              <span className="lib-addrow-main">
+                <strong>New recipe</strong>
+                <span>Build a recipe from ingredients</span>
+              </span>
+              <span className="lib-addrow-chev">›</span>
+            </button>
+          )}
+
+          {foodLibraryTab === "recent" && libraryRecentFoods.length === 0 && (
+            <p className="empty-meal">No recent foods match this search.</p>
+          )}
+          {foodLibraryTab === "recent" && libraryRecentFoods.map((food) => (
+            <button
+              className={`lib-foodrow${librarySelection?.food.id === food.id ? " selected" : ""}`}
+              key={food.id} type="button"
+              onClick={() => setLibrarySelection({ type: "recent", food })}
+            >
+              <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
+              <span className="lib-foodrow-main">
+                <span className="lib-foodrow-name">{food.name}</span>
+                <span className="lib-foodrow-meta">
+                  {getBrandDisplayName(food.brand)}{getBrandDisplayName(food.brand) ? " · " : ""}{food.loggedCount ?? 0}× this week
+                </span>
+              </span>
+              <span className="lib-foodrow-cal">{food.calories}<small>cal</small></span>
+            </button>
+          ))}
+
+          {foodLibraryTab === "custom" && libraryCustomFoods.length === 0 && (
+            <p className="empty-meal">No custom foods match this search.</p>
+          )}
+          {foodLibraryTab === "custom" && libraryCustomFoods.map((food) => (
+            <button
+              className={`lib-foodrow${librarySelection?.food.id === food.id ? " selected" : ""}`}
+              key={food.id} type="button"
+              onClick={() => setLibrarySelection({ type: "custom", food })}
+            >
+              <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
+              <span className="lib-foodrow-main">
+                <span className="lib-foodrow-name">{food.name}</span>
+                <span className="lib-foodrow-meta">
+                  {getBrandDisplayName(food.brand) || "Custom"} · {getFoodServingDisplay(food)}
+                </span>
+              </span>
+              <span className="lib-foodrow-cal">{food.calories}<small>cal</small></span>
+            </button>
+          ))}
+
+          {foodLibraryTab === "recipes" && libraryRecipes.length === 0 && (
+            <p className="empty-meal">No recipes match this search.</p>
+          )}
+          {foodLibraryTab === "recipes" && libraryRecipes.map((recipe) => (
+            <button
+              className={`lib-foodrow${librarySelection?.food.id === recipe.id ? " selected" : ""}`}
+              key={recipe.id} type="button"
+              onClick={() => setLibrarySelection({ type: "recipe", food: recipe })}
+            >
+              <span className="lib-foodrow-icon"><img src={getFoodIconUrl(recipe)} alt="" /></span>
+              <span className="lib-foodrow-main">
+                <span className="lib-foodrow-name">{recipe.name}</span>
+                <span className="lib-foodrow-meta">{recipe.ingredients.length} ingredients · {getFoodServingDisplay(recipe)}</span>
+              </span>
+              <span className="lib-foodrow-cal">{recipe.calories}<small>cal</small></span>
+            </button>
+          ))}
+        </div>
+
+        <aside className="library-detail">
                 {!librarySelection && !isCreatingLibraryCustomFood && !isCreatingLibraryRecipe && (
                   <p className="empty-meal">Select a food to view details.</p>
                 )}
@@ -588,10 +557,10 @@ export function FoodLibraryView({
                     </div>
                   </div>
                 )}
-              </aside>
-            </section>
-    
-            {bottomNav}
-          </main>
+        </aside>
+      </div>
+
+      {bottomNav}
+    </main>
   );
 }

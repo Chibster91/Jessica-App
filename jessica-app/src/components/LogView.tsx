@@ -372,18 +372,17 @@ export function LogView(props: LogViewProps) {
                 </>
               )}
               <div className="log-calorie-stat">
-                <span>Logged</span>
+                <span>Eaten</span>
                 <strong>{netCalories.toLocaleString()}</strong>
               </div>
               <div className="log-gauge-ring" style={{ "--p": calorieGaugePct } as CSSProperties}>
                 <div>
-                  <span>{calorieDelta >= 0 ? "Remaining" : "Over"}</span>
+                  <span>Left</span>
                   <strong>{Math.abs(calorieDelta).toLocaleString()}</strong>
-                  <small>cal</small>
                 </div>
               </div>
               <div className="log-calorie-stat">
-                <span>Total</span>
+                <span>Goal</span>
                 <strong>{calorieBudget > 0 ? calorieBudget.toLocaleString() : "Set goal"}</strong>
               </div>
 
@@ -400,9 +399,11 @@ export function LogView(props: LogViewProps) {
               </div>
 
               <div className="log-macro-row">
-                <span><i className="macro-dot protein-dot" /> Protein <strong>{formatMacro(dailyTotals.protein)}g</strong></span>
-                <span><i className="macro-dot carbs-dot" /> Carbs <strong>{formatMacro(dailyTotals.carbs)}g</strong></span>
-                <span><i className="macro-dot fat-dot" /> Fat <strong>{formatMacro(dailyTotals.fat)}g</strong></span>
+                <span className="log-macro-item"><span className="log-macro-name" style={{ color: "var(--macro-protein)" }}>Protein</span><strong>{formatMacro(dailyTotals.protein)}g</strong></span>
+                <span className="log-macro-sep">·</span>
+                <span className="log-macro-item"><span className="log-macro-name" style={{ color: "var(--macro-carbs)" }}>Carbs</span><strong>{formatMacro(dailyTotals.carbs)}g</strong></span>
+                <span className="log-macro-sep">·</span>
+                <span className="log-macro-item"><span className="log-macro-name" style={{ color: "var(--macro-fat)" }}>Fat</span><strong>{formatMacro(dailyTotals.fat)}g</strong></span>
               </div>
 
               <div className="log-macro-segmented" aria-label="Macro progress">
@@ -442,21 +443,38 @@ export function LogView(props: LogViewProps) {
                         {isExpanded ? "▾" : "▸"}
                       </button>
                       <div className="log-meal-title-block">
-                        <h3>{category}: {mealTotals.calories.toLocaleString()}</h3>
+                        <h3>{category}</h3>
                         <div className="log-meal-macros">
-                          <span>Fat {formatMacro(mealTotals.fat)}g</span>
-                          <span>Carbs {formatMacro(mealTotals.carbs)}g</span>
-                          <span>Protein {formatMacro(mealTotals.protein)}g</span>
+                          <span className="log-meal-cal">{mealTotals.calories.toLocaleString()} cal</span>
+                          <span className="log-meal-mac-sep">·</span>
+                          <span className="log-meal-mac" style={{ color: "var(--macro-protein)" }}>P <b>{formatMacro(mealTotals.protein)}g</b></span>
+                          <span className="log-meal-mac" style={{ color: "var(--macro-carbs)" }}>C <b>{formatMacro(mealTotals.carbs)}g</b></span>
+                          <span className="log-meal-mac" style={{ color: "var(--macro-fat)" }}>F <b>{formatMacro(mealTotals.fat)}g</b></span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="meal-menu-button"
-                        aria-label={`${category} menu`}
-                        onClick={() => setMealMenuCategory(mealMenuCategory === category ? null : category)}
-                      >
-                        ⋯
-                      </button>
+                      <div className="log-meal-actions-row">
+                        <button
+                          type="button"
+                          className="meal-menu-button"
+                          aria-label={`${category} menu`}
+                          onClick={() => setMealMenuCategory(mealMenuCategory === category ? null : category)}
+                        >
+                          ⋯
+                        </button>
+                        <button
+                          type="button"
+                          className="log-add-food-btn"
+                          aria-label={`Add food to ${category}`}
+                          onPointerDown={(event) => logTapProbe(`open-add-food-${category}`, "pointerdown", event)}
+                          onTouchStart={(event) => logTapProbe(`open-add-food-${category}`, "touchstart", event)}
+                          onClick={(event) => {
+                            logTapProbe(`open-add-food-${category}`, "click", event);
+                            openAddFood(category);
+                          }}
+                        >
+                          ＋
+                        </button>
+                      </div>
                       {mealMenuCategory === category && (
                         <>
                           <div className="meal-menu-backdrop" onClick={() => setMealMenuCategory(null)} />
@@ -552,27 +570,16 @@ export function LogView(props: LogViewProps) {
                       </div>
                     )}
 
-                    <div className="log-meal-actions">
-                      <button
-                        className="log-add-food-button"
-                        type="button"
-                        onPointerDown={(event) => logTapProbe(`open-add-food-${category}`, "pointerdown", event)}
-                        onTouchStart={(event) => logTapProbe(`open-add-food-${category}`, "touchstart", event)}
-                        onClick={(event) => {
-                          logTapProbe(`open-add-food-${category}`, "click", event);
-                          openAddFood(category);
-                        }}
-                      >
-                        Add Food
-                      </button>
-                    </div>
                   </section>
                 );
               })}
             </div>
 
-            <div className="finished-logging-row">
-              <span className="finish-toggle-label">Finish Logging</span>
+            <div className={`finished-logging-row${isDayLogged ? " is-done" : ""}`}>
+              <div className="finish-toggle-text">
+                <span className="finish-toggle-title">Done logging for today</span>
+                <span className="finish-toggle-sub">{isDayLogged ? "Day locked — totals saved" : "Lock in your day to save totals"}</span>
+              </div>
               <div className={`finish-toggle${isDayLogged ? " logged" : ""}`} role="switch" aria-checked={isDayLogged} aria-label="Finish logging" onClick={handleFinishToggle}>
                 <span className="finish-toggle-indicator" />
                 <button type="button" aria-label="Mark day unfinished" />

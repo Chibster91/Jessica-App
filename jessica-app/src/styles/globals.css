@@ -559,29 +559,38 @@ input:disabled {
 }
 
 .nav-icon {
-  font-size: 1.2rem;
-  line-height: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
 }
 
 .health-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  display: flex;
+  justify-content: center;
+  border-bottom: var(--ui-border);
   margin-bottom: 1rem;
 }
 
 .health-tabs button {
-  min-height: 2.5rem;
-  background: var(--surface-2);
-  border: var(--ui-border);
-  border-radius: var(--control-radius);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--fg-2);
+  font-size: 0.95rem;
   font-weight: 800;
+  min-height: 2.5rem;
+  padding: 0 1.5rem;
+  margin-bottom: -1px;
+}
+
+.health-tabs button + button {
+  margin-left: 4px;
 }
 
 .health-tabs button.active {
-  border-color: var(--accent);
   color: var(--fg);
+  border-bottom-color: var(--accent);
 }
 
 .modal,
@@ -689,7 +698,6 @@ input:disabled {
 :root[data-theme="light"] .food-card,
 :root[data-theme="light"] .tab-row button,
 :root[data-theme="light"] .bottom-nav button:hover,
-:root[data-theme="light"] .health-tabs button,
 :root[data-theme="light"] .scan-food-panel,
 :root[data-theme="light"] .scan-file-label,
 :root[data-theme="light"] .ingredient-confirm,

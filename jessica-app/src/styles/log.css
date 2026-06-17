@@ -1207,9 +1207,9 @@ button {
   gap: 10px;
   align-items: center;
   padding: 14px;
-  background: var(--surface);
-  border: var(--ui-border);
-  border-radius: var(--ui-radius);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
 }
 
 .log-calorie-stat {
@@ -1232,8 +1232,8 @@ button {
 }
 
 .log-gauge-ring {
-  width: 110px;
-  height: 110px;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
   background:
     radial-gradient(closest-side, var(--surface) 70%, transparent 71%),
@@ -1271,13 +1271,13 @@ button {
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
   padding-top: 10px;
-  border-top: var(--ui-border);
+  border-top: 1px solid var(--border-default);
   margin-top: 4px;
 }
 .log-meal-breakdown button {
   background: none;
   border: 0;
-  color: var(--fg);
+  color: var(--text-primary);
   padding: 6px 4px;
   border-radius: 8px;
   cursor: pointer;
@@ -1286,35 +1286,45 @@ button {
   text-align: center;
 }
 .log-meal-breakdown button span {
-  font-size: 0.65rem;
-  color: var(--fg-2);
+  font-size: 0.6rem;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
+  font-weight: 700;
 }
 .log-meal-breakdown button strong {
-  font-size: 0.95rem;
-  font-family: var(--mono);
-  color: var(--fg);
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
 }
 
 .log-macro-row {
   grid-column: 1 / -1;
   display: flex;
-  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding-top: 8px;
-  border-top: var(--ui-border);
+  border-top: 1px solid var(--border-default);
   font-size: 0.78rem;
   flex-wrap: wrap;
 }
-.log-macro-row span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--fg-2);
+.log-macro-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
 }
-.log-macro-row strong {
-  color: var(--fg);
-  margin-left: 2px;
+.log-macro-item strong {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.log-macro-name {
+  font-weight: 600;
+}
+.log-macro-sep {
+  color: var(--text-muted);
+  font-size: 0.7rem;
 }
 
 .macro-dot {
@@ -1337,12 +1347,12 @@ button {
   height: 6px;
   border-radius: 3px;
   overflow: hidden;
-  background: var(--border);
+  background: var(--border-default);
 }
 .log-macro-segmented span { min-width: 0; }
 .log-macro-segmented .empty-segment {
   width: 100%;
-  background: var(--border);
+  background: var(--border-default);
 }
 
 .log-meal-list {
@@ -1350,9 +1360,9 @@ button {
   gap: 12px;
 }
 .log-meal-card {
-  background: var(--surface);
-  border: var(--ui-border);
-  border-radius: var(--ui-radius);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
   padding: 12px 14px;
   display: grid;
   gap: 10px;
@@ -1361,8 +1371,8 @@ button {
 .log-meal-header {
   position: relative;
   display: grid;
-  grid-template-columns: 24px 1fr 24px;
-  align-items: start;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
   gap: 8px;
 }
 .meal-expand-button,
@@ -1480,17 +1490,50 @@ button {
 .log-meal-title-block h3,
 .log-meal-header h3 {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--fg);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 .log-meal-macros {
   display: flex;
-  gap: 10px;
+  align-items: baseline;
+  gap: 5px;
   font-size: 0.7rem;
-  color: var(--fg-2);
-  margin-top: -8px;
+  color: var(--text-secondary);
   flex-wrap: wrap;
+}
+.log-meal-cal {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.log-meal-mac-sep {
+  color: var(--text-muted);
+}
+.log-meal-mac {
+  font-weight: 500;
+}
+.log-meal-mac b {
+  font-weight: 700;
+}
+.log-meal-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.log-add-food-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .log-food-list {
@@ -1502,9 +1545,9 @@ button {
   grid-template-columns: 24px 1fr auto;
   align-items: center;
   gap: 10px;
-  background: var(--surface-2);
-  border: var(--ui-border);
-  border-radius: var(--ui-radius);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
   cursor: pointer;
   width: 100%;
@@ -1576,21 +1619,6 @@ button {
   font-size: 0.85rem;
   padding: 6px 2px;
   margin: 0;
-}
-.log-meal-actions {
-  display: flex;
-  justify-content: stretch;
-}
-.log-add-food-button {
-  background: var(--accent);
-  border: 0;
-  color: #fff;
-  font: inherit;
-  font-weight: 700;
-  padding: 14px;
-  width: 100%;
-  border-radius: 10px;
-  cursor: pointer;
 }
 
 .add-food-screen {
@@ -1764,7 +1792,6 @@ button {
 :root[data-theme="light"] .log-summary-card,
 :root[data-theme="light"] .log-meal-card,
 :root[data-theme="light"] .log-food-row,
-:root[data-theme="light"] .log-add-food-button,
 :root[data-theme="light"] .log-meal-breakdown button,
 :root[data-theme="light"] .log-menu-dropdown,
 :root[data-theme="light"] .log-menu-dropdown button,

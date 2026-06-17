@@ -586,17 +586,6 @@ export function WeightView({
                 <div className="w-stat"><div className="lbl">Remaining</div><div className="val">{remainingAmount !== null ? Number(remainingAmount.toFixed(1)) : "--"}<small>{displayUnit}</small></div></div>
               </div>
 
-              <div className="w-bmi-row">
-                <span className="lbl">BMI</span>
-                <span className="val">{bmi !== null ? Number(bmi.toFixed(1)) : "--"}</span>
-                <span className="cls">{getBmiClass(bmi)}</span>
-              </div>
-
-              <div className="w-avg-grid">
-                <div className="w-avg"><div className="lbl">Avg daily loss</div><div className="val">{avgDailyChange !== null ? Number(Math.abs(avgDailyChange).toFixed(2)) : "--"}<small>{displayUnit}</small></div></div>
-                <div className="w-avg"><div className="lbl">Total change</div><div className="val">{summaryChangeLabel}</div></div>
-                <div className="w-avg"><div className="lbl">Avg weekly loss</div><div className="val">{avgWeeklyChange !== null ? Number(Math.abs(avgWeeklyChange).toFixed(2)) : "--"}<small>{displayUnit}</small></div></div>
-              </div>
             </section>
 
             <button type="button" className="w-cta" onClick={openWeightForm}>Enter Weight</button>
@@ -609,26 +598,18 @@ export function WeightView({
                   const entryDate = new Date(`${entry.date}T12:00:00`);
                   return (
                     <div className="w-hist-row" key={entry.id}>
-                      <div className="w-hist-weight">
-                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small>{displayUnit}</small></span>
+                      <div className="w-hist-main">
+                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small> {displayUnit}</small></span>
+                        <span className="sep">·</span>
                         <span className={`delta${delta !== null && delta > 0 ? " gain" : delta !== null && delta < 0 ? " loss" : ""}`}>{formatDelta(delta)}</span>
+                        <span className="sep">·</span>
+                        <span className="date-str">{entryDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
+                        {entry.note ? <span className="note-str">{entry.note}</span> : null}
                       </div>
-                      <div className="w-segs">{Array.from({ length: 3 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
-                      <div className="w-hist-date">
-                        <div className="w-hist-date-top">
-                          <span className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</span>
-                          <span className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</span>
-                        </div>
-                        <div className="year">{entryDate.getFullYear()}</div>
-                      </div>
-                      <div className="w-hist-time">
-                        <span className="dow">{entryDate.toLocaleDateString("en-US", { weekday: "long" })}</span>
-                        <span className="clock">{entry.note || ""}</span>
-                        <span className="w-hist-actions">
-                          <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
-                          <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
-                        </span>
-                      </div>
+                      <span className="w-hist-actions">
+                        <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
+                        <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
+                      </span>
                     </div>
                   );
                 })}
@@ -729,26 +710,18 @@ export function WeightView({
                   const entryDate = new Date(`${entry.date}T12:00:00`);
                   return (
                     <div className="w-hist-row" key={entry.id}>
-                      <div className="w-hist-weight">
-                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small>{displayUnit}</small></span>
+                      <div className="w-hist-main">
+                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small> {displayUnit}</small></span>
+                        <span className="sep">·</span>
                         <span className={`delta${delta !== null && delta > 0 ? " gain" : delta !== null && delta < 0 ? " loss" : ""}`}>{formatDelta(delta)}</span>
+                        <span className="sep">·</span>
+                        <span className="date-str">{entryDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
+                        {entry.note ? <span className="note-str">{entry.note}</span> : null}
                       </div>
-                      <div className="w-segs">{Array.from({ length: 3 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
-                      <div className="w-hist-date">
-                        <div className="w-hist-date-top">
-                          <span className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</span>
-                          <span className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</span>
-                        </div>
-                        <div className="year">{entryDate.getFullYear()}</div>
-                      </div>
-                      <div className="w-hist-time">
-                        <span className="dow">{entryDate.toLocaleDateString("en-US", { weekday: "long" })}</span>
-                        <span className="clock">{entry.note || ""}</span>
-                        <span className="w-hist-actions">
-                          <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
-                          <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
-                        </span>
-                      </div>
+                      <span className="w-hist-actions">
+                        <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
+                        <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
+                      </span>
                     </div>
                   );
                 })}
@@ -774,26 +747,18 @@ export function WeightView({
                   const entryDate = new Date(`${entry.date}T12:00:00`);
                   return (
                     <div className="w-hist-row" key={entry.id}>
-                      <div className="w-hist-weight">
-                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small>{displayUnit}</small></span>
+                      <div className="w-hist-main">
+                        <span className="val">{Number(convertWeightValue(entry.weight, entry.unit, displayUnit).toFixed(1))}<small> {displayUnit}</small></span>
+                        <span className="sep">·</span>
                         <span className={`delta${delta !== null && delta > 0 ? " gain" : delta !== null && delta < 0 ? " loss" : ""}`}>{formatDelta(delta)}</span>
+                        <span className="sep">·</span>
+                        <span className="date-str">{entryDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</span>
+                        {entry.note ? <span className="note-str">{entry.note}</span> : null}
                       </div>
-                      <div className="w-segs">{Array.from({ length: 3 }, (_, index) => <span key={index} className={getSegmentClass(index, delta)} />)}</div>
-                      <div className="w-hist-date">
-                        <div className="w-hist-date-top">
-                          <span className="month">{entryDate.toLocaleDateString("en-US", { month: "short" })}</span>
-                          <span className="day">{entryDate.toLocaleDateString("en-US", { day: "2-digit" })}</span>
-                        </div>
-                        <div className="year">{entryDate.getFullYear()}</div>
-                      </div>
-                      <div className="w-hist-time">
-                        <span className="dow">{entryDate.toLocaleDateString("en-US", { weekday: "long" })}</span>
-                        <span className="clock">{entry.note || ""}</span>
-                        <span className="w-hist-actions">
-                          <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
-                          <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
-                        </span>
-                      </div>
+                      <span className="w-hist-actions">
+                        <button type="button" onClick={() => handleEditWeightEntry(entry)}>Edit</button>
+                        <button type="button" onClick={() => setWeightEntryToDelete(entry)}>Delete</button>
+                      </span>
                     </div>
                   );
                 })}

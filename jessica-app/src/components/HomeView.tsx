@@ -228,6 +228,7 @@ export function HomeView({
                   const isSel = date === homeSelectedDate;
                   const isToday = date === today;
                   const total = protein + carbs + fat;
+                  const dayLabel = getShortDayName(date);
 
                   return (
                     <button
@@ -235,7 +236,7 @@ export function HomeView({
                       type="button"
                       className="dash-day-col"
                       aria-pressed={isSel}
-                      aria-label={getShortDayName(date)}
+                      aria-label={dayLabel}
                       onClick={() => toggleHomeDate(date)}
                     >
                       <div className={`dash-macro-meter${isSel ? " sel" : ""}${isToday ? " today" : ""}${total > 0 ? " logged" : ""}`}>
@@ -249,6 +250,7 @@ export function HomeView({
                           <div className="dash-macro-meter-empty" />
                         )}
                       </div>
+                      <span className={`dash-bar-day${isSel ? " sel" : ""}${isToday ? " today" : ""}`}>{dayLabel}</span>
                     </button>
                   );
                 })}
@@ -264,74 +266,27 @@ export function HomeView({
 
         {/* BOTTOM CARDS */}
         <section className="dash-bottom-grid">
-          {/* Top Left: Streak */}
+          {/* Row 1 Left: Streak */}
           <div className="dash-card dash-mini-card dash-streak-card">
             <p className="dash-quad-label">Streak</p>
             <strong className="dash-streak-num">{completedStreak > 0 ? completedStreak : "—"}</strong>
             <span className="dash-quad-sub">days completed</span>
           </div>
 
-          {/* Top Right: Weekly Macro Goals */}
-          <div className="dash-card dash-mini-card">
-            <div className="dash-card-title-row">
-              <p className="dash-quad-label">Goals</p>
-              <div className="dash-goals-toggle" aria-label="Goal range">
-                <button
-                  type="button"
-                  className={goalsView === "daily" ? "active" : ""}
-                  onClick={() => setGoalsView("daily")}
-                >
-                  Daily
-                </button>
-                <button
-                  type="button"
-                  className={goalsView === "weekly" ? "active" : ""}
-                  onClick={() => setGoalsView("weekly")}
-                >
-                  Weekly
-                </button>
-              </div>
-            </div>
-            {goals ? (
-              <div className="dash-macro-progress-list">
-                {[
-                  { label: "Protein", total: goalsView === "weekly" ? weekTotalProtein : displayStats.protein, goal: goals.protein * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-protein)", overflowColor: "#22c55e" },
-                  { label: "Carbs", total: goalsView === "weekly" ? weekTotalCarbs : displayStats.carbs, goal: goals.carbs * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-carbs)", overflowColor: "#38bdf8" },
-                  { label: "Fat", total: goalsView === "weekly" ? weekTotalFat : displayStats.fat, goal: goals.fat * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-fat)", overflowColor: "#fb923c" },
-                ].map(({ label, total, goal, color, overflowColor }) => {
-                  const markerPct = 80;
-                  const goalFillPct = goal > 0 ? Math.min(markerPct, (total / goal) * markerPct) : 0;
-                  const overflowPct = goal > 0 && total > goal
-                    ? Math.min(100 - markerPct, ((total - goal) / (goal * 0.25 || 1)) * (100 - markerPct))
-                    : 0;
-                  return (
-                    <div key={label} className="dash-macro-prog-row">
-                      <div className="dash-macro-prog-head">
-                        <span className="dash-macro-prog-label">{label}</span>
-                        <span className="dash-macro-prog-pct">
-                          {goal > 0 ? `${Math.round((total / goal) * 100)}% / ${Math.round(total)}g` : `${Math.round(total)}g`}
-                        </span>
-                      </div>
-                      <div className="dash-macro-prog-track">
-                        <div className="dash-goal-marker" style={{ left: `${markerPct}%` }} />
-                        <div className="dash-macro-prog-fill" style={{ width: `${goalFillPct}%`, background: color }} />
-                        {overflowPct > 0 && (
-                          <div
-                            className="dash-macro-prog-over"
-                            style={{ left: `${markerPct}%`, width: `${overflowPct}%`, background: overflowColor }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="dash-quad-sub">Set goals in Profile</p>
-            )}
+          {/* Row 1 Right: Today */}
+          <div className="dash-card dash-mini-card dash-today-card">
+            <p className="dash-quad-label">Today</p>
+            <strong className="dash-today-num">
+              {todayCalories.toLocaleString()}
+            </strong>
+            <span className="dash-quad-sub">
+              {todayRemaining !== null
+                ? `cal · ${todayRemaining >= 0 ? todayRemaining.toLocaleString() : `${Math.abs(todayRemaining).toLocaleString()} over`} ${todayRemaining >= 0 ? "left" : ""}`
+                : "cal today"}
+            </span>
           </div>
 
-          {/* Bottom Left: Weight */}
+          {/* Row 2 Left: Weight */}
           <div className="dash-card dash-mini-card dash-weight-card">
             <p className="dash-quad-label">Weight</p>
             {currentWeightEntry ? (
@@ -365,7 +320,7 @@ export function HomeView({
                     <>
                       <span className="dash-quad-sub">Goal: {formatWeightValue(goal, weightUnit)}</span>
                       <div className="dash-macro-prog-track" style={{ marginTop: "0.3rem" }}>
-                        <div className="dash-macro-prog-fill" style={{ width: `${pct}%`, background: "#8AB0AB" }} />
+                        <div className="dash-macro-prog-fill" style={{ width: `${pct}%`, background: "var(--text-muted)" }} />
                       </div>
                       <span className="dash-quad-sub">{formatWeightValue(remaining, weightUnit)} remaining</span>
                     </>
@@ -380,17 +335,64 @@ export function HomeView({
             )}
           </div>
 
-          {/* Bottom Right: Today */}
+          {/* Row 2 Right: Macro Goals */}
           <div className="dash-card dash-mini-card">
-            <p className="dash-quad-label">Today</p>
-            <strong className="dash-streak-num" style={{ color: "var(--fg)" }}>
-              {todayCalories.toLocaleString()}
-            </strong>
-            <span className="dash-quad-sub">
-              {todayRemaining !== null
-                ? `cal · ${todayRemaining >= 0 ? todayRemaining.toLocaleString() : `${Math.abs(todayRemaining).toLocaleString()} over`} ${todayRemaining >= 0 ? "left" : ""}`
-                : "cal today"}
-            </span>
+            <div className="dash-card-title-row">
+              <p className="dash-quad-label">Goals</p>
+              <div className="dash-goals-toggle" aria-label="Goal range">
+                <button
+                  type="button"
+                  className={goalsView === "daily" ? "active" : ""}
+                  onClick={() => setGoalsView("daily")}
+                >
+                  D
+                </button>
+                <button
+                  type="button"
+                  className={goalsView === "weekly" ? "active" : ""}
+                  onClick={() => setGoalsView("weekly")}
+                >
+                  W
+                </button>
+              </div>
+            </div>
+            {goals ? (
+              <div className="dash-macro-progress-list">
+                {[
+                  { label: "Protein", total: goalsView === "weekly" ? weekTotalProtein : displayStats.protein, goal: goals.protein * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-protein)", overflowColor: "var(--macro-protein)" },
+                  { label: "Carbs", total: goalsView === "weekly" ? weekTotalCarbs : displayStats.carbs, goal: goals.carbs * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-carbs)", overflowColor: "var(--macro-carbs)" },
+                  { label: "Fat", total: goalsView === "weekly" ? weekTotalFat : displayStats.fat, goal: goals.fat * (goalsView === "weekly" ? 7 : 1), color: "var(--macro-fat)", overflowColor: "var(--macro-fat)" },
+                ].map(({ label, total, goal, color, overflowColor }) => {
+                  const markerPct = 80;
+                  const goalFillPct = goal > 0 ? Math.min(markerPct, (total / goal) * markerPct) : 0;
+                  const overflowPct = goal > 0 && total > goal
+                    ? Math.min(100 - markerPct, ((total - goal) / (goal * 0.25 || 1)) * (100 - markerPct))
+                    : 0;
+                  return (
+                    <div key={label} className="dash-macro-prog-row">
+                      <div className="dash-macro-prog-head">
+                        <span className="dash-macro-prog-label">{label}</span>
+                        <span className="dash-macro-prog-pct">
+                          {goal > 0 ? `${Math.round((total / goal) * 100)}%` : `${Math.round(total)}g`}
+                        </span>
+                      </div>
+                      <div className="dash-macro-prog-track">
+                        <div className="dash-goal-marker" style={{ left: `${markerPct}%` }} />
+                        <div className="dash-macro-prog-fill" style={{ width: `${goalFillPct}%`, background: color }} />
+                        {overflowPct > 0 && (
+                          <div
+                            className="dash-macro-prog-over"
+                            style={{ left: `${markerPct}%`, width: `${overflowPct}%`, background: overflowColor }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="dash-quad-sub">Set goals in Profile</p>
+            )}
           </div>
         </section>
 

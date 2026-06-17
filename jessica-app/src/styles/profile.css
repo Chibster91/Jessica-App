@@ -1292,29 +1292,8 @@
   white-space: nowrap;
 }
 
-.profile-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 4px;
-  background: var(--surface);
-  border: var(--ui-border);
-  border-radius: var(--radius-pill, 999px);
-  padding: 4px;
-  margin-bottom: 1rem;
-}
-
-.profile-tab {
-  background: transparent;
-  border: 0;
-  border-radius: 999px;
-  color: var(--fg-2);
-  font-weight: 600;
-  padding: 8px 12px;
-}
-
-.profile-tab.is-active {
-  background: var(--accent);
-  color: #fff;
+.pf-tabs {
+  margin: 0.5rem 0 0.75rem;
 }
 
 .profile-recalculate-btn {
@@ -1369,7 +1348,6 @@
 :root[data-theme="light"] .wz-3btn-item,
 :root[data-theme="light"] .wz-live-tile,
 :root[data-theme="light"] .profile-manual-calorie-panel,
-:root[data-theme="light"] .profile-tabs,
 :root[data-theme="light"] .wz-readonly-input,
 :root[data-theme="light"] .goals-input-row input {
   background: var(--surface);

@@ -51,7 +51,9 @@ export function AppChrome({
     className={appView === "home" ? "active" : ""}
     onClick={() => onNavigate("home")}
   >
-    <span className="nav-icon">⌂</span>
+    <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 10.5 12 3l9 7.5M5 9.5V20a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1V9.5" />
+    </svg>
     <span>Home</span>
   </button>
 
@@ -60,7 +62,9 @@ export function AppChrome({
     className={appView === "day" ? "active" : ""}
     onClick={() => onNavigate("day")}
   >
-    <span className="nav-icon">≡</span>
+    <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
     <span>Log</span>
   </button>
 
@@ -69,7 +73,9 @@ export function AppChrome({
     className={appView === "weight" || appView === "egg-oracle" ? "active" : ""}
     onClick={() => onNavigate("weight")}
   >
-    <span className="nav-icon">↕</span>
+    <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z" />
+    </svg>
     <span>Health</span>
   </button>
 
@@ -78,7 +84,9 @@ export function AppChrome({
     className={appView === "library" ? "active" : ""}
     onClick={onOpenLibrary}
   >
-    <span className="nav-icon">⊞</span>
+    <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />
+    </svg>
     <span>Library</span>
   </button>
 
@@ -87,7 +95,9 @@ export function AppChrome({
     className={appView === "profile" ? "active" : ""}
     onClick={() => onNavigate("profile")}
   >
-    <span className="nav-icon">◉</span>
+    <svg className="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM5 21a7 7 0 0 1 14 0" />
+    </svg>
     <span>Profile</span>
   </button>
 </nav>

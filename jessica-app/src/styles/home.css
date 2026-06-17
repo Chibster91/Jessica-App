@@ -379,46 +379,51 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 30px;
+  gap: 0.5rem;
+  padding: 0.1rem 0.1rem 0.2rem;
 }
-.dash-week-nav span,
 .dash-week-label {
-  color: var(--fg-2);
-  font-size: 1rem;
-  font-weight: 900;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: var(--weight-bold);
   text-align: center;
   flex: 1;
 }
 .dash-week-arrow {
-  background: var(--surface-2);
+  background: var(--surface-raised);
   border: var(--ui-border);
-  color: var(--fg);
-  width: 28px;
-  height: 28px;
-  border-radius: var(--control-radius);
+  color: var(--text-primary);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-control);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   line-height: 1;
   flex-shrink: 0;
   padding: 0;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.dash-week-arrow:hover {
+  background: var(--surface-card);
+  border-color: var(--border-strong);
 }
 .dash-card {
-  background: var(--surface);
+  background: var(--surface-card);
   border: var(--ui-border);
-  border-radius: var(--ui-radius);
-  padding: 14px 16px;
-  margin: 0 0 12px;
+  border-radius: var(--radius-card);
+  padding: 1rem;
+  margin: 0 0 0.55rem;
 }
 .dash-card-label {
-  margin: 0 0 8px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  margin: 0 0 0.6rem;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  color: var(--fg-2);
+  color: var(--text-secondary);
   text-align: left;
   line-height: 1;
 }
@@ -446,10 +451,11 @@
 .dash-cal-number {
   position: relative;
   display: block;
-  font-size: 2.4rem;
+  font-size: 2.6rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 .dash-cal-sub {
   position: relative;
@@ -463,9 +469,9 @@
 .dash-day-bars {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-top: 12px;
-  height: 90px;
+  gap: 5px;
+  margin-top: 8px;
+  height: 55px;
   align-items: end;
 }
 .dash-day-col {
@@ -485,10 +491,10 @@
 .dash-bar-wrap,
 .dash-budget-wrap {
   width: 100%;
-  height: 70px;
-  background: var(--surface-2);
+  height: 42px;
+  background: var(--surface-raised);
   border: var(--ui-border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   position: relative;
   overflow: hidden;
 }
@@ -537,10 +543,9 @@
 }
 
 /* Macros card */
-.dash-macro-card { }
 .dash-macro-layout {
   display: grid;
-  grid-template-columns: 100px 1fr;
+  grid-template-columns: 90px 1fr;
   gap: 14px;
   align-items: center;
 }
@@ -548,8 +553,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100px;
-  height: 100px;
+  width: 90px;
+  height: 90px;
   flex-shrink: 0;
 }
 .dash-pie-chart {
@@ -561,13 +566,13 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .dash-macro-meter-col {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
-  height: 60px;
+  height: 55px;
   align-items: end;
 }
 .dash-macro-meter-col .dash-day-col {
@@ -577,8 +582,8 @@
 .dash-macro-meter {
   position: relative;
   width: 100%;
-  height: 50px;
-  background: var(--surface-2);
+  height: 42px;
+  background: var(--surface-raised);
   border: var(--ui-border);
   border-radius: 4px;
   overflow: hidden;
@@ -598,15 +603,23 @@
   position: absolute;
   inset: 0;
 }
+.dash-macro-daylabels {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  text-align: center;
+  margin-top: 1px;
+}
 .dash-macro-summary-line {
   display: flex;
   gap: 12px;
-  font-size: 0.78rem;
-  color: var(--fg-2);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
   margin: 0;
   flex-wrap: wrap;
+  justify-content: center;
 }
-.dash-macro-summary-line b { font-weight: 700; }
+.dash-macro-summary-line b { font-weight: var(--weight-extrabold); }
 
 @media (max-width: 520px) {
   .dash-macro-layout {
@@ -623,19 +636,19 @@
 .dash-bottom-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 0.55rem;
 }
 .dash-mini-card {
-  padding: 10px 12px;
+  padding: 0.75rem 0.85rem;
   margin: 0;
 }
 .dash-quad-label {
-  margin: 0 0 4px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  margin: 0 0 0.3rem;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  color: var(--fg-2);
+  color: var(--text-secondary);
 }
 .dash-card-title-row {
   display: flex;
@@ -646,35 +659,39 @@
 .dash-card-title-row .dash-quad-label { margin: 0; }
 .dash-goals-toggle {
   display: inline-flex;
-  background: var(--surface-2);
+  background: var(--surface-raised);
   border: var(--ui-border);
-  border-radius: var(--control-radius);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 .dash-goals-toggle button {
   background: none;
   border: 0;
-  color: var(--fg-2);
+  color: var(--text-secondary);
   font: inherit;
   font-size: 0.65rem;
-  padding: 4px 8px;
+  font-weight: var(--weight-bold);
+  padding: 3px 8px;
   cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
 }
 .dash-goals-toggle button.active {
   background: var(--accent);
   color: #fff;
 }
 .dash-quad-sub {
-  color: var(--fg-2);
-  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
   overflow-wrap: anywhere;
 }
 .dash-streak-num {
   display: block;
-  font-size: 4rem;
-  font-weight: 700;
-  line-height: 1;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
   color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 .dash-streak-card {
   display: flex;
@@ -682,19 +699,43 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  gap: 6px;
-  min-height: 140px;
+  gap: 4px;
+  min-height: 130px;
 }
 .dash-streak-card .dash-quad-label { margin: 0; }
 .dash-streak-card .dash-quad-sub { display: block; }
+.dash-today-num {
+  display: block;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.dash-today-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 4px;
+  min-height: 130px;
+}
+.dash-today-card .dash-quad-label { margin: 0; }
+.dash-weight-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 .dash-weight-num {
   display: block;
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--fg);
+  font-size: 1.9rem;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
-.dash-weight-card { }
+.dash-weight-card .dash-quad-sub { display: block; }
 .weight-lost { color: var(--macro-protein); }
 .weight-gained { color: var(--danger-warm); }
 .dash-macro-progress-list { display: grid; gap: 6px; }
@@ -704,16 +745,16 @@
   justify-content: space-between;
   font-size: 0.7rem;
 }
-.dash-macro-prog-label { color: var(--fg-2); }
+.dash-macro-prog-label { color: var(--text-secondary); }
 .dash-macro-prog-pct {
-  color: var(--fg);
-  font-family: var(--mono);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 .dash-macro-prog-track {
   position: relative;
   height: 5px;
-  background: var(--border);
+  background: var(--border-default);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -741,14 +782,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--surface);
-  border: var(--ui-border);
-  border-radius: var(--ui-radius);
-  padding: 12px 14px;
+  gap: 12px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
 }
-.finish-toggle-label {
-  font-weight: 600;
-  color: var(--fg);
+.finished-logging-row.is-done {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-default));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-card));
+}
+.finish-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.finish-toggle-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.finish-toggle-sub {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
 }
 .finish-toggle {
   position: relative;

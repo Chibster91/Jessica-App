@@ -1,46 +1,200 @@
 :root {
-  --text: #f2f2f0;
-  --text-h: #F2F2F0;
-  --bg: #15161a;
-  --surface: #1E2026;
-  --surface-2: #262932;
-  --fg: #F2F2F0;
-  --fg-2: #B7BCC7;
-  --border: #343845;
-  --code-bg: #262932;
-  --accent: #b46cff;
-  --accent-bg: rgba(180, 108, 255, 0.15);
-  --accent-soft: rgba(180, 108, 255, 0.22);
-  --accent-border: rgba(180, 108, 255, 0.5);
-  --macro-carbs: #4cc9f0;
+  /* ================================================================
+     FoodVault Design Tokens
+     Dark-gray + purple. Dark is the canonical theme.
+     ================================================================ */
+
+  /* ---- Neutral ramp ---- */
+  --gray-950: #101116;
+  --gray-900: #15161a;
+  --gray-850: #1a1c22;
+  --gray-800: #1e2026;
+  --gray-750: #23262e;
+  --gray-700: #262932;
+  --gray-600: #343845;
+  --gray-500: #4a4f5e;
+  --gray-400: #7c828f;
+  --gray-300: #b7bcc7;
+  --gray-100: #e6e7ea;
+  --gray-50:  #f2f2f0;
+
+  /* ---- Brand purple ---- */
+  --purple-700: #6d36c9;
+  --purple-600: #863bff;
+  --purple-500: #b46cff;
+  --purple-400: #c389ff;
+  --purple-300: #d6b4ff;
+  --purple-glow: rgba(180, 108, 255, 0.45);
+
+  /* ---- Macro palette ---- */
   --macro-protein: #80ed99;
-  --macro-fat: #ffb86b;
-  --danger-warm: #F87171;
-  --danger-bg: rgba(248, 113, 113, 0.14);
-  --danger-border: rgba(248, 113, 113, 0.4);
+  --macro-carbs:   #4cc9f0;
+  --macro-fat:     #ffb86b;
+
+  /* ---- Cycle / health palette ---- */
+  --cycle-period:      #f87171;
+  --cycle-fertile:     #d97706;
+  --cycle-fertile-100: #fbbf24;
+  --cycle-ovulation:   var(--purple-500);
+  --cycle-intercourse: #f472b6;
+  --cycle-mucus:       #34d399;
+
+  /* ---- Status ---- */
+  --danger:      #f87171;
+  --danger-deep: #7f1d1d;
+  --danger-fg:   #fee2e2;
+  --success:     #80ed99;
+  --warning:     #ffb86b;
+
+  /* ---- Semantic surfaces ---- */
+  --surface-app:    var(--gray-900);
+  --surface-card:   var(--gray-800);
+  --surface-raised: var(--gray-700);
+  --surface-sunken: var(--gray-950);
+  --surface-nav:    #15161a;
+
+  /* ---- Semantic text ---- */
+  --text-primary:   var(--gray-50);
+  --text-secondary: var(--gray-300);
+  --text-muted:     var(--gray-400);
+  --text-on-accent: #ffffff;
+  --text-inverse:   #171921;
+
+  /* ---- Semantic borders ---- */
+  --border-default: var(--gray-600);
+  --border-strong:  var(--gray-500);
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+
+  /* ---- Accent (purple) ---- */
+  --accent:        var(--purple-500);
+  --accent-hover:  var(--purple-400);
+  --accent-press:  var(--purple-600);
+  --accent-fg:     #ffffff;
+  --accent-bg:     rgba(180, 108, 255, 0.15);
+  --accent-soft:   rgba(180, 108, 255, 0.22);
+  --accent-border: rgba(180, 108, 255, 0.50);
+
+  /* ---- Status surfaces ---- */
+  --danger-bg:     rgba(248, 113, 113, 0.14);
+  --danger-border: rgba(248, 113, 113, 0.40);
+  --danger-warm:   #F87171;
+
+  /* ---- Focus ring ---- */
+  --focus-ring: 0 0 0 3px var(--purple-glow);
+
+  /* ---- Typography ---- */
+  --font-sans:    "Nunito", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Nunito", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-extrabold: 800;
+  --weight-black:    900;
+
+  --text-3xl:  3.5rem;
+  --text-2xl:  2.4rem;
+  --text-xl:   2rem;
+  --text-lg:   1.5rem;
+  --text-md:   1.125rem;
+  --text-base: 1rem;
+  --text-sm:   0.875rem;
+  --text-xs:   0.78rem;
+  --text-2xs:  0.65rem;
+
+  --leading-tight:  1.1;
+  --leading-snug:   1.25;
+  --leading-normal: 1.45;
+
+  --tracking-tight:   -0.01em;
+  --tracking-normal:  0;
+  --tracking-eyebrow: 0.1em;
+  --tracking-wide:    0.06em;
+
+  /* ---- Spacing scale (4px base) ---- */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* ---- Radii ---- */
+  --radius-sm:      6px;
+  --radius-control: 10px;
+  --radius-md:      12px;
+  --radius-lg:      18px;
+  --radius-pill:    999px;
+  --radius-card:    clamp(10px, 4vw, 18px);
+
+  /* ---- Shadows ---- */
+  --shadow-sm:     0 2px 6px rgba(0, 0, 0, 0.22);
+  --shadow-card:   0 10px 24px rgba(0, 0, 0, 0.28);
+  --shadow-popup:  0 20px 48px rgba(0, 0, 0, 0.42);
+  --shadow-accent: 0 8px 22px rgba(125, 20, 255, 0.35);
+
+  /* ---- Overlay ---- */
+  --overlay: rgba(0, 0, 0, 0.55);
+
+  /* ---- Motion ---- */
+  --ease-out:    cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast:    0.12s;
+  --dur-base:    0.2s;
+  --dur-slow:    0.3s;
+
+  /* ---- Layout ---- */
+  --app-max-width: 1000px;
+  --nav-height:    4rem;
+  --z-nav:         100;
+  --z-overlay:     200;
+  --z-popup:       260;
+  --z-toast:       320;
+
+  /* ================================================================
+     Legacy aliases — keep these so existing CSS continues to work
+     ================================================================ */
+  --text:    var(--text-primary);
+  --text-h:  var(--text-primary);
+  --bg:      var(--surface-app);
+  --surface: var(--surface-card);
+  --surface-2: var(--surface-raised);
+  --fg:      var(--text-primary);
+  --fg-2:    var(--text-secondary);
+  --border:  var(--border-default);
+  --code-bg: var(--surface-raised);
   --social-bg: rgba(38, 41, 50, 0.55);
-  --shadow: rgba(0, 0, 0, 0.28) 0 10px 24px;
-  --ui-border: 1px solid var(--border);
-  --ui-radius: 12px;
-  --control-radius: 10px;
-  --popup-border: var(--ui-border);
-  --popup-radius: 12px;
-  --popup-padding: clamp(1rem, 4vw, 1.5rem);
-  --popup-gap: 0.75rem;
-  --popup-shadow: 0 20px 48px rgba(0, 0, 0, 0.42);
-  --popup-overlay: rgba(0, 0, 0, 0.55);
+  --shadow:  var(--shadow-card);
+
+  /* ---- Legacy component shorthands ---- */
+  --ui-border:          1px solid var(--border);
+  --ui-radius:          var(--radius-md);
+  --control-radius:     var(--radius-control);
+  --popup-border:       var(--ui-border);
+  --popup-radius:       var(--radius-md);
+  --popup-padding:      clamp(1rem, 4vw, 1.5rem);
+  --popup-gap:          0.75rem;
+  --popup-shadow:       var(--shadow-popup);
+  --popup-overlay:      var(--overlay);
   --popup-header-space: 1rem;
   --popup-footer-space: 0.75rem;
 
-  --sans: "Nunito", system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: "Nunito", system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* ---- Font stacks (legacy names) ---- */
+  --sans:    var(--font-sans);
+  --heading: var(--font-display);
+  --mono:    var(--font-mono);
 
-  font: 16px/145% var(--sans);
+  /* ---- Base rendering ---- */
+  font: 16px/145% var(--font-sans);
   letter-spacing: 0;
   color-scheme: dark;
-  color: var(--text);
-  background: var(--bg);
+  color: var(--text-primary);
+  background: var(--surface-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -52,17 +206,35 @@
 }
 
 :root[data-theme="light"] {
-  --bg: #838ca6;
-  --surface: #a9b4d4;
-  --surface-2: #a9b4d4;
-  --border: #16181c;
-  --code-bg: #a9b4d4;
-  --accent-bg: rgba(180, 108, 255, 0.18);
-  --accent-soft: rgba(180, 108, 255, 0.24);
-  --accent-border: rgba(180, 108, 255, 0.6);
+  /* Surfaces */
+  --surface-app:    #838ca6;
+  --surface-card:   #a9b4d4;
+  --surface-raised: #a9b4d4;
+  --surface-nav:    #838ca6;
+
+  /* Borders */
+  --border-default: #16181c;
+
+  /* Text */
+  --text-primary:   #16181c;
+  --text-secondary: #2b2f3a;
+  --text-muted:     #4a4f5e;
+
+  /* Accent tints */
+  --accent-bg:     rgba(180, 108, 255, 0.18);
+  --accent-soft:   rgba(180, 108, 255, 0.24);
+  --accent-border: rgba(180, 108, 255, 0.60);
+
+  /* Legacy aliases for light mode */
+  --bg:       var(--surface-app);
+  --surface:  var(--surface-card);
+  --surface-2: var(--surface-raised);
+  --border:   var(--border-default);
+  --code-bg:  var(--surface-card);
   --social-bg: rgba(169, 180, 212, 0.7);
-  --shadow: rgba(22, 24, 28, 0.28) 0 10px 24px;
+  --shadow:    rgba(22, 24, 28, 0.28) 0 10px 24px;
   --popup-overlay: rgba(22, 24, 28, 0.28);
+
   color-scheme: light;
 }
 
@@ -85,14 +257,14 @@ button,
 input,
 select,
 textarea {
-  font-family: var(--sans);
+  font-family: var(--font-sans);
 }
 
 body {
   margin: 0;
   min-width: 320px;
   overflow-x: hidden;
-  background: var(--bg);
+  background: var(--surface-app);
 }
 
 button,
@@ -104,9 +276,9 @@ textarea {
 
 h1,
 h2 {
-  font-family: var(--heading);
+  font-family: var(--font-display);
   font-weight: 500;
-  color: var(--text-h);
+  color: var(--text-primary);
 }
 
 h1 {
@@ -129,17 +301,34 @@ p {
 
 code,
 .counter {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   display: inline-flex;
   border-radius: 4px;
-  color: var(--text-h);
+  color: var(--text-primary);
 }
 
 code {
   font-size: 15px;
   line-height: 135%;
   padding: 4px 8px;
-  background: var(--code-bg);
+  background: var(--surface-raised);
+}
+
+/* ---- Utility helpers (design system) ---- */
+.fv-eyebrow {
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.fv-mono { font-family: var(--font-mono); }
+
+.fv-numeral {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 @media (min-width: 720px) {
