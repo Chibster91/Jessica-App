@@ -181,6 +181,7 @@ function App() {
     confirmImportReview,
     updateImportReviewSelection,
     applyImportReviewToSimilar,
+    applyAllImportReview,
     rejectImportReviewItem,
     expandImportReviewGroup,
     openImportReviewManualSearch,
@@ -198,6 +199,7 @@ function App() {
     recipes,
     setWeightEntries,
     setTopFoods,
+    setCompletedDays,
   });
 
   const {
@@ -771,6 +773,7 @@ function App() {
         importResolutionProgress,
         updateImportReviewSelection,
         applyImportReviewToSimilar,
+        applyAllImportReview,
         rejectImportReviewItem,
         expandImportReviewGroup,
         openImportReviewManualSearch,

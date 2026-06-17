@@ -124,6 +124,7 @@ export interface LogViewProps {
   importResolutionProgress: ImportResolutionProgress | null;
   updateImportReviewSelection: (itemId: string, value: string) => void;
   applyImportReviewToSimilar: (item: FoodLogImportDraft) => void;
+  applyAllImportReview: () => void;
   rejectImportReviewItem: (item: FoodLogImportDraft) => void;
   expandImportReviewGroup: (item: FoodLogImportDraft) => void;
   openImportReviewManualSearch: (item: FoodLogImportDraft) => void;
@@ -177,7 +178,7 @@ type ImportManualGroupUi = {
 
 export function LogView(props: LogViewProps) {
   const {
-    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, rejectImportReviewItem, expandImportReviewGroup, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
+    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, applyAllImportReview, rejectImportReviewItem, expandImportReviewGroup, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
   } = props;
   const {
     mealCardRefs, longPressRef, suppressNextClickRef, isLogMenuOpen, setIsLogMenuOpen, expandedMeals, toggleMeal,
@@ -1353,9 +1354,14 @@ export function LogView(props: LogViewProps) {
                   {importWeightEntries.length > 0 && ` · ${importWeightEntries.length} weight entr${importWeightEntries.length === 1 ? "y" : "ies"}`}
                 </p>
               </div>
-              <button type="button" onClick={closeImportPreview} aria-label="Close import review">
-                ×
-              </button>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <button type="button" className="secondary-button" onClick={applyAllImportReview}>
+                  Approve All
+                </button>
+                <button type="button" onClick={closeImportPreview} aria-label="Close import review">
+                  ×
+                </button>
+              </div>
             </div>
 
             {importErrors.length > 0 && (

@@ -58,6 +58,7 @@ type UseImportFlowArgs = {
   recipes: Recipe[];
   setWeightEntries: Dispatch<SetStateAction<WeightEntry[]>>;
   setTopFoods: Dispatch<SetStateAction<TopFoodEntry[]>>;
+  setCompletedDays: Dispatch<SetStateAction<string[]>>;
 };
 
 export function useImportFlow({
@@ -70,6 +71,7 @@ export function useImportFlow({
   recipes,
   setWeightEntries,
   setTopFoods,
+  setCompletedDays,
 }: UseImportFlowArgs) {
   const importFoodBatchResolverRef = useRef<ImportFoodBatchResolver | null>(null);
   const [importDrafts, setImportDrafts] = useState<FoodLogImportDraft[]>([]);
@@ -369,6 +371,15 @@ export function useImportFlow({
         .sort((a, b) => b.count - a.count)
         .slice(0, 10);
     });
+
+    const importedDates = Array.from(new Set(appendedEntries.map((entry) => entry.date)));
+    if (importedDates.length > 0) {
+      setCompletedDays((current) => {
+        const existing = new Set(current);
+        const toAdd = importedDates.filter((date) => !existing.has(date));
+        return toAdd.length > 0 ? [...current, ...toAdd] : current;
+      });
+    }
 
     return { nextLogsByDate, foodRemap, importedCount: appendedEntries.length, skippedDuplicates };
   }
@@ -848,6 +859,25 @@ export function useImportFlow({
     closeImportReviewManualSearch();
   }
 
+  function applyAllImportReview() {
+    const pending = importReviewItems.filter((review) => !importReviewActions[review.item.id]);
+    if (pending.length === 0) return;
+
+    const nextActions: Record<string, ImportReviewAction> = {};
+    const nextApplied: Record<string, string> = {};
+
+    for (const review of pending) {
+      const selection = importReviewSelections[review.item.id] ?? review.candidates[0]?.key ?? "new";
+      nextActions[review.item.id] = "applied";
+      nextApplied[review.item.id] = selection;
+    }
+
+    setImportReviewActions((current) => ({ ...current, ...nextActions }));
+    setImportReviewAppliedSelections((current) => ({ ...current, ...nextApplied }));
+    setUnresolvedImportReviewIds([]);
+    setImportErrors([]);
+  }
+
   return {
     importDrafts,
     importWeightEntries,
@@ -888,6 +918,7 @@ export function useImportFlow({
     confirmImportReview,
     updateImportReviewSelection,
     applyImportReviewToSimilar,
+    applyAllImportReview,
     rejectImportReviewItem,
     expandImportReviewGroup,
     openImportReviewManualSearch,
