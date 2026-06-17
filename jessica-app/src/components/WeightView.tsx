@@ -249,28 +249,9 @@ export function WeightView({
       summaryCurrentWeight !== null && summaryStartingWeight !== null
         ? summaryCurrentWeight - summaryStartingWeight
         : null;
-    const summaryChangeLabel =
-      summaryChange === null
-        ? "No entry"
-        : summaryChange === 0
-        ? "No change"
-        : summaryChange < 0
-        ? `Lost ${formatWeightValue(Math.abs(summaryChange), displayUnit)}`
-        : `Gained ${formatWeightValue(summaryChange, displayUnit)}`;
     const [activeWeightTab, setActiveWeightTab] = useState<"current" | "graph" | "history">("current");
     const [isWeightFormOpen, setIsWeightFormOpen] = useState(false);
-    const currentWeightKg = currentWeightEntry ? convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, "kg") : null;
-    const bmi = profile && currentWeightKg ? currentWeightKg / ((profile.heightCm / 100) ** 2) : null;
     const goalBmi = profile?.goalWeightKg ? profile.goalWeightKg / ((profile.heightCm / 100) ** 2) : null;
-    const getBmiClass = (value: number | null) => {
-      if (value === null) return "Not set";
-      if (value < 18.5) return "Underweight";
-      if (value < 25) return "Normal";
-      if (value < 30) return "Overweight";
-      if (value < 35) return "Obese Class I";
-      if (value < 40) return "Obese Class II";
-      return "Obese Class III";
-    };
     const progressPct =
       summaryStartingWeight !== null && summaryCurrentWeight !== null && goalWeight !== null && summaryStartingWeight !== goalWeight
         ? Math.min(100, Math.max(0, Math.abs((summaryStartingWeight - summaryCurrentWeight) / (summaryStartingWeight - goalWeight)) * 100))
@@ -305,7 +286,6 @@ export function WeightView({
         : 0;
     const elapsedDays = firstEntryTime ? Math.max(1, Math.round((todayTime - firstEntryTime) / 86400000)) : 0;
     const avgDailyChange = summaryChange !== null && elapsedDays > 0 ? summaryChange / elapsedDays : null;
-    const avgWeeklyChange = avgDailyChange !== null ? avgDailyChange * 7 : null;
     const projectedGoalDays =
       avgDailyChange !== null &&
       avgDailyChange !== 0 &&
@@ -357,11 +337,6 @@ export function WeightView({
       const previous = chronologicalIndex > 0 ? sortedWeightEntriesOldest[chronologicalIndex - 1] : null;
       if (!previous) return null;
       return convertWeightValue(entry.weight, entry.unit, displayUnit) - convertWeightValue(previous.weight, previous.unit, displayUnit);
-    };
-    const getSegmentClass = (index: number, delta: number | null) => {
-      if (delta === null || delta === 0) return index < 2 ? "amber" : "";
-      if (delta > 0) return index === 0 ? "red" : "";
-      return "green";
     };
     const weightPickerMin = displayUnit === "kg" ? 30 : 70;
     const weightPickerMax = displayUnit === "kg" ? 250 : 550;
