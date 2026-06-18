@@ -1358,7 +1358,7 @@ export function LogView(props: LogViewProps) {
                 <button type="button" className="secondary-button" onClick={applyAllImportReview}>
                   Approve All
                 </button>
-                <button type="button" onClick={closeImportPreview} aria-label="Close import review">
+                <button type="button" className="import-preview-close" onClick={closeImportPreview} aria-label="Close import review">
                   ×
                 </button>
               </div>

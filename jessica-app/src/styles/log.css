@@ -374,7 +374,7 @@ button {
   gap: 1rem;
 }
 
-.import-preview-header button {
+.import-preview-close {
   width: 2.25rem;
   height: 2.25rem;
   padding: 0;
