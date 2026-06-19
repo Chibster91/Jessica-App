@@ -14,6 +14,7 @@ import {
   LibraryManualEntry,
   LibraryBarcodeScan,
   LibraryUrlImport,
+  LibraryPhotoImport,
 } from "./LibraryAddScreens";
 
 type RecentFood = Food & { loggedCount: number; lastLoggedDate: string };
@@ -35,7 +36,7 @@ export function FoodLibraryView({
   setRecipes,
   recentFoods
 }: FoodLibraryViewProps) {
-  type AddScreen = "scan" | "manual-food" | "manual-recipe" | "url-import";
+  type AddScreen = "scan" | "manual-food" | "manual-recipe" | "url-import" | "photo-import" | "recipe-menu";
   const [addScreen, setAddScreen] = useState<AddScreen | null>(null);
 
   const {
@@ -125,11 +126,11 @@ export function FoodLibraryView({
             </button>
           )}
           {foodLibraryTab === "recipes" && (
-            <button type="button" className="lib-addrow" onClick={() => setAddScreen("manual-recipe")}>
+            <button type="button" className="lib-addrow" onClick={() => setAddScreen("recipe-menu")}>
               <span className="lib-addrow-plus">+</span>
               <span className="lib-addrow-main">
                 <strong>New recipe</strong>
-                <span>Enter manually or import from URL</span>
+                <span>Enter manually, or import from a URL or screenshot</span>
               </span>
               <span className="lib-addrow-chev">›</span>
             </button>
@@ -583,19 +584,64 @@ export function FoodLibraryView({
           onBack={() => setAddScreen(null)}
         />
       )}
+      {addScreen === "recipe-menu" && (
+        <div className="kit-addfood">
+          <div className="kit-addfood__top">
+            <div className="kit-addfood__bar">
+              <div className="kit-addfood__bar-left">
+                <button className="kit-icon-btn" aria-label="Back" onClick={() => setAddScreen(null)}>‹</button>
+                <span className="kit-addfood__title">New recipe</span>
+              </div>
+              <button className="kit-icon-btn kit-icon-btn--ghost" aria-label="Close" onClick={() => setAddScreen(null)}>×</button>
+            </div>
+          </div>
+          <div className="library-list" style={{ padding: "0.5rem 0" }}>
+            <button type="button" className="lib-addrow" onClick={() => setAddScreen("manual-recipe")}>
+              <span className="lib-addrow-main">
+                <strong>Enter manually</strong>
+                <span>Type in the name and nutrition yourself</span>
+              </span>
+              <span className="lib-addrow-chev">›</span>
+            </button>
+            <button type="button" className="lib-addrow" onClick={() => setAddScreen("photo-import")}>
+              <span className="lib-addrow-main">
+                <strong>Import from screenshot</strong>
+                <span>Read a recipe photo on your device</span>
+              </span>
+              <span className="lib-addrow-chev">›</span>
+            </button>
+            <button type="button" className="lib-addrow" onClick={() => setAddScreen("url-import")}>
+              <span className="lib-addrow-main">
+                <strong>Import from URL</strong>
+                <span>Paste a link to a recipe page</span>
+              </span>
+              <span className="lib-addrow-chev">›</span>
+            </button>
+          </div>
+        </div>
+      )}
       {addScreen === "manual-recipe" && (
         <LibraryManualEntry
           kind="recipe"
           onSaveFood={() => {}}
           onSaveRecipe={(recipe) => { setRecipes((prev) => [recipe, ...prev]); setAddScreen(null); }}
           onClose={() => setAddScreen(null)}
-          onBack={() => setAddScreen(null)}
+          onBack={() => setAddScreen("recipe-menu")}
         />
       )}
       {addScreen === "url-import" && (
         <LibraryUrlImport
+          onSaveRecipe={(recipe) => { setRecipes((prev) => [recipe, ...prev]); setAddScreen(null); }}
           onClose={() => setAddScreen(null)}
-          onBack={() => setAddScreen("manual-recipe")}
+          onBack={() => setAddScreen("recipe-menu")}
+        />
+      )}
+      {addScreen === "photo-import" && (
+        <LibraryPhotoImport
+          customFoods={customFoods}
+          onSaveRecipe={(recipe) => { setRecipes((prev) => [recipe, ...prev]); setAddScreen(null); }}
+          onClose={() => setAddScreen(null)}
+          onBack={() => setAddScreen("recipe-menu")}
         />
       )}
 

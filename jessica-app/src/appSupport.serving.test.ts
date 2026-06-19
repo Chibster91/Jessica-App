@@ -5,6 +5,8 @@ import {
   getFoodDensity,
   convertAmountToBasisUnit,
   getScaleFromServingBasis,
+  parseIngredientAmount,
+  ingredientServingsFromAmount,
   scaleFoodNutrition,
   parseDecimalInput,
   getItemCalories,
@@ -185,5 +187,44 @@ describe("log totals", () => {
       carbs: 12,
       fat: 1.2000000000000002,
     });
+  });
+});
+
+describe("parseIngredientAmount", () => {
+  it("parses tablespoons, teaspoons, and cups", () => {
+    expect(parseIngredientAmount("8 Tbsp unsalted butter")).toEqual({ amount: 8, unit: "tbsp" });
+    expect(parseIngredientAmount("1 1/2 tsp cinnamon")).toEqual({ amount: 1.5, unit: "tsp" });
+    expect(parseIngredientAmount("7 cups apples")).toEqual({ amount: 7, unit: "cup" });
+  });
+
+  it("handles mixed numbers and converts lb to oz", () => {
+    expect(parseIngredientAmount("2 1/4 lbs Granny Smith apples")).toEqual({ amount: 36, unit: "oz" });
+  });
+
+  it("returns null for non-measurable units or no leading amount", () => {
+    expect(parseIngredientAmount("2 cloves garlic")).toBeNull();
+    expect(parseIngredientAmount("salt to taste")).toBeNull();
+  });
+});
+
+describe("ingredientServingsFromAmount", () => {
+  const butter: Food = {
+    id: -1,
+    name: "Butter, unsalted",
+    brand: null,
+    servingSize: "100 g",
+    calories: 717,
+    protein: 0.9,
+    carbs: 0.1,
+    fat: 81,
+    measurementType: "spoonable",
+  };
+
+  it("converts tbsp to a serving multiplier using density (8 tbsp butter ≈ 1.14 × 100g)", () => {
+    expect(ingredientServingsFromAmount(butter, 8, "tbsp")).toBeCloseTo(1.14, 2);
+  });
+
+  it("passes serving units through unchanged", () => {
+    expect(ingredientServingsFromAmount(butter, 2, "serving")).toBe(2);
   });
 });

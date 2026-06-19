@@ -288,6 +288,37 @@ export type ScannedNutritionFields = Partial<
   >
 >;
 
+/** Prefilled fields used to seed the manual-entry form (from barcode/scan lookups). */
+export type PrefillData = {
+  name?: string;
+  serving?: string;
+  calories?: number;
+  protein?: string;
+  carbs?: string;
+  fat?: string;
+};
+
+/** Recipe fields parsed from a screenshot via on-device OCR. */
+export type ScannedRecipeFields = {
+  name: string;
+  ingredients: string[];
+  calories?: string;
+  protein?: string;
+  carbs?: string;
+  fat?: string;
+};
+
+/** Recipe data scraped from a URL by the worker's /recipe endpoint. */
+export type ImportedRecipe = {
+  name: string;
+  servings: string | null;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  ingredients: string[];
+};
+
 export type RecipeForm = {
   name: string;
   servingSize: string;

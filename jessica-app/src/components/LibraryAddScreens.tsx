@@ -2,10 +2,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "../styles/overlays.css";
 import {
   createNegativeFoodId,
+  fetchProductByBarcode,
+  getAmountUnitsForFood,
+  getRecipeTotals,
+  importRecipeFromUrl,
+  ingredientServingsFromAmount,
+  matchIngredientToFoods,
   parseCustomFood,
+  parseIngredientAmount,
+  parseRecipe,
+  parseRecipeScreenshotText,
+  recipeIngredientSearchTerm,
+  type AmountUnit,
   type CustomFoodForm,
   type Food,
+  type PrefillData,
   type Recipe,
+  type RecipeIngredient,
 } from "../appSupport";
 
 // ── Shared helpers ──────────────────────────────────────────────
@@ -22,15 +35,6 @@ function parseServingField(s: string): { servingSize: string; servingUnit: strin
 }
 
 // ── Types ───────────────────────────────────────────────────────
-
-export type PrefillData = {
-  name?: string;
-  serving?: string;
-  calories?: number;
-  protein?: string;
-  carbs?: string;
-  fat?: string;
-};
 
 type LibraryManualEntryProps = {
   kind?: "food" | "recipe";
@@ -49,19 +53,31 @@ type LibraryBarcodeScanProps = {
 };
 
 type LibraryUrlImportProps = {
+  onSaveRecipe: (recipe: Recipe) => void;
   onClose: () => void;
   onBack?: () => void;
 };
 
-// ── Mock barcode lookup ─────────────────────────────────────────
-
-const BARCODE_DB: Record<string, PrefillData> = {
-  "0123456789012": { name: "Chobani Greek Yogurt", serving: "1 container · 150g", calories: 120, protein: "15", carbs: "9", fat: "0" },
-  "0049000000443": { name: "Clif Bar — Chocolate", serving: "1 bar · 68g", calories: 250, protein: "9", carbs: "44", fat: "6" },
+type LibraryPhotoImportProps = {
+  customFoods: Food[];
+  onSaveRecipe: (recipe: Recipe) => void;
+  onClose: () => void;
+  onBack?: () => void;
 };
 
-function lookupBarcode(code: string): PrefillData {
-  return BARCODE_DB[code] ?? { name: "Scanned product", serving: "1 serving", calories: 180, protein: "6", carbs: "24", fat: "5" };
+type IngredientRow = {
+  id: string;
+  line: string;
+  candidates: Food[];
+  selectedId: number | null;
+  amount: string;
+  unit: AmountUnit;
+  searchQuery: string;
+  searching: boolean;
+};
+
+function formatAmount(n: number): string {
+  return String(Math.round(n * 100) / 100);
 }
 
 // ── LibraryManualEntry ──────────────────────────────────────────
@@ -293,13 +309,25 @@ export function LibraryManualEntry({
 export function LibraryBarcodeScan({ onSaveFood, onClose, onBack, onManual }: LibraryBarcodeScanProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const back = onBack ?? onClose;
-  const [status, setStatus] = useState<"starting" | "scanning" | "denied" | "found">("starting");
+  const [status, setStatus] = useState<"starting" | "scanning" | "denied" | "looking-up" | "found" | "not-found">("starting");
   const [manualCode, setManualCode] = useState("");
   const [found, setFound] = useState<PrefillData | null>(null);
+  const [lastCode, setLastCode] = useState("");
 
-  const handleCode = useCallback((code: string) => {
-    setFound(lookupBarcode(code));
-    setStatus("found");
+  const handleCode = useCallback(async (code: string) => {
+    setLastCode(code);
+    setStatus("looking-up");
+    try {
+      const product = await fetchProductByBarcode(code);
+      if (product) {
+        setFound(product);
+        setStatus("found");
+      } else {
+        setStatus("not-found");
+      }
+    } catch {
+      setStatus("not-found");
+    }
   }, []);
 
   useEffect(() => {
@@ -364,6 +392,33 @@ export function LibraryBarcodeScan({ onSaveFood, onClose, onBack, onManual }: Li
 
   const submitManual = () => { if (manualCode.trim()) handleCode(manualCode.trim()); };
 
+  if (status === "not-found") {
+    return (
+      <div className="kit-addfood">
+        <div className="kit-addfood__top">
+          <div className="kit-addfood__bar">
+            <div className="kit-addfood__bar-left">
+              <button className="kit-icon-btn" aria-label="Back" onClick={() => { setStatus("starting"); setManualCode(""); }}>‹</button>
+              <span className="kit-addfood__title">No match</span>
+            </div>
+            <button className="kit-icon-btn kit-icon-btn--ghost" aria-label="Close" onClick={onClose}>×</button>
+          </div>
+        </div>
+        <div className="kit-addfood__body">
+          <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", lineHeight: 1.5, margin: 0 }}>
+            We couldn't find a product for barcode <strong>{lastCode}</strong>. You can scan again or add it by hand.
+          </p>
+          <button className="kit-btn kit-btn--secondary" style={{ width: "100%" }} onClick={() => { setStatus("starting"); setManualCode(""); }}>
+            Scan another
+          </button>
+          <button className="kit-btn kit-btn--primary" style={{ width: "100%" }} onClick={onManual}>
+            Add manually
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="kit-addfood">
       <div className="kit-addfood__top">
@@ -383,11 +438,11 @@ export function LibraryBarcodeScan({ onSaveFood, onClose, onBack, onManual }: Li
             <div className="kit-bc__placeholder">
               <div className="kit-bc__placeholder-icon">▦</div>
               <p className="kit-bc__placeholder-text">
-                {status === "denied" ? "Camera unavailable" : "Starting camera…"}
+                {status === "denied" ? "Camera unavailable" : status === "looking-up" ? "Looking up…" : "Starting camera…"}
               </p>
               {status === "denied" && (
                 <p className="kit-bc__placeholder-sub">
-                  Enter the barcode below or simulate a scan
+                  Enter the barcode below to look it up
                 </p>
               )}
             </div>
@@ -419,17 +474,13 @@ export function LibraryBarcodeScan({ onSaveFood, onClose, onBack, onManual }: Li
           <button
             className="kit-btn kit-btn--secondary"
             onClick={submitManual}
-            disabled={!manualCode.trim()}
+            disabled={!manualCode.trim() || status === "looking-up"}
           >
-            Look up
+            {status === "looking-up" ? "Looking up…" : "Look up"}
           </button>
         </div>
 
         <div className="kit-bc__alt">
-          <button className="kit-bc__sim" onClick={() => handleCode("0123456789012")}>
-            Simulate scan
-          </button>
-          <span className="kit-bc__dot">·</span>
           <button className="kit-bc__sim" onClick={onManual}>
             Enter manually instead
           </button>
@@ -441,20 +492,54 @@ export function LibraryBarcodeScan({ onSaveFood, onClose, onBack, onManual }: Li
 
 // ── LibraryUrlImport ────────────────────────────────────────────
 
-export function LibraryUrlImport({ onClose, onBack }: LibraryUrlImportProps) {
+export function LibraryUrlImport({ onSaveRecipe, onClose, onBack }: LibraryUrlImportProps) {
   const back = onBack ?? onClose;
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<{ name: string; ingredientCount: number } | null>(null);
+  const [error, setError] = useState("");
 
-  function importUrl() {
+  async function importUrl() {
     if (!url.trim() || loading) return;
     setLoading(true);
-    setTimeout(() => {
+    setError("");
+    try {
+      const imported = await importRecipeFromUrl(url.trim());
+      const p = imported.protein || 0;
+      const c = imported.carbs || 0;
+      const f = imported.fat || 0;
+      const calories = imported.calories || Math.round(p * 4 + c * 4 + f * 9);
+      const rawName = imported.name.trim() || "Imported recipe";
+      const recipeName = rawName.endsWith("- Recipe") ? rawName : `${rawName} - Recipe`;
+      const noteParts: string[] = [];
+      if (imported.servings) noteParts.push(`Makes ${imported.servings}.`);
+      if (imported.ingredients.length) {
+        noteParts.push(`Ingredients:\n${imported.ingredients.map((i) => `• ${i}`).join("\n")}`);
+      }
+      noteParts.push(`Imported from ${url.trim()}`);
+      const recipe: Recipe = {
+        id: createNegativeFoodId(),
+        name: recipeName,
+        brand: "Recipe",
+        servingSize: "1 serving",
+        calories,
+        protein: p,
+        carbs: c,
+        fat: f,
+        fiber: 0,
+        sugar: 0,
+        sodium: 0,
+        notes: noteParts.join("\n\n"),
+        ingredients: [],
+      };
+      onSaveRecipe(recipe);
       setLoading(false);
-      setDone(true);
-      setTimeout(onClose, 950);
-    }, 1100);
+      setDone({ name: rawName, ingredientCount: imported.ingredients.length });
+      setTimeout(onClose, 1100);
+    } catch (e) {
+      setLoading(false);
+      setError(e instanceof Error ? e.message : "Could not import that recipe.");
+    }
   }
 
   if (done) {
@@ -463,7 +548,11 @@ export function LibraryUrlImport({ onClose, onBack }: LibraryUrlImportProps) {
         <div className="kit-form-success">
           <div className="kit-form-success__mark">✓</div>
           <p className="kit-form-success__title">Recipe imported</p>
-          <p className="kit-form-success__sub">Parsed ingredients &amp; nutrition added</p>
+          <p className="kit-form-success__sub">
+            {done.ingredientCount > 0
+              ? `${done.name} · ${done.ingredientCount} ingredients`
+              : done.name}
+          </p>
         </div>
       </div>
     );
@@ -483,7 +572,7 @@ export function LibraryUrlImport({ onClose, onBack }: LibraryUrlImportProps) {
 
       <div className="kit-addfood__body">
         <p style={{ color: "var(--text-secondary)", fontSize: "0.86rem", lineHeight: 1.5, margin: 0 }}>
-          Paste a link to any recipe page. We'll pull the ingredients, steps, and nutrition automatically.
+          Paste a link to a recipe page. We'll pull the name, ingredients, and nutrition automatically.
         </p>
         <div className="kit-field">
           <span className="kit-field__label">Recipe URL</span>
@@ -492,10 +581,13 @@ export function LibraryUrlImport({ onClose, onBack }: LibraryUrlImportProps) {
             placeholder="https://…"
             inputMode="url"
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => { setUrl(e.target.value); setError(""); }}
             onKeyDown={(e) => e.key === "Enter" && importUrl()}
           />
         </div>
+        {error && (
+          <p style={{ color: "var(--danger, #d33)", fontSize: "0.82rem", margin: 0 }}>{error}</p>
+        )}
         <button
           className="kit-btn kit-btn--primary"
           style={{ width: "100%" }}
@@ -505,6 +597,271 @@ export function LibraryUrlImport({ onClose, onBack }: LibraryUrlImportProps) {
           {loading ? "Importing…" : "Import recipe"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── LibraryPhotoImport ──────────────────────────────────────────
+
+export function LibraryPhotoImport({ customFoods, onSaveRecipe, onClose, onBack }: LibraryPhotoImportProps) {
+  const back = onBack ?? onClose;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = useState<"idle" | "scanning" | "edit" | "matching" | "review">("idle");
+  const [error, setError] = useState("");
+  const [name, setName] = useState("");
+  const [draftText, setDraftText] = useState("");
+  const [rows, setRows] = useState<IngredientRow[]>([]);
+
+  async function handleFile(file: File) {
+    setStatus("scanning");
+    setError("");
+    try {
+      const { recognize } = await import("tesseract.js");
+      const result = await recognize(file, "eng");
+      const parsed = parseRecipeScreenshotText(result.data.text);
+      setName(parsed.name);
+      setDraftText(parsed.ingredients.join("\n"));
+      setStatus("edit");
+    } catch {
+      setError("Couldn't read that image. Try a clearer screenshot, or add the recipe by hand.");
+      setStatus("idle");
+    }
+  }
+
+  async function matchIngredients() {
+    const lines = draftText.split("\n").map((l) => l.trim()).filter(Boolean);
+    setStatus("matching");
+    const built = await Promise.all(
+      lines.map(async (line, i): Promise<IngredientRow> => {
+        const candidates = await matchIngredientToFoods(recipeIngredientSearchTerm(line), customFoods);
+        const parsedAmount = parseIngredientAmount(line);
+        return {
+          id: `ing-${i}`,
+          line,
+          candidates,
+          selectedId: candidates[0]?.id ?? null,
+          amount: parsedAmount ? formatAmount(parsedAmount.amount) : "1",
+          unit: parsedAmount?.unit ?? "serving",
+          searchQuery: "",
+          searching: false,
+        };
+      })
+    );
+    setRows(built);
+    setStatus("review");
+  }
+
+  function updateRow(id: string, patch: Partial<IngredientRow>) {
+    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+
+  async function searchRow(row: IngredientRow) {
+    const query = row.searchQuery.trim();
+    if (!query) return;
+    updateRow(row.id, { searching: true });
+    const candidates = await matchIngredientToFoods(query, customFoods);
+    updateRow(row.id, { candidates, selectedId: candidates[0]?.id ?? null, searching: false });
+  }
+
+  const selectedIngredients: RecipeIngredient[] = rows
+    .map((row) => {
+      const food = row.candidates.find((c) => c.id === row.selectedId);
+      if (!food) return null;
+      const amount = parseFloat(row.amount) || 0;
+      const quantity = ingredientServingsFromAmount(food, amount, row.unit) ?? amount;
+      return { food, quantity };
+    })
+    .filter((i): i is RecipeIngredient => i !== null);
+
+  const totals = getRecipeTotals(selectedIngredients);
+  const matchedCount = selectedIngredients.length;
+
+  function save() {
+    const skipped = rows.filter((row) => row.selectedId === null).map((row) => row.line);
+    const notes = skipped.length ? `Couldn't match:\n${skipped.map((l) => `• ${l}`).join("\n")}` : "";
+
+    if (selectedIngredients.length > 0) {
+      const recipe = parseRecipe(
+        { name: name.trim() || "Imported recipe", servingSize: "1", servingUnit: "serving", notes },
+        selectedIngredients
+      );
+      if (recipe) { onSaveRecipe(recipe); return; }
+    }
+
+    // No matched ingredients — save a shell recipe with the lines kept as notes.
+    const allLines = rows.map((row) => row.line);
+    onSaveRecipe({
+      id: createNegativeFoodId(),
+      name: (name.trim() || "Imported recipe").endsWith("- Recipe") ? name.trim() : `${name.trim() || "Imported recipe"} - Recipe`,
+      brand: "Recipe",
+      servingSize: "1 serving",
+      calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0,
+      notes: allLines.length ? `Ingredients:\n${allLines.map((l) => `• ${l}`).join("\n")}` : undefined,
+      ingredients: [],
+    });
+  }
+
+  return (
+    <div className="kit-addfood">
+      <div className="kit-addfood__top">
+        <div className="kit-addfood__bar">
+          <div className="kit-addfood__bar-left">
+            <button className="kit-icon-btn" aria-label="Back" onClick={back}>‹</button>
+            <span className="kit-addfood__title">Import from screenshot</span>
+          </div>
+          <button className="kit-icon-btn kit-icon-btn--ghost" aria-label="Close" onClick={onClose}>×</button>
+        </div>
+      </div>
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        style={{ display: "none" }}
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+      />
+
+      {(status === "idle" || status === "scanning") && (
+        <div className="kit-addfood__body">
+          <p className="kit-photo-hint">
+            Take a screenshot of a recipe and pick it here. We'll read it on your device, then let you tidy up the ingredients before matching them to foods.
+          </p>
+          {error && <p className="kit-photo-error">{error}</p>}
+          <button
+            className="kit-btn kit-btn--primary kit-btn--block"
+            disabled={status === "scanning"}
+            onClick={() => fileRef.current?.click()}
+          >
+            {status === "scanning" ? "Reading screenshot…" : "Choose screenshot"}
+          </button>
+        </div>
+      )}
+
+      {(status === "edit" || status === "matching") && (
+        <div className="kit-addfood__body">
+          <div className="kit-field">
+            <span className="kit-field__label">Recipe name</span>
+            <input className="kit-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipe name" />
+          </div>
+          <div className="kit-field">
+            <span className="kit-field__label">Ingredients <span className="kit-field__muted">(one per line)</span></span>
+            <p className="kit-photo-hint">
+              Clean up anything the scan got wrong — fix typos, delete junk lines, simplify names (e.g. "Granny Smith apples" → "apples"). Then match them to foods.
+            </p>
+            <textarea
+              className="kit-input kit-photo-textarea"
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              placeholder={"2 1/4 lbs apples\n1 1/2 tsp cinnamon\n8 Tbsp butter\n…"}
+            />
+          </div>
+          <button
+            className="kit-btn kit-btn--primary kit-btn--block"
+            disabled={status === "matching" || !draftText.trim()}
+            onClick={matchIngredients}
+          >
+            {status === "matching" ? "Matching…" : "Match ingredients →"}
+          </button>
+          <button className="kit-btn kit-btn--secondary kit-btn--block" onClick={() => { setStatus("idle"); setDraftText(""); setError(""); }}>
+            Try another screenshot
+          </button>
+        </div>
+      )}
+
+      {status === "review" && (
+        <div className="kit-addfood__body">
+          <div className="kit-field">
+            <span className="kit-field__label">Recipe name</span>
+            <input className="kit-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipe name" />
+          </div>
+
+          <p className="kit-photo-hint">
+            Each ingredient is matched to a food. Pick a different match, set the amount, or skip ones we got wrong. The amount is in <strong>servings of the matched food</strong> — the line under each shows what that works out to.
+          </p>
+
+          {rows.length === 0 && (
+            <p className="kit-photo-hint">No ingredients to match.</p>
+          )}
+
+          {rows.map((row) => {
+            const selected = row.candidates.find((c) => c.id === row.selectedId) ?? null;
+            const amount = parseFloat(row.amount) || 0;
+            const servings = selected ? (ingredientServingsFromAmount(selected, amount, row.unit) ?? amount) : 0;
+            const rowCal = selected ? Math.round(selected.calories * servings) : 0;
+            const unitOptions = selected
+              ? (getAmountUnitsForFood(selected).includes(row.unit)
+                  ? getAmountUnitsForFood(selected)
+                  : [row.unit, ...getAmountUnitsForFood(selected)])
+              : [];
+            return (
+              <div key={row.id} className={`kit-ing${selected ? "" : " kit-ing--skipped"}`}>
+                <div className="kit-ing__line">{row.line}</div>
+
+                <select
+                  className="kit-input kit-ing__select"
+                  value={row.selectedId ?? ""}
+                  onChange={(e) => updateRow(row.id, { selectedId: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">— Skip (no match) —</option>
+                  {row.candidates.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name} · {c.calories} cal / {c.servingSize}</option>
+                  ))}
+                </select>
+
+                {selected && (
+                  <div className="kit-ing__row">
+                    <input
+                      className="kit-input kit-ing__qty"
+                      inputMode="decimal"
+                      value={row.amount}
+                      onChange={(e) => updateRow(row.id, { amount: e.target.value.replace(/[^\d.]/g, "") })}
+                      aria-label="Amount"
+                    />
+                    <select
+                      className="kit-input kit-ing__unit"
+                      value={row.unit}
+                      onChange={(e) => updateRow(row.id, { unit: e.target.value as AmountUnit })}
+                      aria-label="Unit"
+                    >
+                      {unitOptions.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
+                    <span className="kit-ing__calc kit-ing__calc--inline">≈ {rowCal.toLocaleString()} cal</span>
+                  </div>
+                )}
+
+                <div className="kit-ing__row">
+                  <input
+                    className="kit-input kit-ing__search"
+                    placeholder="Search for a different food"
+                    value={row.searchQuery}
+                    onChange={(e) => updateRow(row.id, { searchQuery: e.target.value })}
+                    onKeyDown={(e) => e.key === "Enter" && searchRow(row)}
+                  />
+                  <button className="kit-btn kit-btn--secondary" disabled={row.searching || !row.searchQuery.trim()} onClick={() => searchRow(row)}>
+                    {row.searching ? "…" : "Search"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          <div className="kit-recipe-summary">
+            <div className="kit-recipe-summary__count">{matchedCount} ingredient{matchedCount === 1 ? "" : "s"} matched</div>
+            <div className="kit-recipe-summary__macros">
+              ≈ {Math.round(totals.calories).toLocaleString()} cal · {Math.round(totals.protein)}p / {Math.round(totals.carbs)}c / {Math.round(totals.fat)}f
+            </div>
+          </div>
+
+          <button className="kit-btn kit-btn--primary kit-btn--block" disabled={!name.trim()} onClick={save}>
+            Save recipe
+          </button>
+          <button className="kit-btn kit-btn--secondary kit-btn--block" onClick={() => setStatus("edit")}>
+            ‹ Back to edit text
+          </button>
+        </div>
+      )}
     </div>
   );
 }

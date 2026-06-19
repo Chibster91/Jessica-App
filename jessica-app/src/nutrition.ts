@@ -1,4 +1,4 @@
-import type { AmountUnit, CustomFoodForm, Food, FoodDetail, FoodPortion, MeasuredAmountUnit, PortionOption, Recipe, RecipeForm, RecipeIngredient, ScannedNutritionFields } from "./types";
+import type { AmountUnit, CustomFoodForm, Food, FoodDetail, FoodPortion, MeasuredAmountUnit, PortionOption, Recipe, RecipeForm, RecipeIngredient, ScannedNutritionFields, ScannedRecipeFields } from "./types";
 import { createNegativeFoodId, escapeRegExp, parseDecimalInput } from "./format";
 
 export const emptyCustomFoodForm: CustomFoodForm = {
@@ -866,4 +866,132 @@ export function parseNutritionLabelText(text: string): ScannedNutritionFields {
     fiber: extractNutritionAmount(normalizedText, /\b(dietary fiber|fiber)\b/),
     sodium: extractNutritionAmount(normalizedText, /\bsodium\b/, "mg"),
   };
+}
+
+const recipeIngredientUnit = /\b(cups?|tbsps?|tbs|tablespoons?|tsps?|teaspoons?|ounces?|oz|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|lit(?:er|re)s?|pounds?|lbs?|cloves?|pinch(?:es)?|cans?|slices?|sticks?|sprigs?|packages?|pkg|quarts?|pints?|handfuls?|dash(?:es)?)\b/i;
+const recipeLeadingQuantity = /^(?:\d+[\d/.\s¼½¾⅓⅔⅛⅜⅝⅞-]*|[¼½¾⅓⅔⅛⅜⅝⅞])/;
+const recipeNonNameWords = /(nutrition|calorie|protein|carb|fat\b|sugar|fiber|sodium|serving|ingredient|direction|instruction|method|step\b|prep\b|cook\b|total time|yield|servings)/i;
+
+/**
+ * Best-effort parse of a recipe screenshot's OCR text into name, ingredient
+ * lines, and any visible per-serving macros. Heuristic and lossy by nature —
+ * the user reviews and edits the result before saving.
+ */
+export function parseRecipeScreenshotText(rawText: string): ScannedRecipeFields {
+  const text = normalizeOcrText(rawText);
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  const ingredients = lines
+    .map((line) => line.replace(/^[^\p{L}\p{N}]+/u, "").trim())
+    .filter((line) => {
+      if (line.length < 3 || line.length > 90) return false;
+      return recipeLeadingQuantity.test(line) || recipeIngredientUnit.test(line);
+    });
+
+  const letterRatio = (line: string) => (line.match(/[a-z]/gi)?.length ?? 0) / line.length;
+  const name =
+    lines.find(
+      (line) =>
+        line.length >= 3 &&
+        line.length <= 60 &&
+        letterRatio(line) >= 0.5 &&
+        !recipeNonNameWords.test(line) &&
+        !recipeLeadingQuantity.test(line)
+    ) ?? "";
+
+  const macros = parseNutritionLabelText(text);
+
+  return {
+    name,
+    ingredients,
+    calories: macros.calories,
+    protein: macros.protein,
+    carbs: macros.carbs,
+    fat: macros.fat,
+  };
+}
+
+const recipeIngredientUnitGlobal = new RegExp(recipeIngredientUnit.source, "gi");
+const recipeIngredientPrepWords = /\b(of|fresh|chopped|diced|minced|sliced|grated|shredded|crushed|ground|to taste|optional|finely|roughly|large|small|medium)\b/gi;
+
+/** Strip quantities, units, and prep words from an ingredient line to get a searchable food name. */
+export function recipeIngredientSearchTerm(line: string): string {
+  return line
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/^\s*[\d/.\s¼½¾⅓⅔⅛⅜⅝⅞-]+/, " ")
+    .split(",")[0]
+    .replace(recipeIngredientUnitGlobal, " ")
+    .replace(recipeIngredientPrepWords, " ")
+    .replace(/[^\p{L}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Unit choices for entering an amount of a food, by its measurement type (mirrors the log editor). */
+export function getAmountUnitsForFood(food: Pick<Food, "measurementType">): AmountUnit[] {
+  if (food.measurementType === "liquid") return ["ml", "cup", "tbsp", "tsp", "serving"];
+  if (food.measurementType === "spoonable") return ["g", "oz", "cup", "tbsp", "tsp", "serving"];
+  return ["g", "oz", "cup", "tbsp", "tsp", "serving"];
+}
+
+const ingredientUnitMap: Record<string, { unit: AmountUnit; factor: number }> = {
+  tbsp: { unit: "tbsp", factor: 1 }, tbsps: { unit: "tbsp", factor: 1 }, tbs: { unit: "tbsp", factor: 1 },
+  tablespoon: { unit: "tbsp", factor: 1 }, tablespoons: { unit: "tbsp", factor: 1 },
+  tsp: { unit: "tsp", factor: 1 }, tsps: { unit: "tsp", factor: 1 }, teaspoon: { unit: "tsp", factor: 1 }, teaspoons: { unit: "tsp", factor: 1 },
+  cup: { unit: "cup", factor: 1 }, cups: { unit: "cup", factor: 1 },
+  ml: { unit: "ml", factor: 1 }, milliliter: { unit: "ml", factor: 1 }, milliliters: { unit: "ml", factor: 1 },
+  l: { unit: "ml", factor: 1000 }, liter: { unit: "ml", factor: 1000 }, liters: { unit: "ml", factor: 1000 }, litre: { unit: "ml", factor: 1000 }, litres: { unit: "ml", factor: 1000 },
+  g: { unit: "g", factor: 1 }, gram: { unit: "g", factor: 1 }, grams: { unit: "g", factor: 1 },
+  kg: { unit: "g", factor: 1000 }, kilogram: { unit: "g", factor: 1000 }, kilograms: { unit: "g", factor: 1000 },
+  oz: { unit: "oz", factor: 1 }, ounce: { unit: "oz", factor: 1 }, ounces: { unit: "oz", factor: 1 },
+  lb: { unit: "oz", factor: 16 }, lbs: { unit: "oz", factor: 16 }, pound: { unit: "oz", factor: 16 }, pounds: { unit: "oz", factor: 16 },
+};
+
+const unicodeFractions: Record<string, number> = {
+  "¼": 0.25, "½": 0.5, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3, "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875,
+};
+
+function parseAmountToken(raw: string): number | null {
+  let token = raw.trim();
+  if (!token) return null;
+  for (const [glyph, value] of Object.entries(unicodeFractions)) token = token.split(glyph).join(` ${value} `);
+  const parts = token.split(/\s+/).filter(Boolean);
+  let total = 0;
+  let matched = false;
+  for (const part of parts) {
+    const fraction = part.match(/^(\d+)\/(\d+)$/);
+    if (fraction) {
+      const denominator = Number(fraction[2]);
+      if (!denominator) return null;
+      total += Number(fraction[1]) / denominator;
+      matched = true;
+    } else if (/^\d+(\.\d+)?$/.test(part)) {
+      total += parseFloat(part);
+      matched = true;
+    } else {
+      return null;
+    }
+  }
+  return matched ? total : null;
+}
+
+/** Pull a leading "8 Tbsp" / "2 1/4 lbs" / "1 1/2 tsp" amount+unit off an ingredient line (lb→oz, kg→g, l→ml). */
+export function parseIngredientAmount(line: string): { amount: number; unit: AmountUnit } | null {
+  const match = line.trim().match(/^([^a-zA-Z]*?)\s*([a-zA-Z]+)/);
+  if (!match) return null;
+  const amount = parseAmountToken(match[1]);
+  if (amount === null) return null;
+  const mapped = ingredientUnitMap[match[2].toLowerCase()];
+  if (!mapped) return null;
+  return { amount: amount * mapped.factor, unit: mapped.unit };
+}
+
+/** Convert an amount + unit of a food into a RecipeIngredient quantity (a multiplier of the food's serving). */
+export function ingredientServingsFromAmount(food: Food, amount: number, unit: AmountUnit): number | null {
+  if (unit === "serving") return amount;
+  const basis = getMeasuredServingBasis(food);
+  if (!basis || !basis.amount) return null;
+  const inBasis = convertAmountToBasisUnit(amount, unit, basis.unit, getFoodDensity(food));
+  if (inBasis === null) return null;
+  return inBasis / basis.amount;
 }

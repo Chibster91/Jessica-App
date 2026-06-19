@@ -1,5 +1,5 @@
 import foodIconMappingConfig from "./assets/icons/food_icon_mapping.json";
-import type { Food, FoodDetail, Recipe } from "./types";
+import type { Food, FoodDetail, ImportedRecipe, PrefillData, Recipe } from "./types";
 import { getDateRangeEnding, isRecord } from "./format";
 import { getSavedLog } from "./storage";
 
@@ -345,6 +345,26 @@ export async function getAllLocalFoods(): Promise<Food[]> {
   return (await getLocalFoods()).map(localFoodToFood);
 }
 
+/**
+ * Offline best-effort match of an ingredient name to foods the user already has
+ * (custom foods first, then the built-in local database). No USDA / network.
+ * Returns best matches first, for the recipe-screenshot ingredient review.
+ */
+export async function matchIngredientToFoods(query: string, customFoods: Food[]): Promise<Food[]> {
+  const q = query.trim();
+  if (!q) return [];
+
+  const custom = customFoods
+    .filter((food) => matchesFoodQuery(food, q))
+    .sort((a, b) => getFoodSearchScore(b, q) - getFoodSearchScore(a, q));
+  const local = await searchLocalFoods(q);
+
+  const seen = new Set<number>();
+  return [...custom, ...local]
+    .filter((food) => (seen.has(food.id) ? false : (seen.add(food.id), true)))
+    .slice(0, 8);
+}
+
 export function asFoodArray(value: unknown): Food[] {
   if (Array.isArray(value)) return value as Food[];
   if (isRecord(value) && Array.isArray(value.foods)) return value.foods as Food[];
@@ -370,6 +390,28 @@ export async function fetchUsdaFoodDetail(foodId: number): Promise<FoodDetail> {
   const detail = await res.json() as FoodDetail;
   foodDetailCache.set(foodId, detail);
   return detail;
+}
+
+/** Look up a scanned barcode via the worker → Open Food Facts. Returns null when not found. */
+export async function fetchProductByBarcode(code: string): Promise<PrefillData | null> {
+  const res = await fetch(`${WORKER_BASE_URL}/barcode?code=${encodeURIComponent(code)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Barcode lookup failed.");
+  return (await res.json()) as PrefillData;
+}
+
+/** Import a recipe from a URL via the worker's schema.org JSON-LD scraper. */
+export async function importRecipeFromUrl(url: string): Promise<ImportedRecipe> {
+  const res = await fetch(`${WORKER_BASE_URL}/recipe?url=${encodeURIComponent(url)}`);
+  if (!res.ok) {
+    let message = "Could not import that recipe.";
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body?.error) message = body.error;
+    } catch { /* non-JSON error body */ }
+    throw new Error(message);
+  }
+  return (await res.json()) as ImportedRecipe;
 }
 
 export async function searchUsdaFoodsWithSynonyms(query: string) {
