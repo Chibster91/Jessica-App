@@ -148,6 +148,24 @@ export function useProfileForm({
     setProfileSaveStatus("Profile saved.");
   }
 
+  function patchProfile(patch: Partial<Profile>) {
+    if (!profile) return;
+    const merged: Profile = { ...profile, ...patch, profileUpdatedAt: new Date().toISOString() };
+    const form = profileToForm(merged);
+    const calculation = calculateProfile(form);
+    const nextProfile: Profile = {
+      ...merged,
+      calculatedCalories: calculation?.calculatedCalories ?? merged.calculatedCalories,
+    };
+    setStorageJson("profile", nextProfile);
+    const nextGoals = profileToGoals(nextProfile);
+    setStorageJson("goals", nextGoals);
+    setProfile(nextProfile);
+    setProfileForm(profileToForm(nextProfile));
+    setGoals(nextGoals);
+    setProfileSaveStatus("Saved.");
+  }
+
   const profileCalculation = calculateProfile(profileForm);
   const profileErrors = getProfileValidationErrors(profileForm);
   const profileHasBlockingErrors = Object.keys(profileErrors).length > 0 || profileCalculation === null;
@@ -169,6 +187,7 @@ export function useProfileForm({
     updateProfileForm,
     cancelProfileChanges,
     saveProfile,
+    patchProfile,
     setCycleTrackingPreference,
     profileCalculation,
     profileErrors,

@@ -1,6 +1,7 @@
-import { useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/profile.css";
 import { CycleSettingsCard } from "./CycleView";
+import { Sheet } from "./Overlays";
 import {
   formatEntryDate,
   formatHeightValue,
@@ -11,6 +12,7 @@ import {
   getSavedRecipes,
   getSavedWeightEntries,
   kgToLb,
+  lbToKg,
   macroPresets,
   profileActivityLabels,
   profileActivityMultipliers,
@@ -25,6 +27,7 @@ import {
   type GoalType,
   type MacroPreset,
   type Profile,
+  type ProfileActivityLevel,
   type ProfileCalculation,
   type ProfileForm,
   type Sex
@@ -51,6 +54,7 @@ type ProfileViewProps = {
   setCycleTrackingPreference: (trackCycle: boolean) => void;
   cancelProfileChanges: () => void;
   saveProfile: () => void;
+  patchProfile: (patch: Partial<Profile>) => void;
   onOpenExport: () => void;
   onOpenImport: () => void;
   onConnectDrive: () => void;
@@ -102,6 +106,318 @@ const wizardPaceOptions: { key: string; label: string; sub: string; kg: number }
   { key: "aggressive", label: "Aggressive", sub: "2.0 lb/wk", kg: 2.0 / poundsPerKilogram },
 ];
 
+// ── ft/in helpers ─────────────────────────────────────────────
+function cmToFtIn(cm: number) {
+  const totalIn = cm / 2.54;
+  const ft = Math.floor(totalIn / 12);
+  const ins = Math.round(totalIn % 12);
+  return { ft, ins };
+}
+function ftInToCm(ft: number, ins: number) { return (ft * 12 + ins) * 2.54; }
+
+// ── Shared micro-components ───────────────────────────────────
+function Row({ label, value, sub, accent, onEdit }: { label: string; value?: string; sub?: string; accent?: boolean; onEdit?: () => void }) {
+  const El = onEdit ? "button" : "div";
+  return (
+    <El className={`kit-prof-row${onEdit ? " kit-prof-row--tap" : ""}`} onClick={onEdit} type={onEdit ? "button" : undefined}>
+      <span className="kit-prof-row__label">{label}</span>
+      <span className="kit-prof-row__right">
+        <span className={`kit-prof-row__val${accent ? " kit-prof-row__val--accent" : ""}`}>{value}</span>
+        {sub && <span className="kit-prof-row__sub">{sub}</span>}
+        {onEdit && <span className="kit-prof-row__chev">›</span>}
+      </span>
+    </El>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="kit-prof-group">
+      <div className="kit-prof-section">{title}</div>
+      <div className="kit-prof-card">{children}</div>
+    </div>
+  );
+}
+
+function SwitchRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button className="kit-prof-row kit-prof-row--tap kit-prof-row--control" type="button" onClick={() => onChange(!checked)}>
+      <span className="kit-prof-row__label">{label}</span>
+      <span className={`kit-toggle${checked ? " is-on" : ""}`}><span className="kit-toggle__thumb" /></span>
+    </button>
+  );
+}
+
+function NumStepper({ value, onChange, unit, min = 1, max = 120 }: { value: number; onChange: (n: number) => void; unit?: string; min?: number; max?: number }) {
+  const bump = (d: number) => onChange(Math.min(max, Math.max(min, value + d)));
+  return (
+    <div className="kit-weighin">
+      <button className="kit-weighin__step" type="button" onClick={() => bump(-1)}>−</button>
+      <div className="kit-weighin__val"><strong>{value}</strong>{unit && <span>{unit}</span>}</div>
+      <button className="kit-weighin__step" type="button" onClick={() => bump(1)}>＋</button>
+    </div>
+  );
+}
+
+function WtStepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [raw, setRaw] = useState(value.toFixed(1));
+  const bump = (d: number) => {
+    const next = Math.round((value + d) * 10) / 10;
+    onChange(next);
+    setRaw(next.toFixed(1));
+  };
+  const commit = () => {
+    const n = parseFloat(raw);
+    if (!isNaN(n) && n > 0) {
+      const clamped = Math.round(Math.min(999, Math.max(1, n)) * 10) / 10;
+      onChange(clamped);
+      setRaw(clamped.toFixed(1));
+    } else setRaw(value.toFixed(1));
+  };
+  return (
+    <div className="kit-weighin">
+      <button className="kit-weighin__step" type="button" onClick={() => bump(-0.2)}>−</button>
+      <div className="kit-weighin__val">
+        <input className="kit-weighin__input" type="text" inputMode="decimal"
+          value={raw} onChange={(e) => setRaw(e.target.value)}
+          onFocus={(e) => e.target.select()} onBlur={commit} />
+        <span>lb</span>
+      </div>
+      <button className="kit-weighin__step" type="button" onClick={() => bump(0.2)}>＋</button>
+    </div>
+  );
+}
+
+function OptionList({ options, value, onChange }: { options: Array<{ value: string; label: string; desc?: string }>; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="kit-prof-optlist">
+      {options.map((o) => (
+        <button key={o.value} type="button" className={`kit-prof-opt${value === o.value ? " is-on" : ""}`} onClick={() => onChange(o.value)}>
+          <div className="kit-prof-opt__main">
+            <span className="kit-prof-opt__label">{o.label}</span>
+            {o.desc && <span className="kit-prof-opt__desc">{o.desc}</span>}
+          </div>
+          {value === o.value && <span className="kit-prof-opt__check">✓</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const activityOpts = profileActivityOptions.map((level) => ({
+  value: level,
+  label: profileActivityLabels[level].title,
+  desc: profileActivityLabels[level].detail,
+}));
+
+// ── Edit sheets ───────────────────────────────────────────────
+type EditSheetProps = { profile: Profile; patchProfile: (patch: Partial<Profile>) => void; onClose: () => void };
+
+function EditName({ profile, patchProfile, onClose }: EditSheetProps) {
+  const [name, setName] = useState(profile.name);
+  return (
+    <Sheet title="Edit name" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ name: name.trim() || profile.name }); onClose(); }}>Save</button>}>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Display name</div>
+        <input className="kit-qty__input" style={{ width: "100%", boxSizing: "border-box", textAlign: "left" }}
+          value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+    </Sheet>
+  );
+}
+
+function EditPersonal({ profile, patchProfile, onClose }: EditSheetProps) {
+  const [age, setAge] = useState(profile.age);
+  const [sex, setSex] = useState<Sex>(profile.sex);
+  return (
+    <Sheet title="Personal info" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ age, sex }); onClose(); }}>Save</button>}>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Age</div>
+        <NumStepper value={age} onChange={setAge} unit="yrs" min={13} max={99} />
+      </div>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Biological sex</div>
+        <OptionList options={[{ value: "female", label: "Female" }, { value: "male", label: "Male" }]} value={sex} onChange={(v) => setSex(v as Sex)} />
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", margin: 0 }}>Used only for BMR calculation.</p>
+      </div>
+    </Sheet>
+  );
+}
+
+function EditHeight({ profile, patchProfile, onClose }: EditSheetProps) {
+  const { ft: initFt, ins: initIns } = cmToFtIn(profile.heightCm);
+  const [ft, setFt] = useState(initFt);
+  const [ins, setIns] = useState(initIns);
+  const cm = Math.round(ftInToCm(ft, ins));
+  return (
+    <Sheet title="Height" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ heightCm: ftInToCm(ft, ins) }); onClose(); }}>Save</button>}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+        <div className="kit-prof-input-wrap">
+          <div className="kit-field__label">Feet</div>
+          <NumStepper value={ft} onChange={setFt} unit="ft" min={3} max={8} />
+        </div>
+        <div className="kit-prof-input-wrap">
+          <div className="kit-field__label">Inches</div>
+          <NumStepper value={ins} onChange={setIns} unit="in" min={0} max={11} />
+        </div>
+      </div>
+      <p style={{ textAlign: "center", fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>{cm} cm</p>
+    </Sheet>
+  );
+}
+
+function EditCurrentWeight({ profile, patchProfile, onClose }: EditSheetProps) {
+  const [w, setW] = useState(parseFloat(kgToLb(profile.weightKg).toFixed(1)));
+  return (
+    <Sheet title="Current weight" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ weightKg: lbToKg(w) }); onClose(); }}>Save</button>}>
+      <WtStepper value={w} onChange={setW} />
+    </Sheet>
+  );
+}
+
+function EditGoalWeight({ profile, patchProfile, onClose }: EditSheetProps) {
+  const [w, setW] = useState(parseFloat(kgToLb(profile.goalWeightKg ?? profile.weightKg).toFixed(1)));
+  return (
+    <Sheet title="Goal weight" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ goalWeightKg: lbToKg(w) }); onClose(); }}>Save</button>}>
+      <WtStepper value={w} onChange={setW} />
+    </Sheet>
+  );
+}
+
+function EditActivity({ profile, patchProfile, onClose }: EditSheetProps) {
+  const [level, setLevel] = useState<ProfileActivityLevel>(toProfileActivityLevel(profile.activityLevel));
+  return (
+    <Sheet title="Activity level" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ activityLevel: level }); onClose(); }}>Save</button>}>
+      <OptionList options={activityOpts} value={level} onChange={(v) => setLevel(v as ProfileActivityLevel)} />
+    </Sheet>
+  );
+}
+
+function EditGoal({ profile, patchProfile, onClose }: EditSheetProps) {
+  const [goalType, setGoalType] = useState<GoalType>(profile.goal);
+  const [rateKg, setRateKg] = useState(profile.weeklyRateKg);
+  const rateOpts = goalType === "gain"
+    ? [0.25, 0.5, 0.75, 1].map((lb) => ({ value: lb / poundsPerKilogram, label: `+${lb} lb/wk` }))
+    : [0.5, 1, 1.5, 2].map((lb) => ({ value: lb / poundsPerKilogram, label: `−${lb} lb/wk` }));
+  return (
+    <Sheet title="Goal" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ goal: goalType, weeklyRateKg: goalType === "maintain" ? 0 : rateKg }); onClose(); }}>Save</button>}>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Goal type</div>
+        <OptionList
+          options={[{ value: "lose", label: "Lose weight" }, { value: "maintain", label: "Maintain weight" }, { value: "gain", label: "Gain weight" }]}
+          value={goalType}
+          onChange={(v) => { setGoalType(v as GoalType); setRateKg(v === "gain" ? 0.5 / poundsPerKilogram : v === "maintain" ? 0 : 1 / poundsPerKilogram); }} />
+      </div>
+      {goalType !== "maintain" && (
+        <div className="kit-prof-input-wrap">
+          <div className="kit-field__label">Weekly rate</div>
+          <div className="kit-chiprow kit-chiprow--wrap">
+            {rateOpts.map((o) => (
+              <button key={o.value} type="button"
+                className={`kit-pick${Math.abs(rateKg - o.value) < 0.001 ? " is-on" : ""}`}
+                onClick={() => setRateKg(o.value)}>{o.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function EditCalories({ profile, patchProfile, onClose }: EditSheetProps) {
+  const activeCalories = profile.useManualCalories && profile.manualCalorieOverride
+    ? profile.manualCalorieOverride
+    : profile.calculatedCalories;
+  const tdee = computeTdee(profile);
+  const [manual, setManual] = useState(profile.useManualCalories);
+  const [val, setVal] = useState(String(profile.manualCalorieOverride ?? activeCalories));
+  const deficitLabel = profile.goal === "maintain" ? ""
+    : profile.goal === "gain" ? ` + ${Math.round(kgToLb(profile.weeklyRateKg) * 500)} cal surplus`
+    : ` − ${Math.round(kgToLb(profile.weeklyRateKg) * 500)} cal deficit`;
+  return (
+    <Sheet title="Calorie target" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ useManualCalories: manual, manualCalorieOverride: manual ? (parseInt(val) || null) : null }); onClose(); }}>Save</button>}>
+      <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", padding: "0.8rem 0.9rem" }}>
+        <div style={{ fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>Auto-calculated</div>
+        <div style={{ fontSize: "1.8rem", fontWeight: 800, lineHeight: 1 }}>
+          {profile.calculatedCalories.toLocaleString()}
+          <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 700, marginLeft: "0.3rem" }}>cal/day</span>
+        </div>
+        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 4 }}>
+          TDEE {tdee.toLocaleString()}{deficitLabel}
+        </div>
+      </div>
+      <SwitchRow label="Override manually" checked={manual} onChange={setManual} />
+      {manual && (
+        <div className="kit-prof-input-wrap">
+          <div className="kit-field__label">Daily calorie target</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem" }}>
+            <input className="kit-qty__input" style={{ width: 120, textAlign: "right" }}
+              type="text" inputMode="numeric"
+              value={val} onChange={(e) => setVal(e.target.value.replace(/\D/g, ""))} />
+            <span style={{ color: "var(--text-muted)", fontWeight: 700 }}>cal</span>
+          </div>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function EditMacros({ profile, patchProfile, onClose }: EditSheetProps) {
+  const savedProfileGoals = profileToGoals(profile);
+  const pr0 = savedProfileGoals.protein, ca0 = savedProfileGoals.carbs, fa0 = savedProfileGoals.fat;
+  const wasManual = profile.macroMode === "grams" && (profile.macros.proteinGrams !== undefined);
+  const [manual, setManual] = useState(wasManual);
+  const [pr, setPr] = useState(String(profile.macros.proteinGrams ?? pr0));
+  const [ca, setCa] = useState(String(profile.macros.carbGrams ?? ca0));
+  const [fa, setFa] = useState(String(profile.macros.fatGrams ?? fa0));
+  const total = (parseInt(pr) || 0) * 4 + (parseInt(ca) || 0) * 4 + (parseInt(fa) || 0) * 9;
+  const reset = () => { setPr(String(pr0)); setCa(String(ca0)); setFa(String(fa0)); };
+  return (
+    <Sheet title="Macro targets" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => {
+          patchProfile({
+            macroMode: manual ? "grams" : "percentages",
+            macros: {
+              ...profile.macros,
+              ...(manual ? { proteinGrams: parseInt(pr) || 0, carbGrams: parseInt(ca) || 0, fatGrams: parseInt(fa) || 0 } : {}),
+            },
+          });
+          onClose();
+        }}>Save</button>}>
+      <SwitchRow label="Set manually (grams)" checked={manual} onChange={(v) => { setManual(v); if (!v) reset(); }} />
+      <div style={{ display: "grid", gap: "0.65rem" }}>
+        {([["Protein", "var(--macro-protein)", pr, setPr], ["Carbs", "var(--macro-carbs)", ca, setCa], ["Fat", "var(--macro-fat)", fa, setFa]] as const).map(([lbl, color, val, set]) => (
+          <div key={lbl} style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <span style={{ width: 52, fontSize: "0.8rem", fontWeight: 800, color, flexShrink: 0 }}>{lbl}</span>
+            <input className="kit-qty__input" style={{ flex: 1, textAlign: "right", opacity: manual ? 1 : 0.45 }}
+              disabled={!manual} type="text" inputMode="numeric"
+              value={val} onChange={(e) => (set as (v: string) => void)(e.target.value.replace(/\D/g, ""))} />
+            <span style={{ color: "var(--text-muted)", fontWeight: 700, fontSize: "0.82rem", width: 16 }}>g</span>
+          </div>
+        ))}
+      </div>
+      {manual && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", margin: 0, textAlign: "center" }}>≈ {total.toLocaleString()} cal total</p>}
+    </Sheet>
+  );
+}
+
 export function ProfileView({
   bottomNav,
   profile,
@@ -123,6 +439,7 @@ export function ProfileView({
   setCycleTrackingPreference,
   cancelProfileChanges,
   saveProfile,
+  patchProfile,
   onOpenExport,
   onOpenImport,
   onConnectDrive,
@@ -135,6 +452,7 @@ export function ProfileView({
   const [manualCalorieDraft, setManualCalorieDraft] = useState("");
   const [manualCalorieDraftError, setManualCalorieDraftError] = useState("");
   const [profileTab, setProfileTab] = useState<"info" | "settings">("info");
+  const [editing, setEditing] = useState<string | null>(null);
 
   function openDeleteModal() {
     let logDays = 0;
@@ -228,8 +546,9 @@ export function ProfileView({
   if (profile && !isProfileWizardOpen) {
     const savedProfileGoals = profileToGoals(profile);
     const displayUnit = profile.units === "metric" ? "kg" : "lb";
+    const weightLb = kgToLb(profile.weightKg);
     const weightDisplay = formatWeightValue(
-      profile.units === "metric" ? profile.weightKg : kgToLb(profile.weightKg),
+      profile.units === "metric" ? profile.weightKg : weightLb,
       displayUnit
     );
     const goalWeightDisplay = profile.goalWeightKg
@@ -248,254 +567,128 @@ export function ProfileView({
     const avatarInitial = (profile.name || "?").charAt(0).toUpperCase();
     const sexDisplay = profile.sex === "female" ? "Female" : "Male";
     const heightDisplay = formatHeightValue(profile.heightCm, profile.units);
+    // ── computed display values ──────────────────────────────────
     const paceLabel = (() => {
       if (profile.goal === "maintain") return "Maintain";
       const lbPerWeek = kgToLb(profile.weeklyRateKg);
       const match = profilePaceOptions.find(
         (p) => p.goal === profile.goal && Math.abs(kgToLb(p.weeklyRateKg) - lbPerWeek) < 0.05
       );
-      return match?.label ?? `Lose ${formatProfileNumber(lbPerWeek, 1)} lb/wk`;
+      return match?.label ?? `${profile.goal === "gain" ? "+" : "−"}${formatProfileNumber(lbPerWeek, 1)} lb/wk`;
     })();
+    const goalLabel = profile.goal === "lose" ? "Lose weight" : profile.goal === "gain" ? "Gain weight" : "Maintain weight";
+    const actLabel = profileActivityLabels[toProfileActivityLevel(profile.activityLevel)].title;
+    const rateStr = profile.goal === "maintain" ? "—" : paceLabel;
+
+    const close = () => setEditing(null);
 
     return (
       <main className="app">
-        <div className="top-bar">
-        </div>
-
         {profileSaveStatus && <p className="profile-toast">{profileSaveStatus}</p>}
 
         <div className="health-tabs pf-tabs" role="tablist" aria-label="Profile sections">
-          <button
-            type="button"
-            className={profileTab === "info" ? "active" : ""}
-            onClick={() => setProfileTab("info")}
-            role="tab"
-            aria-selected={profileTab === "info"}
-          >
-            Info
-          </button>
-          <button
-            type="button"
-            className={profileTab === "settings" ? "active" : ""}
-            onClick={() => setProfileTab("settings")}
-            role="tab"
-            aria-selected={profileTab === "settings"}
-          >
-            Settings
-          </button>
+          <button type="button" role="tab" aria-selected={profileTab === "info"}
+            className={profileTab === "info" ? "active" : ""} onClick={() => setProfileTab("info")}>Info</button>
+          <button type="button" role="tab" aria-selected={profileTab === "settings"}
+            className={profileTab === "settings" ? "active" : ""} onClick={() => setProfileTab("settings")}>Settings</button>
         </div>
 
-        <section className="panel">
-          <div className="pf-hero">
-            <div className="pf-avatar" aria-hidden>{avatarInitial}</div>
-            <div className="pf-id">
-              <div className="pf-name">{profile.name || "Your Profile"}</div>
-              <div className="pf-meta">{profile.age} · {sexDisplay} · {heightDisplay}</div>
+        {profileTab === "info" && (
+          <>
+            <div className="kit-prof-hero">
+              <div className="kit-prof-hero-avatar">{avatarInitial}</div>
+              <div>
+                <div className="kit-prof-hero-name">{profile.name || "Your Profile"}</div>
+                <div className="kit-prof-hero-meta">Member since {new Date(profile.profileCreatedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</div>
+              </div>
             </div>
+
+            <Section title="About you">
+              <Row label="Name"   value={profile.name}   onEdit={() => setEditing("name")} />
+              <Row label="Age"    value={`${profile.age} yrs`}  onEdit={() => setEditing("personal")} />
+              <Row label="Sex"    value={sexDisplay}             onEdit={() => setEditing("personal")} />
+              <Row label="Height" value={heightDisplay}          onEdit={() => setEditing("height")} />
+            </Section>
+
+            <Section title="Body">
+              <Row label="Current weight" value={weightDisplay}    onEdit={() => setEditing("currentWeight")} />
+              <Row label="Goal weight"    value={goalWeightDisplay ?? "—"} onEdit={() => setEditing("goalWeight")} />
+            </Section>
+
+            <Section title="Goal">
+              <Row label="Goal type" value={goalLabel}  onEdit={() => setEditing("goal")} />
+              <Row label="Activity"  value={actLabel}   onEdit={() => setEditing("activity")} />
+              <Row label="Weekly rate" value={rateStr}  onEdit={() => setEditing("goal")} />
+            </Section>
+
+            <Section title="Targets">
+              <Row label="Daily calories" value={`${activeCalories.toLocaleString()} cal`} accent onEdit={() => setEditing("calories")} />
+              <Row label="Protein" value={`${savedProfileGoals.protein} g`} onEdit={() => setEditing("macros")} />
+              <Row label="Carbs"   value={`${savedProfileGoals.carbs} g`}   onEdit={() => setEditing("macros")} />
+              <Row label="Fat"     value={`${savedProfileGoals.fat} g`}     onEdit={() => setEditing("macros")} />
+            </Section>
+
+            <Section title="Estimates">
+              <Row label="BMR"            value={`${bmr.toLocaleString()} cal`}  sub="Basal metabolic rate" />
+              <Row label="TDEE"           value={`${tdee.toLocaleString()} cal`} sub="Total daily energy" />
+              <Row label="Est. goal date" value={goalDateDisplay ?? "—"} accent />
+            </Section>
+
             <button
               type="button"
-              className="pf-edit-btn"
-              onClick={() => {
-                setProfileForm(profileToForm(profile));
-                setProfileWizardStep(0);
-                setIsProfileWizardOpen(true);
-                setProfileSaveStatus("");
-              }}
+              className="secondary-button profile-recalculate-btn"
+              style={{ marginTop: "0.5rem" }}
+              onClick={() => { setProfileForm(profileToForm(profile)); setProfileWizardStep(0); setIsProfileWizardOpen(true); setProfileSaveStatus(""); }}
             >
-              Edit
+              Full recalculate →
             </button>
-          </div>
-        </section>
-
-        {profileTab === "info" && (
-        <>
-        <section className="panel">
-          <p className="panel-eyebrow">Targets</p>
-          <div className="pf-derived-grid">
-            <div className="pf-derived">
-              <div className="pf-stat-lbl">BMR</div>
-              <div className="pf-stat-val">{bmr.toLocaleString()}<small>kcal</small></div>
-            </div>
-            <div className="pf-derived">
-              <div className="pf-stat-lbl">TDEE</div>
-              <div className="pf-stat-val">{tdee.toLocaleString()}<small>kcal</small></div>
-            </div>
-            <div className="pf-derived">
-              <div className="pf-stat-lbl">Target</div>
-              <div className="pf-stat-val">{activeCalories.toLocaleString()}<small>kcal</small></div>
-            </div>
-          </div>
-          <div className="pf-macros-row">
-            <div className="pf-macro" style={{ "--macro-c": "var(--macro-protein)" } as CSSProperties}>
-              <div className="pf-stat-lbl">Protein</div>
-              <div className="pf-macro-val">{savedProfileGoals.protein}<small>g</small></div>
-            </div>
-            <div className="pf-macro" style={{ "--macro-c": "var(--macro-carbs)" } as CSSProperties}>
-              <div className="pf-stat-lbl">Carbs</div>
-              <div className="pf-macro-val">{savedProfileGoals.carbs}<small>g</small></div>
-            </div>
-            <div className="pf-macro" style={{ "--macro-c": "var(--macro-fat)" } as CSSProperties}>
-              <div className="pf-stat-lbl">Fat</div>
-              <div className="pf-macro-val">{savedProfileGoals.fat}<small>g</small></div>
-            </div>
-          </div>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Body</p>
-          <ul className="pf-kv-list">
-            <li className="pf-kv">
-              <span className="pf-k">Current weight</span>
-              <span className="pf-v">{weightDisplay}</span>
-            </li>
-            {goalWeightDisplay && (
-              <li className="pf-kv">
-                <span className="pf-k">Goal weight</span>
-                <span className="pf-v">{goalWeightDisplay}</span>
-              </li>
-            )}
-            {goalDateDisplay && (
-              <li className="pf-kv">
-                <span className="pf-k">Est. goal date</span>
-                <span className="pf-v">{goalDateDisplay}</span>
-              </li>
-            )}
-            <li className="pf-kv">
-              <span className="pf-k">Activity level</span>
-              <span className="pf-v">{profileActivityLabels[toProfileActivityLevel(profile.activityLevel)].title}</span>
-            </li>
-          </ul>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Plan</p>
-          <ul className="pf-kv-list">
-            <li className="pf-kv">
-              <span className="pf-k">Goal</span>
-              <span className="pf-v">
-                {profile.goal === "maintain" ? "Maintain" : profile.goal === "lose" ? "Lose" : "Gain"}
-              </span>
-            </li>
-            <li className="pf-kv">
-              <span className="pf-k">Pace</span>
-              <span className="pf-v">{paceLabel}</span>
-            </li>
-          </ul>
-          <button
-            type="button"
-            className="secondary-button profile-recalculate-btn"
-            onClick={() => {
-              setProfileForm(profileToForm(profile));
-              setProfileWizardStep(0);
-              setIsProfileWizardOpen(true);
-              setProfileSaveStatus("");
-            }}
-          >
-            Recalculate goals
-          </button>
-        </section>
-        </>
+          </>
         )}
 
         {profileTab === "settings" && (
-        <>
-        <section className="panel">
-          <p className="panel-eyebrow">General</p>
-          <ul className="pf-kv-list">
-            <li className="pf-kv">
-              <span className="pf-k">Theme</span>
-              <button
-                type="button"
-                className={`toggle-pill${themeMode === "light" ? " active" : ""}`}
-                onClick={() => setThemeMode((mode) => (mode === "light" ? "dark" : "light"))}
-              >
-                {themeMode === "light" ? "Light" : "Dark"}
+          <>
+            <Section title="Appearance">
+              <SwitchRow label="Dark theme" checked={themeMode === "dark"} onChange={(on) => setThemeMode(on ? "dark" : "light")} />
+            </Section>
+
+            <Section title="Cycle tracking">
+              <SwitchRow label="Show cycle tab" checked={profile.trackCycle !== false} onChange={(v) => setCycleTrackingPreference(v)} />
+              {profile.trackCycle !== false && (
+                <div style={{ padding: "0 0.1rem" }}><CycleSettingsCard /></div>
+              )}
+            </Section>
+
+            <Section title="Data &amp; account">
+              <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={onOpenExport}>
+                <span className="kit-prof-row__label">Export all data (JSON)</span>
+                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
               </button>
-            </li>
-          </ul>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Home</p>
-          <p className="profile-placeholder">Settings coming soon.</p>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Food Logging</p>
-          <p className="profile-placeholder">Settings coming soon.</p>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Weight</p>
-          <p className="profile-placeholder">Settings coming soon.</p>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Cycle</p>
-          <ul className="pf-kv-list">
-            <li className="pf-kv">
-              <span className="pf-k">Show Cycle in Health</span>
-              <button
-                type="button"
-                className={`toggle-pill${profile.trackCycle !== false ? " active" : ""}`}
-                onClick={() => setCycleTrackingPreference(profile.trackCycle === false)}
-              >
-                {profile.trackCycle !== false ? "Shown" : "Hidden"}
+              <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={onOpenImport}>
+                <span className="kit-prof-row__label">Import JSON</span>
+                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
               </button>
-            </li>
-          </ul>
-          <div className="profile-cycle-settings">
-            <CycleSettingsCard />
-          </div>
-        </section>
-
-        <section className="panel">
-          <p className="panel-eyebrow">Data</p>
-          <ul className="pf-kv-list">
-            <li
-              className="pf-row"
-              onClick={onOpenExport}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onOpenExport()}
-            >
-              <span>Export all data (JSON)</span>
-              <span className="pf-chev">›</span>
-            </li>
-            <li
-              className="pf-row"
-              onClick={onOpenImport}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onOpenImport()}
-            >
-              <span>Import JSON</span>
-              <span className="pf-chev">›</span>
-            </li>
-            <li
-              className="pf-row"
-              onClick={onConnectDrive}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && onConnectDrive()}
-            >
-              <span>Connect Google Drive</span>
-              <span className="pf-chev">›</span>
-            </li>
-            <li
-              className="pf-row pf-row-danger"
-              onClick={openDeleteModal}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && openDeleteModal()}
-            >
-              <span>Delete all data</span>
-              <span className="pf-chev">›</span>
-            </li>
-          </ul>
-        </section>
-        </>
+              <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={onConnectDrive}>
+                <span className="kit-prof-row__label">Connect Google Drive</span>
+                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
+              </button>
+              <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link kit-prof-row--danger" type="button" onClick={openDeleteModal}>
+                <span className="kit-prof-row__label">Delete all data</span>
+                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
+              </button>
+            </Section>
+          </>
         )}
+
+        {/* Edit sheets */}
+        {editing === "name"          && <EditName profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "personal"      && <EditPersonal profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "height"        && <EditHeight profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "currentWeight" && <EditCurrentWeight profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "goalWeight"    && <EditGoalWeight profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "activity"      && <EditActivity profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "goal"          && <EditGoal profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "calories"      && <EditCalories profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "macros"        && <EditMacros profile={profile} patchProfile={patchProfile} onClose={close} />}
 
         {isDeleteModalOpen && (
           <div className="modal-backdrop" role="dialog" aria-modal aria-labelledby="pf-dlg-title">
@@ -511,35 +704,14 @@ export function ProfileView({
                     <div>Profile, goals, streak history</div>
                   </div>
                 )}
-                <p className="pf-dlg-instruction">
-                  Type <strong>DELETE</strong> to confirm.
-                </p>
-                <input
-                  className="pf-dlg-input"
-                  type="text"
-                  placeholder="DELETE"
-                  value={deleteConfirmText}
-                  onChange={(e) => setDeleteConfirmText(e.target.value)}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                />
+                <p className="pf-dlg-instruction">Type <strong>DELETE</strong> to confirm.</p>
+                <input className="pf-dlg-input" type="text" placeholder="DELETE"
+                  value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} />
               </div>
               <div className="pf-dlg-foot">
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={handleDeleteConfirm}
-                  disabled={deleteConfirmText !== "DELETE"}
-                >
+                <button type="button" className="secondary-button" onClick={() => setIsDeleteModalOpen(false)}>Cancel</button>
+                <button type="button" className="danger-button" onClick={handleDeleteConfirm} disabled={deleteConfirmText !== "DELETE"}>
                   Delete everything
                 </button>
               </div>

@@ -4,3 +4,9 @@
 **/.env
 food-log-*.json
 jessica-app/public/Icons/old icon/
+
+# Local working/source asset dumps (not part of the app build)
+/Plants/
+/googlefonts noto-emoji main svg/
+/FOOD_VAULT_UPDATE/
+/import files/

@@ -399,24 +399,27 @@ export function useAddFoodModal({
     selectLocalFood(recipe);
   }
 
-  function addSelectedFood() {
+  function addSelectedFood(qtyOverride?: string) {
     if (!selectedFood || !pendingCategory) return;
     if (selectedFood.isSearchPreview) return;
 
-    const servings = amountUnit === "serving" ? Number(quantity) : hasUsableSearchNutrition(selectedFood) ? 1 : Number(quantity);
+    const effectiveQuantity = qtyOverride ?? quantity;
+    const effectiveUnit: AmountUnit = qtyOverride !== undefined ? "serving" : amountUnit;
+
+    const servings = effectiveUnit === "serving" ? Number(effectiveQuantity) : hasUsableSearchNutrition(selectedFood) ? 1 : Number(effectiveQuantity);
     const amount = Number(portionAmount);
     const measuredBasis = getMeasuredServingBasis(selectedFood);
     const basisAmount =
-      measuredBasis && amountUnit !== "serving" && Number.isFinite(amount) && amount > 0
-        ? convertAmountToBasisUnit(amount, amountUnit, measuredBasis.unit, getFoodDensity(selectedFood))
+      measuredBasis && effectiveUnit !== "serving" && Number.isFinite(amount) && amount > 0
+        ? convertAmountToBasisUnit(amount, effectiveUnit, measuredBasis.unit, getFoodDensity(selectedFood))
         : null;
     const amountScale =
-      selectedFood && amountUnit !== "serving" && basisAmount !== null
+      selectedFood && effectiveUnit !== "serving" && basisAmount !== null
         ? getScaleFromServingBasis(selectedFood, basisAmount)
         : null;
-    const selectedServings = amountUnit === "serving" ? servings : 1;
+    const selectedServings = effectiveUnit === "serving" ? servings : 1;
     if (!Number.isFinite(selectedServings) || selectedServings <= 0) return;
-    if (amountUnit !== "serving" && amountScale === null) return;
+    if (effectiveUnit !== "serving" && amountScale === null) return;
 
     const portionOptions = getPortionOptions(selectedFoodDetail, selectedFood.name);
     const selectedPortion = portionOptions.find((portion) => portion.value === selectedPortionValue);
@@ -424,7 +427,7 @@ export function useAddFoodModal({
       selectedFood,
       selectedFoodDetail,
       selectedPortion,
-      amountUnit !== "serving" && amountScale !== null
+      effectiveUnit !== "serving" && amountScale !== null
         ? basisAmount ?? amount
         : Number(portionAmount)
     );
@@ -434,7 +437,7 @@ export function useAddFoodModal({
       brand: selectedFoodServing.brand ? getBrandDisplayName(selectedFoodServing.brand) : selectedFoodServing.brand,
     };
     const servingLabel =
-      amountUnit === "serving"
+      effectiveUnit === "serving"
         ? selectedPortion
           ? selectedServings === 1
             ? selectedPortion.label
@@ -442,7 +445,7 @@ export function useAddFoodModal({
           : selectedServings === 1
           ? selectedFoodServing.servingSize
           : `${selectedServings} x ${selectedFoodServing.servingSize}`
-        : `${amount} ${amountUnit}`;
+        : `${amount} ${effectiveUnit}`;
 
     setLog([
       ...log,
@@ -450,8 +453,8 @@ export function useAddFoodModal({
         ...displayFoodServing,
         category: pendingCategory,
         quantity: selectedServings,
-        amount: amountUnit === "serving" ? selectedServings : amount,
-        amountUnit,
+        amount: effectiveUnit === "serving" ? selectedServings : amount,
+        amountUnit: effectiveUnit,
         portionLabel: selectedPortion?.label,
         portionScale: selectedPortion
           ? getScaleFromServingBasis(selectedFood, selectedPortion.gramWeight) ?? undefined

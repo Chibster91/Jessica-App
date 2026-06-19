@@ -50,9 +50,9 @@ export function useWeightTracking({
     [weightRange, sortedWeightEntriesOldest, weightRangeStartDate]
   );
 
-  function saveWeightEntry() {
+  function saveWeightEntry(weightOverride?: string) {
     setWeightSaveError("");
-    const weight = parseDecimalInput(weightForm.weight);
+    const weight = parseDecimalInput(weightOverride ?? weightForm.weight);
     appendDebugLog("weight-save-click", {
       rawWeight: weightForm.weight,
       parsedWeight: weight,

@@ -21,7 +21,6 @@ import {
   getFoodSearchCalorieDisplay,
   getBrandDisplayName,
   getIngredientCalories,
-  type AmountUnit,
   type Food,
   type FoodLogImportDraft,
   type Goals,
@@ -42,6 +41,7 @@ import {
   type ImportReviewItem,
 } from "../importMatching";
 import "../styles/log.css";
+import { ConfirmDialog, NutritionSheet, type NutritionFood } from "./Overlays";
 
 type MacroTotals = { calories: number; protein: number; carbs: number; fat: number };
 type RecentFood = Food & { loggedCount: number; lastLoggedDate: string };
@@ -186,8 +186,7 @@ export function LogView(props: LogViewProps) {
     setMealRecipeName, openSaveMealAsRecipe, saveMealAsRecipe, mealToDelete, setMealToDelete, confirmDeleteMeal,
     contextMenuItem, setContextMenuItem, contextMenuY, setContextMenuY, moveToMealItem, setMoveToMealItem,
     moveItemToMeal, moveToDayItem, setMoveToDayItem, moveToDayDate, setMoveToDayDate, moveToDayStep, setMoveToDayStep,
-    moveItemToDifferentDay, itemToEdit, setItemToEdit, editItemAmount, setEditItemAmount, editItemAmountUnit,
-    setEditItemAmountUnit, getEditAmountUnits, openEditFoodItem, saveEditedFoodItem, itemToRemove, setItemToRemove,
+    moveItemToDifferentDay, itemToEdit, setItemToEdit, openEditFoodItem, saveEditedFoodItem, itemToRemove, setItemToRemove,
     confirmRemoveFood,
   } = useLogItemActions({ selectedDate, log, setLog, recipes, setRecipes });
   const visibleMealCategories = useMemo(() => getMealCategoriesForLog(log), [log]);
@@ -205,9 +204,7 @@ export function LogView(props: LogViewProps) {
     isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, setPendingRecipeIngredient,
     selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity,
     confirmRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe,
-    filteredRecipes, detailError, servingBasisText, amountUnit, setAmountUnit, portionOptions, selectedPortionValue,
-    setSelectedPortionValue, quantity, setQuantity, portionAmount, setPortionAmount, allowedAmountUnits,
-    selectedPortionCalories, addSelectedFood, canAddSelectedFood,
+    filteredRecipes, quantity, addSelectedFood,
   } = useAddFoodModal({ selectedDate, log, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods });
   const sortedRecentFoods = [...recentFoods].sort((a, b) => {
     const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
@@ -248,16 +245,6 @@ export function LogView(props: LogViewProps) {
   function submitAddFoodSearch() {
     if (activeAddFoodTab === "search") searchModalFood();
   }
-  function getSelectedPortionCalorieTarget() {
-    if (amountUnit !== "serving" || !selectedPortion) return "this amount";
-
-    const servings = Number(quantity);
-    if (!Number.isFinite(servings) || servings <= 0) return selectedPortion.label;
-    if (servings === 1) return selectedPortion.unitLabel ? `1 ${selectedPortion.unitLabel}` : selectedPortion.label;
-
-    return `${servings} x ${selectedPortion.label}`;
-  }
-
   const importReviewDateGroups: ImportReviewDateGroupUi[] = importReviewItems.reduce((dateGroups: ImportReviewDateGroupUi[], review: ImportReviewUi) => {
     let dateGroup = dateGroups.find((group) => group.date === review.item.date);
     if (!dateGroup) {
@@ -1158,87 +1145,26 @@ export function LogView(props: LogViewProps) {
         </section>
       )}
 
-      {pendingCategory && selectedFood && !isCustomFormOpen && !isRecipeFormOpen && (
-        <div className="floating-overlay serving-overlay" role="presentation">
-          <div className="floating-popover serving-popover" role="dialog" aria-modal="true" aria-labelledby="serving-popup-title">
-            <h2 id="serving-popup-title">{getFoodDisplayName(selectedFood)}</h2>
-            {isLoadingDetail && <p className="scan-status">Loading portions...</p>}
-            {detailError && <p className="modal-error">{detailError}</p>}
-
-            <p className="serving-basis-text">
-              {servingBasisText}
-            </p>
-
-            {amountUnit === "serving" && portionOptions.length > 0 && (
-              <label className="floating-field">
-                Portion
-                <select value={selectedPortionValue} onChange={(e) => setSelectedPortionValue(e.target.value)}>
-                  {portionOptions.map((portion) => (
-                    <option key={portion.value} value={portion.value}>
-                      {portion.label} ({portion.gramWeight}g)
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
-<div className="amount-row">
-  <label className="floating-field amount-field">
-    {amountUnit === "serving" && selectedPortion ? "Amount" : amountUnit === "serving" ? "Servings" : "Amount"}
-    <input
-      type="text"
-      inputMode="decimal"
-      value={amountUnit === "serving" ? quantity : portionAmount}
-      onChange={(e) =>
-        amountUnit === "serving"
-          ? setQuantity(e.target.value)
-          : setPortionAmount(e.target.value)
-      }
-    />
-  </label>
-
-  <label className="floating-field unit-field">
-    Unit
-    <select
-      value={amountUnit}
-      onChange={(e) => setAmountUnit(e.target.value as AmountUnit)}
-    >
-      {allowedAmountUnits.map((unit) => (
-        <option key={unit} value={unit}>
-          {unit === "serving" && selectedPortion?.unitLabel ? selectedPortion.unitLabel : unit}
-        </option>
-      ))}
-    </select>
-  </label>
-</div>
-
-            {selectedPortionCalories !== null && (
-              <p className="modal-hint">
-                {selectedPortionCalories.toLocaleString()} cal for {getSelectedPortionCalorieTarget()}
-              </p>
-            )}
-
-            <div className="floating-actions">
-              <button className="primary-button" type="button" onClick={addSelectedFood} disabled={!canAddSelectedFood}>
-                Add Food
-              </button>
-              {selectedFood.id > 0 && (
-                <a
-                  className="secondary-button"
-                  href={`https://fdc.nal.usda.gov/food-details/${selectedFood.id}/nutrients`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  View on USDA
-                </a>
-              )}
-              <button className="secondary-button" type="button" onClick={() => setSelectedFood(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {pendingCategory && selectedFood && !isCustomFormOpen && !isRecipeFormOpen && (() => {
+        const nutriFood: NutritionFood = {
+          name: getFoodDisplayName(selectedFood),
+          calories: selectedFood.calories,
+          serving: selectedFood.servingSize,
+          protein: selectedFood.protein,
+          carbs: selectedFood.carbs,
+          fat: selectedFood.fat,
+        };
+        return (
+          <NutritionSheet
+            food={nutriFood}
+            meal={pendingCategory}
+            mode="add"
+            initialQuantity={quantity}
+            onAdd={(qty) => addSelectedFood(qty)}
+            onClose={() => setSelectedFood(null)}
+          />
+        );
+      })()}
 
       {importReviewItems.length === 0 && !isResolvingImport && importSteps.length > 0 && importStepIndex < importSteps.length && (() => {
         const step = importSteps[importStepIndex];
@@ -1877,68 +1803,37 @@ export function LogView(props: LogViewProps) {
       )}
 
       {itemToEdit && (
-        <div className="floating-overlay" role="presentation">
-          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="edit-food-title">
-            <h2 id="edit-food-title">Edit food</h2>
-            <p>{getFoodDisplayName(itemToEdit)}</p>
-            <div className="amount-row">
-              <label className="floating-field amount-field">
-                {editItemAmountUnit === "serving" ? "Servings" : "Amount"}
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={editItemAmount}
-                  onChange={(e) => setEditItemAmount(e.target.value)}
-                />
-              </label>
-              <label className="floating-field unit-field">
-                Unit
-                <select
-                  value={editItemAmountUnit}
-                  onChange={(e) => setEditItemAmountUnit(e.target.value as AmountUnit)}
-                >
-                  {getEditAmountUnits(itemToEdit).map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <p className="modal-hint">
-              Current: {getFoodServingDisplay(itemToEdit)}
-            </p>
-            <div className="floating-actions">
-              <button type="button" className="primary-button" onClick={saveEditedFoodItem}>
-                Save
-              </button>
-              <button type="button" className="secondary-button" onClick={() => setItemToEdit(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <NutritionSheet
+          food={{
+            name: getFoodDisplayName(itemToEdit),
+            calories: itemToEdit.calories,
+            serving: itemToEdit.servingSize,
+            protein: itemToEdit.protein,
+            carbs: itemToEdit.carbs,
+            fat: itemToEdit.fat,
+          }}
+          meal={itemToEdit.category}
+          mode="logged"
+          initialQuantity={String(itemToEdit.quantity)}
+          onSave={(qty) => saveEditedFoodItem(qty)}
+          onRemove={() => {
+            const logId = itemToEdit.logId;
+            setLog((prev) => prev.filter((i) => i.logId !== logId));
+            setItemToEdit(null);
+          }}
+          onClose={() => setItemToEdit(null)}
+        />
       )}
 
       {itemToRemove && (
-        <div className="floating-overlay" role="presentation">
-          <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-food-title">
-            <h2 id="remove-food-title">Remove food?</h2>
-            <p>
-              {getFoodDisplayName(itemToRemove)} x {itemToRemove.quantity} will be removed from{" "}
-              {itemToRemove.category}.
-            </p>
-
-            <div className="floating-actions">
-              <button className="danger-button" onClick={confirmRemoveFood}>
-                Remove
-              </button>
-              <button className="secondary-button" onClick={() => setItemToRemove(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Remove food?"
+          message={`${getFoodDisplayName(itemToRemove)} × ${itemToRemove.quantity} will be removed from ${itemToRemove.category}.`}
+          confirmLabel="Remove"
+          danger
+          onConfirm={confirmRemoveFood}
+          onCancel={() => setItemToRemove(null)}
+        />
       )}
 
       {contextMenuItem && (

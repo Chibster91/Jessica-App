@@ -1,4 +1,4 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/library.css";
 import {
   getBrandDisplayName,
@@ -10,6 +10,11 @@ import {
   type Recipe
 } from "../appSupport";
 import { useFoodLibrary } from "../hooks/useFoodLibrary";
+import {
+  LibraryManualEntry,
+  LibraryBarcodeScan,
+  LibraryUrlImport,
+} from "./LibraryAddScreens";
 
 type RecentFood = Food & { loggedCount: number; lastLoggedDate: string };
 
@@ -30,6 +35,9 @@ export function FoodLibraryView({
   setRecipes,
   recentFoods
 }: FoodLibraryViewProps) {
+  type AddScreen = "scan" | "manual-food" | "manual-recipe" | "url-import";
+  const [addScreen, setAddScreen] = useState<AddScreen | null>(null);
+
   const {
     foodLibraryTab,
     setFoodLibraryTab,
@@ -38,8 +46,6 @@ export function FoodLibraryView({
     librarySelection,
     setLibrarySelection,
     cancelLibraryEditing,
-    createLibraryCustomFood,
-    createLibraryRecipe,
     libraryRecentFoods,
     libraryCustomFoods,
     libraryRecipes,
@@ -109,21 +115,21 @@ export function FoodLibraryView({
 
         <div className="library-list">
           {foodLibraryTab === "custom" && (
-            <button type="button" className="lib-addrow" onClick={createLibraryCustomFood}>
+            <button type="button" className="lib-addrow" onClick={() => setAddScreen("scan")}>
               <span className="lib-addrow-plus">+</span>
               <span className="lib-addrow-main">
                 <strong>New food</strong>
-                <span>Add a custom food to your library</span>
+                <span>Scan a barcode or enter manually</span>
               </span>
               <span className="lib-addrow-chev">›</span>
             </button>
           )}
           {foodLibraryTab === "recipes" && (
-            <button type="button" className="lib-addrow" onClick={createLibraryRecipe}>
+            <button type="button" className="lib-addrow" onClick={() => setAddScreen("manual-recipe")}>
               <span className="lib-addrow-plus">+</span>
               <span className="lib-addrow-main">
                 <strong>New recipe</strong>
-                <span>Build a recipe from ingredients</span>
+                <span>Enter manually or import from URL</span>
               </span>
               <span className="lib-addrow-chev">›</span>
             </button>
@@ -559,6 +565,39 @@ export function FoodLibraryView({
                 )}
         </aside>
       </div>
+
+      {addScreen === "scan" && (
+        <LibraryBarcodeScan
+          onSaveFood={(food) => { setCustomFoods((prev) => [food, ...prev]); setAddScreen(null); }}
+          onClose={() => setAddScreen(null)}
+          onBack={() => setAddScreen(null)}
+          onManual={() => setAddScreen("manual-food")}
+        />
+      )}
+      {addScreen === "manual-food" && (
+        <LibraryManualEntry
+          kind="food"
+          onSaveFood={(food) => { setCustomFoods((prev) => [food, ...prev]); setAddScreen(null); }}
+          onSaveRecipe={() => {}}
+          onClose={() => setAddScreen(null)}
+          onBack={() => setAddScreen(null)}
+        />
+      )}
+      {addScreen === "manual-recipe" && (
+        <LibraryManualEntry
+          kind="recipe"
+          onSaveFood={() => {}}
+          onSaveRecipe={(recipe) => { setRecipes((prev) => [recipe, ...prev]); setAddScreen(null); }}
+          onClose={() => setAddScreen(null)}
+          onBack={() => setAddScreen(null)}
+        />
+      )}
+      {addScreen === "url-import" && (
+        <LibraryUrlImport
+          onClose={() => setAddScreen(null)}
+          onBack={() => setAddScreen("manual-recipe")}
+        />
+      )}
 
       {bottomNav}
     </main>

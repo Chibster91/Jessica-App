@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import "../styles/eggOracle.css";
+import { CycleLogSheet, type CycleLogSheetSaveData } from "./Overlays";
 
 const STORAGE_KEY = "eggOracleTrackingFirst.v2";
 
@@ -18,6 +19,7 @@ type EggOracleLog = {
   intercourse: boolean;
   opk: OPKResult;
   notes: string;
+  symptoms?: string[];
 };
 
 type EggOracleData = {
@@ -176,6 +178,7 @@ function cleanLog(log: Partial<EggOracleLog> = {}): EggOracleLog {
     intercourse: !!log.intercourse,
     opk: (log.opk as OPKResult) || "",
     notes: log.notes || "",
+    symptoms: Array.isArray(log.symptoms) ? log.symptoms : [],
   };
 }
 
@@ -413,26 +416,6 @@ function runLogicTests() {
 
 if (typeof window !== "undefined") runLogicTests();
 
-// ─── UI Components ────────────────────────────────────────────────────────────
-
-type EoToggleProps = {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-};
-
-function EoToggle({ active, onClick, children }: EoToggleProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`eo-toggle-btn${active ? " selected" : ""}`}
-    >
-      {children}
-    </button>
-  );
-}
-
 type CalendarCellProps = {
   date: Date;
   monthDate: Date;
@@ -473,135 +456,6 @@ function CalendarCell({ date, monthDate, data, onOpenDay }: CalendarCellProps) {
         )}
       </div>
     </button>
-  );
-}
-
-type DayModalProps = {
-  iso: string;
-  data: EggOracleData;
-  setData: React.Dispatch<React.SetStateAction<EggOracleData>>;
-  onClose: () => void;
-};
-
-function DayModal({ iso, data, setData, onClose }: DayModalProps) {
-  const log = cleanLog(data.logs[iso]);
-  const date = fromISO(iso);
-  const info = getDayInfo(data, date);
-
-  function setLog(patch: Partial<EggOracleLog>) {
-    setData((prev) => ({
-      ...prev,
-      logs: { ...prev.logs, [iso]: cleanLog({ ...(prev.logs[iso] || {}), ...patch }) },
-    }));
-  }
-
-  function clearDay() {
-    setData((prev) => {
-      const logs = { ...prev.logs };
-      delete logs[iso];
-      return { ...prev, logs };
-    });
-    onClose();
-  }
-
-  function togglePeriodStart() {
-    const next = !log.periodStart;
-    setLog({ periodStart: next, periodFlow: next && log.periodFlow === "none" ? "medium" : log.periodFlow });
-  }
-
-  function togglePeriodEnd() {
-    const next = !log.periodEnd;
-    setLog({ periodEnd: next, periodFlow: next && log.periodFlow === "none" ? "light" : log.periodFlow });
-  }
-
-  function setFlow(flow: FlowLevel) {
-    setLog({ periodFlow: flow, periodStart: flow === "none" ? false : log.periodStart, periodEnd: flow === "none" ? false : log.periodEnd });
-  }
-
-  const dateLabel = date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
-  const cycleDayLabel = `Cycle day ${Math.max(1, info.cycle.cycleDay)}`;
-  const ovLabel = `Ovulation est. ${formatDateLong(info.cycle.ovulationDate)}${info.cycle.ovulationSource !== "calendar" ? ` (from LH ${formatDate(info.cycle.opkDate)})` : ""}`;
-
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal aria-label={`Log for ${dateLabel}`} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal eo-modal">
-        <div className="eo-modal-head">
-          <div>
-            <div className="eo-modal-date">{dateLabel}</div>
-            <div className="eo-modal-sub">{cycleDayLabel} · {ovLabel}</div>
-          </div>
-          <button type="button" className="eo-close-btn" onClick={onClose} aria-label="Close">×</button>
-        </div>
-
-        <div className="eo-modal-body">
-          <section className="eo-log-section">
-            <h3 className="eo-section-title">Period</h3>
-            <div className="eo-toggle-grid two">
-              <EoToggle active={log.periodStart} onClick={togglePeriodStart}>Period start</EoToggle>
-              <EoToggle active={log.periodEnd} onClick={togglePeriodEnd}>Period end</EoToggle>
-              <EoToggle active={log.spotting} onClick={() => setLog({ spotting: !log.spotting })}>Spotting</EoToggle>
-            </div>
-            <div className="eo-toggle-grid four" style={{ marginTop: "0.5rem" }}>
-              {(["none", "light", "medium", "heavy"] as FlowLevel[]).map((flow) => (
-                <EoToggle key={flow} active={log.periodFlow === flow} onClick={() => setFlow(flow)}>
-                  {flow[0].toUpperCase() + flow.slice(1)}
-                </EoToggle>
-              ))}
-            </div>
-          </section>
-
-          <section className="eo-log-section">
-            <h3 className="eo-section-title">Cervical mucus</h3>
-            <div className="eo-toggle-grid two">
-              {(["dry", "sticky", "creamy", "watery", "egg-white"] as MucusType[]).filter(Boolean).map((mucus) => (
-                <EoToggle key={mucus} active={log.cervicalMucus === mucus} onClick={() => setLog({ cervicalMucus: log.cervicalMucus === mucus ? "" : mucus })}>
-                  {mucus === "egg-white" ? "Egg-white" : mucus[0].toUpperCase() + mucus.slice(1)}
-                </EoToggle>
-              ))}
-            </div>
-          </section>
-
-          <section className="eo-log-section">
-            <h3 className="eo-section-title">LH / OPK test</h3>
-            <div className="eo-toggle-grid three">
-              {([
-                { value: "negative", label: "Negative", hint: "Fainter than control" },
-                { value: "positive", label: "Positive", hint: "Same as control" },
-                { value: "peak", label: "Peak", hint: "Darker than control" },
-              ] as const).map((opk) => (
-                <EoToggle key={opk.value} active={log.opk === opk.value} onClick={() => setLog({ opk: log.opk === opk.value ? "" : opk.value })}>
-                  <span className="eo-toggle-main">{opk.label}</span>
-                  <span className="eo-toggle-hint">{opk.hint}</span>
-                </EoToggle>
-              ))}
-            </div>
-          </section>
-
-          <section className="eo-log-section">
-            <h3 className="eo-section-title">Intercourse</h3>
-            <EoToggle active={log.intercourse} onClick={() => setLog({ intercourse: !log.intercourse })}>
-              Logged
-            </EoToggle>
-          </section>
-
-          <section className="eo-log-section">
-            <h3 className="eo-section-title">Notes</h3>
-            <textarea
-              className="eo-notes"
-              value={log.notes}
-              onChange={(e) => setLog({ notes: e.target.value })}
-              placeholder="Symptoms, mood, cramps, timing..."
-              rows={3}
-            />
-          </section>
-        </div>
-
-        <div className="eo-modal-foot">
-          <button type="button" className="primary-button" onClick={onClose}>Save</button>
-          <button type="button" className="secondary-button" onClick={clearDay}>Clear day</button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -812,7 +666,90 @@ export default function CycleView({ bottomNav, healthTabs }: CycleViewProps) {
       {tab === "calendar" && <CalendarPage data={data} monthDate={monthDate} setMonthDate={setMonthDate} onOpenDay={setSelectedISO} />}
       {tab === "stats" && <StatsPage data={data} setData={setData} />}
 
-      {selectedISO && <DayModal iso={selectedISO} data={data} setData={setData} onClose={() => setSelectedISO(null)} />}
+      {selectedISO && (() => {
+        const iso = selectedISO;
+        const selDate = fromISO(iso);
+        const selLog = cleanLog(data.logs[iso]);
+        const selInfo = getDayInfo(data, selDate);
+        const isPeriodLogged = selLog.periodStart || selLog.spotting || selLog.periodFlow !== "none";
+        const existingFlow: string | null = selLog.spotting ? "Spotting"
+          : selLog.periodFlow === "light" ? "Light"
+          : selLog.periodFlow === "medium" ? "Medium"
+          : selLog.periodFlow === "heavy" ? "Heavy"
+          : null;
+        const existingLhTest: string | null = selLog.opk === "peak" ? "Peak"
+          : selLog.opk === "positive" ? "High"
+          : selLog.opk === "negative" ? "Negative"
+          : null;
+        const dayCtx = selInfo.actualPeriod ? "Period logged"
+          : selInfo.fertile ? "Estimated fertile"
+          : selInfo.ovulation ? "Estimated ovulation"
+          : selInfo.hasLog ? "Logged"
+          : "";
+        const monthName = selDate.toLocaleDateString(undefined, { month: "long" });
+
+        function handleTogglePeriod(on: boolean) {
+          setData((prev) => ({
+            ...prev,
+            logs: {
+              ...prev.logs,
+              [iso]: cleanLog({
+                ...(prev.logs[iso] || {}),
+                periodStart: on,
+                ...(on ? {} : { periodEnd: false, periodFlow: "none" as FlowLevel, spotting: false }),
+              }),
+            },
+          }));
+        }
+
+        function handleSave(saveData: CycleLogSheetSaveData) {
+          const flow = saveData.flow;
+          const spotting = flow === "Spotting";
+          const periodFlow: FlowLevel = !flow || flow === "Spotting" ? "none"
+            : flow === "Light" ? "light"
+            : flow === "Medium" ? "medium"
+            : "heavy";
+          const opk: OPKResult = saveData.lhTest === "Peak" ? "peak"
+            : saveData.lhTest === "High" || saveData.lhTest === "Low" ? "positive"
+            : saveData.lhTest === "Negative" ? "negative"
+            : "";
+          setData((prev) => ({
+            ...prev,
+            logs: {
+              ...prev.logs,
+              [iso]: cleanLog({
+                ...(prev.logs[iso] || {}),
+                spotting,
+                periodFlow,
+                opk,
+                notes: saveData.note,
+                intercourse: saveData.sex,
+                symptoms: saveData.symptoms,
+              }),
+            },
+          }));
+        }
+
+        return (
+          <CycleLogSheet
+            day={selDate.getDate()}
+            monthName={monthName}
+            cycleDay={Math.max(1, selInfo.cycle.cycleDay)}
+            dayContext={dayCtx}
+            isPeriodLogged={isPeriodLogged}
+            existingLogs={{
+              flow: existingFlow,
+              symptoms: selLog.symptoms ?? [],
+              lhTest: existingLhTest,
+              note: selLog.notes,
+              sex: selLog.intercourse,
+            }}
+            onTogglePeriod={handleTogglePeriod}
+            onSave={handleSave}
+            onClose={() => setSelectedISO(null)}
+          />
+        );
+      })()}
 
       {bottomNav}
     </main>

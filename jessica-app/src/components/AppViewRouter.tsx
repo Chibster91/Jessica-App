@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { FoodLibraryView } from "./FoodLibraryView";
 import { HomeView } from "./HomeView";
 import { LogView, type LogViewProps } from "./LogView";
@@ -11,10 +11,10 @@ type AppViewRouterProps = {
   appView: string;
   onNavigate: (view: AppView) => void;
   bottomNav: ReactNode;
-  homeProps: any;
-  profileProps: any;
-  weightProps: any;
-  libraryProps: any;
+  homeProps: Omit<ComponentProps<typeof HomeView>, "bottomNav">;
+  profileProps: Omit<ComponentProps<typeof ProfileView>, "bottomNav">;
+  weightProps: Omit<ComponentProps<typeof WeightView>, "bottomNav" | "healthTabs">;
+  libraryProps: Omit<ComponentProps<typeof FoodLibraryView>, "bottomNav">;
   logProps: Omit<LogViewProps, "bottomNav">;
 };
 

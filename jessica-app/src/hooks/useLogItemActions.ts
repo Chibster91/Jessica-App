@@ -117,24 +117,25 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
     setEditItemAmountUnit(item.amountUnit ?? "serving");
   }
 
-  function saveEditedFoodItem() {
+  function saveEditedFoodItem(amountOverride?: string) {
     if (!itemToEdit) return;
 
-    const amount = parseDecimalInput(editItemAmount);
+    const amount = parseDecimalInput(amountOverride ?? editItemAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
+    const effectiveUnit: AmountUnit = amountOverride !== undefined ? "serving" : editItemAmountUnit;
     const amountLabel = formatAmountLabel(amount);
 
     setLog(
       log.map((item) =>
         item.logId === itemToEdit.logId
           ? (() => {
-              if (editItemAmountUnit === "serving") {
+              if (effectiveUnit === "serving") {
                 const servingName = item.portionLabel ?? item.servingSize;
                 return {
                   ...item,
                   quantity: amount,
                   amount,
-                  amountUnit: editItemAmountUnit,
+                  amountUnit: effectiveUnit,
                   servingLabel: amount === 1 ? servingName : `${amountLabel} x ${servingName}`,
                 };
               }
@@ -142,7 +143,7 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
               const measuredBasis = getMeasuredServingBasis(item);
               if (!measuredBasis) return item;
 
-              const basisAmount = convertAmountToBasisUnit(amount, editItemAmountUnit, measuredBasis.unit, getFoodDensity(item));
+              const basisAmount = convertAmountToBasisUnit(amount, effectiveUnit, measuredBasis.unit, getFoodDensity(item));
               if (basisAmount === null) return item;
 
               const amountScale = getScaleFromServingBasis(item, basisAmount);
@@ -158,12 +159,12 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
                 logId: item.logId,
                 quantity: 1,
                 amount,
-                amountUnit: editItemAmountUnit,
+                amountUnit: effectiveUnit,
                 portionScale:
                   item.portionScale !== undefined && Number.isFinite(item.portionScale)
                     ? item.portionScale * amountScale
                     : item.portionScale,
-                servingLabel: `${amountLabel} ${editItemAmountUnit}`,
+                servingLabel: `${amountLabel} ${effectiveUnit}`,
               };
             })()
           : item

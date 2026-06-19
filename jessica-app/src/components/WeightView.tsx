@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction, type SyntheticEvent } from "react";
+import { useMemo, useState, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction, type SyntheticEvent } from "react";
 import "../styles/weight.css";
+import { EnterWeightSheet } from "./Overlays";
 import {
   convertWeightValue,
   formatDateRange,
@@ -56,15 +57,12 @@ export function WeightView({
   setWeightEntries,
   currentWeightEntry,
   startingWeightEntry,
-  tapProbeProps,
-  logTapProbe,
   sortedWeightEntriesOldest,
   sortedWeightEntriesNewest
 }: WeightViewProps) {
     const {
       weightForm,
       setWeightForm,
-      weightSaveError,
       setWeightSaveError,
       weightRange,
       setWeightRange,
@@ -74,7 +72,6 @@ export function WeightView({
       setWeightEntryToDelete,
       editingWeightEntryId,
       setEditingWeightEntryId,
-      isWeightFormValid,
       chartWeightEntries,
       saveWeightEntry,
       startEditWeightEntry,
@@ -317,11 +314,6 @@ export function WeightView({
       setEditingWeightEntryId(null);
       setWeightForm({ date: today, weight: "", note: "" });
     };
-    const handleSaveWeight = (event: SyntheticEvent<HTMLElement>) => {
-      logTapProbe("weight-save-button", "click", event);
-      saveWeightEntry();
-      if (isWeightFormValid) setIsWeightFormOpen(false);
-    };
     const handleEditWeightEntry = (entry: WeightEntry) => {
       startEditWeightEntry(entry);
       setIsWeightFormOpen(true);
@@ -338,147 +330,6 @@ export function WeightView({
       if (!previous) return null;
       return convertWeightValue(entry.weight, entry.unit, displayUnit) - convertWeightValue(previous.weight, previous.unit, displayUnit);
     };
-    const weightPickerMin = displayUnit === "kg" ? 30 : 70;
-    const weightPickerMax = displayUnit === "kg" ? 250 : 550;
-    const parsedPickerWeight = Number(weightForm.weight);
-    const normalizedPickerWeight = Number.isFinite(parsedPickerWeight) ? Math.max(0, parsedPickerWeight) : null;
-    const selectedWholeWeight = normalizedPickerWeight !== null
-      ? Math.floor(Math.round(normalizedPickerWeight * 10) / 10)
-      : currentWeightEntry
-        ? Math.floor(convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit))
-        : Math.round((weightPickerMin + weightPickerMax) / 2);
-    const selectedDecimalWeight = normalizedPickerWeight !== null
-      ? Math.round((Math.round(normalizedPickerWeight * 10) / 10 - selectedWholeWeight) * 10)
-      : currentWeightEntry
-        ? Math.round((convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, displayUnit) % 1) * 10)
-        : 0;
-    const wholeWeightValues = useMemo(() => {
-      const values = Array.from(
-        { length: weightPickerMax - weightPickerMin + 1 },
-        (_, index) => weightPickerMin + index
-      );
-      return values.includes(selectedWholeWeight)
-        ? values
-        : [...values, selectedWholeWeight].sort((a, b) => a - b);
-    }, [selectedWholeWeight, weightPickerMax, weightPickerMin]);
-    const decimalWeightValues = Array.from({ length: 10 }, (_, index) => index);
-    const wholeWheelRef = useRef<HTMLSelectElement | null>(null);
-    const decimalWheelRef = useRef<HTMLSelectElement | null>(null);
-    useEffect(() => {
-      const centerSelectedOption = (select: HTMLSelectElement | null) => {
-        const option = select?.selectedOptions.item(0);
-        if (!select || !option) return;
-        select.scrollTop = option.offsetTop - select.clientHeight / 2 + option.clientHeight / 2;
-      };
-      centerSelectedOption(wholeWheelRef.current);
-      centerSelectedOption(decimalWheelRef.current);
-    }, [selectedDecimalWeight, selectedWholeWeight, isWeightFormOpen]);
-    const updateWeightPicker = (whole: number, decimal: number) => {
-      setWeightSaveError("");
-      setWeightForm({ ...weightForm, weight: `${whole}.${decimal}` });
-    };
-    const renderWeightForm = () => (
-      <div className="floating-overlay" role="presentation" onClick={closeWeightForm}>
-        <div
-          className="floating-popover weight-form-popover"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="weight-form-title"
-          onClick={(e) => e.stopPropagation()}
-          {...tapProbeProps("weight-entry-panel")}
-        >
-          <h2 id="weight-form-title">{editingWeightEntryId ? "Edit Weight" : "Enter Weight"}</h2>
-          <div className="weight-form" {...tapProbeProps("weight-form")}>
-            <div className="weight-date-row">
-              <label className="weight-date-field">
-                Date
-                <input
-                  type="date"
-                  value={weightForm.date}
-                  onChange={(e) => {
-                    setWeightSaveError("");
-                    setWeightForm({ ...weightForm, date: e.target.value });
-                  }}
-                />
-              </label>
-            </div>
-            <div className="weight-picker-field">
-              <label>
-                Weight ({weightUnit})
-                <div className="weight-dual-wheel-wrap">
-                <div className="weight-wheel-wrap">
-                  <select
-                    ref={wholeWheelRef}
-                    className="weight-wheel-picker"
-                    size={7}
-                    value={String(selectedWholeWeight)}
-                    onChange={(e) => {
-                      updateWeightPicker(Number(e.target.value), selectedDecimalWeight);
-                    }}
-                    aria-label={`Whole ${weightUnit}`}
-                  >
-                    {wholeWeightValues.map((value) => (
-                      <option key={value} value={String(value)}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="weight-wheel-decimal">.</div>
-                <div className="weight-wheel-wrap weight-wheel-wrap-decimal">
-                  <select
-                    ref={decimalWheelRef}
-                    className="weight-wheel-picker weight-wheel-picker-decimal"
-                    size={7}
-                    value={String(Math.max(0, Math.min(9, selectedDecimalWeight)))}
-                    onChange={(e) => {
-                      updateWeightPicker(selectedWholeWeight, Number(e.target.value));
-                    }}
-                    aria-label={`Tenths of ${weightUnit}`}
-                  >
-                    {decimalWeightValues.map((value) => (
-                      <option key={value} value={String(value)}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <span className="weight-wheel-unit">{weightUnit}</span>
-                </div>
-              </label>
-            </div>
-            <label>
-              Note
-              <input
-                value={weightForm.note}
-                placeholder="Optional"
-                onChange={(e) => {
-                  setWeightSaveError("");
-                  setWeightForm({ ...weightForm, note: e.target.value });
-                }}
-              />
-            </label>
-            {weightSaveError && <p className="form-error">{weightSaveError}</p>}
-            <div className="weight-form-actions">
-              <button
-                type="button"
-                className="primary-button"
-                onPointerDown={(event) => logTapProbe("weight-save-button", "pointerdown", event)}
-                onTouchStart={(event) => logTapProbe("weight-save-button", "touchstart", event)}
-                onClick={handleSaveWeight}
-                disabled={!isWeightFormValid}
-              >
-                {editingWeightEntryId ? "Update" : "Save"}
-              </button>
-              <button type="button" className="secondary-button" onClick={closeWeightForm}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-
     return (
       <main className="app">
         <div className="w-screen-head"></div>
@@ -743,7 +594,22 @@ export function WeightView({
           </>
         )}
 
-        {isWeightFormOpen && renderWeightForm()}
+        {isWeightFormOpen && (
+          <EnterWeightSheet
+            initialWeight={weightForm.weight}
+            unit={displayUnit}
+            dateLabel={(() => {
+              const d = new Date(weightForm.date + "T00:00:00");
+              const formatted = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+              return weightForm.date === today ? `Today · ${formatted}` : (editingWeightEntryId ? `Editing · ${formatted}` : formatted);
+            })()}
+            onSave={(weight) => {
+              saveWeightEntry(weight);
+              closeWeightForm();
+            }}
+            onClose={closeWeightForm}
+          />
+        )}
 
         {weightEntryToDelete && (
           <div className="floating-overlay" role="presentation">
