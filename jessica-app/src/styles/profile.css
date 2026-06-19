@@ -409,7 +409,7 @@
 
 .profile-summary-card .profile-target {
   border-color: var(--border);
-  box-shadow: inset 0 0 0 1px rgba(180, 108, 255, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(22, 196, 168, 0.18);
 }
 
 .profile-summary-card .profile-target strong {
@@ -442,7 +442,7 @@
 }
 
 .profile-toast {
-  background: rgba(180, 108, 255, 0.16);
+  background: rgba(22, 196, 168, 0.16);
   border: var(--ui-border);
   border-radius: var(--ui-radius);
   color: #f3e8ff;

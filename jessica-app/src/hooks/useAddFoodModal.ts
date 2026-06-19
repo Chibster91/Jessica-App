@@ -74,6 +74,7 @@ export function useAddFoodModal({
   const [modalFoods, setModalFoods] = useState<Food[]>([]);
   const [customQuery, setCustomQuery] = useState("");
   const [isCustomFormOpen, setIsCustomFormOpen] = useState(false);
+  const [isBarcodeScanOpen, setIsBarcodeScanOpen] = useState(false);
   const [customFoodForm, setCustomFoodForm] = useState<CustomFoodForm>(emptyCustomFoodForm);
   const [customFoodOcrText, setCustomFoodOcrText] = useState("");
   const [customFoodOcrError, setCustomFoodOcrError] = useState("");
@@ -114,6 +115,7 @@ export function useAddFoodModal({
     setModalFoods([]);
     setCustomQuery("");
     setIsCustomFormOpen(false);
+    setIsBarcodeScanOpen(false);
     setCustomFoodForm(emptyCustomFoodForm);
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
@@ -146,6 +148,7 @@ export function useAddFoodModal({
     setPortionAmount("100");
     setDetailError("");
     setIsCustomFormOpen(false);
+    setIsBarcodeScanOpen(false);
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
     setCustomFoodSaveError("");
@@ -224,6 +227,21 @@ export function useAddFoodModal({
     setCustomFoodOcrError("");
     setCustomFoodSaveError("");
     setIsCustomFormOpen(true);
+  }
+
+  function openBarcodeScan() {
+    setIsBarcodeScanOpen(true);
+  }
+
+  function closeBarcodeScan() {
+    setIsBarcodeScanOpen(false);
+  }
+
+  function saveScannedBarcodeFood(food: Food) {
+    setCustomFoods([food, ...customFoods]);
+    setIsBarcodeScanOpen(false);
+    setActiveAddFoodTab("custom");
+    selectLocalFood(food);
   }
 
   function openRecipeForm() {
@@ -564,6 +582,10 @@ export function useAddFoodModal({
     openCustomFoodForm,
     isCustomFormOpen,
     setIsCustomFormOpen,
+    isBarcodeScanOpen,
+    openBarcodeScan,
+    closeBarcodeScan,
+    saveScannedBarcodeFood,
     isScanningCustomFood,
     scanCustomFoodLabel,
     customFoodOcrError,

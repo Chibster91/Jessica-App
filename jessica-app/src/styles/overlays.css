@@ -85,7 +85,7 @@
 .kit-sheet-close {
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: var(--surface-raised);
   border: 1px solid var(--border-default);
   color: var(--text-muted);
@@ -189,6 +189,102 @@
   grid-template-columns: 1fr 1fr;
   gap: 0.55rem;
   margin-top: 0.5rem;
+}
+
+/* ── Streak celebration ────────────────────────────────────── */
+.kit-streak {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-popup, 260);
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(6, 8, 12, 0.66);
+  animation: kit-fade 150ms var(--ease-out);
+}
+.kit-streak__box {
+  width: 100%;
+  max-width: 264px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popup);
+  padding: 1.7rem 1.4rem 1.5rem;
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  animation: kit-streak-in 340ms var(--ease-out);
+}
+@keyframes kit-streak-in {
+  0% { transform: scale(0.82) translateY(12px); opacity: 0; }
+  60% { transform: scale(1.04); }
+  100% { transform: none; opacity: 1; }
+}
+.kit-streak__eyebrow {
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.kit-streak__badge {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  display: grid;
+  place-items: center;
+  margin: 0.5rem 0 0.3rem;
+}
+.kit-streak__badge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--accent-bg);
+  border: 2px solid var(--accent-border);
+}
+.kit-streak__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  animation: kit-streak-pulse 1.9s var(--ease-out) infinite;
+}
+.kit-streak__ring--2 { animation-delay: 0.95s; }
+@keyframes kit-streak-pulse {
+  0% { transform: scale(1); opacity: 0.55; }
+  70% { opacity: 0; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
+.kit-streak__num {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 3.4rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  animation: kit-streak-roll 380ms var(--ease-out);
+}
+.kit-streak__num.is-bumped { animation: kit-streak-roll 460ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes kit-streak-roll {
+  0% { transform: translateY(0.55em) scale(0.65); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+.kit-streak__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+.kit-streak__sub { margin: 0.35rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .kit-streak, .kit-streak__box, .kit-streak__num, .kit-streak__num.is-bumped {
+    animation: kit-fade 150ms var(--ease-out);
+  }
+  .kit-streak__ring { display: none; }
 }
 
 /* ── Nutrition sheet ───────────────────────────────────────── */
@@ -393,7 +489,7 @@
   display: flex;
   align-items: baseline;
   gap: 0.3rem;
-  min-width: 130px;
+  min-width: 170px;
   justify-content: center;
 }
 
@@ -415,7 +511,7 @@
   border-bottom: 2px solid var(--border-default);
   outline: none;
   text-align: center;
-  width: 110px;
+  width: 150px;
   padding: 0;
   transition: border-color var(--dur-fast) var(--ease-out);
 }

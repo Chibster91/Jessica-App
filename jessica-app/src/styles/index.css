@@ -1,30 +1,30 @@
 :root {
   /* ================================================================
      FoodVault Design Tokens
-     Dark-gray + purple. Dark is the canonical theme.
+     Dark-slate + teal-green. Dark is the canonical theme.
      ================================================================ */
 
   /* ---- Neutral ramp ---- */
-  --gray-950: #101116;
-  --gray-900: #15161a;
+  --gray-950: #10131a;
+  --gray-900: #171b23;
   --gray-850: #1a1c22;
-  --gray-800: #1e2026;
+  --gray-800: #212734;
   --gray-750: #23262e;
-  --gray-700: #262932;
-  --gray-600: #343845;
+  --gray-700: #2b3242;
+  --gray-600: #3a4254;
   --gray-500: #4a4f5e;
   --gray-400: #7c828f;
   --gray-300: #b7bcc7;
   --gray-100: #e6e7ea;
   --gray-50:  #f2f2f0;
 
-  /* ---- Brand purple ---- */
+  /* ---- Brand ramp (legacy purple shades; purple-500 now repointed to the teal-green accent) ---- */
   --purple-700: #6d36c9;
   --purple-600: #863bff;
-  --purple-500: #b46cff;
+  --purple-500: #16c4a8;
   --purple-400: #c389ff;
   --purple-300: #d6b4ff;
-  --purple-glow: rgba(180, 108, 255, 0.45);
+  --purple-glow: rgba(22, 196, 168, 0.45);
 
   /* ---- Macro palette ---- */
   --macro-protein: #80ed99;
@@ -35,7 +35,7 @@
   --cycle-period:      #f87171;
   --cycle-fertile:     #d97706;
   --cycle-fertile-100: #fbbf24;
-  --cycle-ovulation:   var(--purple-500);
+  --cycle-ovulation:   #b46cff;
   --cycle-intercourse: #f472b6;
   --cycle-mucus:       #34d399;
 
@@ -51,7 +51,7 @@
   --surface-card:   var(--gray-800);
   --surface-raised: var(--gray-700);
   --surface-sunken: var(--gray-950);
-  --surface-nav:    #15161a;
+  --surface-nav:    #171b23;
 
   /* ---- Semantic text ---- */
   --text-primary:   var(--gray-50);
@@ -65,14 +65,14 @@
   --border-strong:  var(--gray-500);
   --border-subtle:  rgba(255, 255, 255, 0.06);
 
-  /* ---- Accent (purple) ---- */
+  /* ---- Accent (teal-green) ---- */
   --accent:        var(--purple-500);
-  --accent-hover:  var(--purple-400);
-  --accent-press:  var(--purple-600);
+  --accent-hover:  #45d0ba;
+  --accent-press:  #129e86;
   --accent-fg:     #ffffff;
-  --accent-bg:     rgba(180, 108, 255, 0.15);
-  --accent-soft:   rgba(180, 108, 255, 0.22);
-  --accent-border: rgba(180, 108, 255, 0.50);
+  --accent-bg:     rgba(22, 196, 168, 0.15);
+  --accent-soft:   rgba(22, 196, 168, 0.22);
+  --accent-border: rgba(22, 196, 168, 0.50);
 
   /* ---- Status surfaces ---- */
   --danger-bg:     rgba(248, 113, 113, 0.14);
@@ -136,7 +136,7 @@
   --shadow-sm:     0 2px 6px rgba(0, 0, 0, 0.22);
   --shadow-card:   0 10px 24px rgba(0, 0, 0, 0.28);
   --shadow-popup:  0 20px 48px rgba(0, 0, 0, 0.42);
-  --shadow-accent: 0 8px 22px rgba(125, 20, 255, 0.35);
+  --shadow-accent: 0 8px 22px rgba(22, 196, 168, 0.35);
 
   /* ---- Overlay ---- */
   --overlay: rgba(0, 0, 0, 0.55);
@@ -221,9 +221,9 @@
   --text-muted:     #4a4f5e;
 
   /* Accent tints */
-  --accent-bg:     rgba(180, 108, 255, 0.18);
-  --accent-soft:   rgba(180, 108, 255, 0.24);
-  --accent-border: rgba(180, 108, 255, 0.60);
+  --accent-bg:     rgba(22, 196, 168, 0.18);
+  --accent-soft:   rgba(22, 196, 168, 0.24);
+  --accent-border: rgba(22, 196, 168, 0.60);
 
   /* Legacy aliases for light mode */
   --bg:       var(--surface-app);

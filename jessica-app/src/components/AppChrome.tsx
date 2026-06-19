@@ -1,4 +1,5 @@
-import { getDayLetter, getWeekDates, type AppView } from "../appSupport";
+import { type AppView } from "../appSupport";
+import { StreakCelebration } from "./Overlays";
 
 type AppChromeProps = {
   appView: AppView;
@@ -12,11 +13,8 @@ type AppChromeProps = {
   onCloseDebugPanel: () => void;
   onCopyDebugLog: () => void;
   onClearDebugLog: () => void;
-  showStreakPopup: boolean;
-  streakPopupDate: string;
-  completedDays: string[];
-  getCompletedStreak: (referenceDate?: string, days?: string[]) => number;
-  onCloseStreakPopup: () => void;
+  streakCelebration: { from: number; to: number } | null;
+  onCloseStreakCelebration: () => void;
 };
 
 export function AppChrome({
@@ -31,18 +29,9 @@ export function AppChrome({
   onCloseDebugPanel,
   onCopyDebugLog,
   onClearDebugLog,
-  showStreakPopup,
-  streakPopupDate,
-  completedDays,
-  getCompletedStreak,
-  onCloseStreakPopup,
+  streakCelebration,
+  onCloseStreakCelebration,
 }: AppChromeProps) {
-  const popupWeekDates = getWeekDates(streakPopupDate);
-  const popupCompletedDays = completedDays.includes(streakPopupDate)
-    ? completedDays
-    : [...completedDays, streakPopupDate];
-  const completedSet = new Set(popupCompletedDays);
-
   return (
     <>
      <nav className="bottom-nav" aria-label="Main navigation">
@@ -143,34 +132,12 @@ export function AppChrome({
           </div>
         </div>
       )}
-      {showStreakPopup && (
-        <div className="floating-overlay" role="presentation" onClick={onCloseStreakPopup}>
-          <div
-            className="floating-popover streak-popup"
-            role="dialog"
-            aria-modal="true"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="streak-popup-title">Day Logged!</h2>
-            <div className="streak-popup-num">{getCompletedStreak(streakPopupDate, popupCompletedDays)}</div>
-            <p className="streak-popup-label">day streak</p>
-            <div className="streak-week-grid">
-              {popupWeekDates.map((date) => {
-                const done = completedSet.has(date);
-                const letter = getDayLetter(date);
-                return (
-                  <div key={date} className={`streak-day-cell${done ? " done" : ""}`}>
-                    <span className="streak-day-check">{done ? "✓" : ""}</span>
-                    <span className="streak-day-letter">{letter}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <button type="button" className="primary-button" onClick={onCloseStreakPopup}>
-              Close
-            </button>
-          </div>
-        </div>
+      {streakCelebration && (
+        <StreakCelebration
+          from={streakCelebration.from}
+          to={streakCelebration.to}
+          onClose={onCloseStreakCelebration}
+        />
       )}
     </>
   );

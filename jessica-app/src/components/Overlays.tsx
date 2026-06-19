@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import "../styles/overlays.css";
 
 // ── Sheet shell ──────────────────────────────────────────────────────────────
@@ -58,6 +58,47 @@ export function ConfirmDialog({
             {confirmLabel}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Streak celebration ───────────────────────────────────────────────────────
+
+type StreakCelebrationProps = {
+  from: number;
+  to: number;
+  onClose: () => void;
+};
+
+export function StreakCelebration({ from, to, onClose }: StreakCelebrationProps) {
+  const [n, setN] = useState(from);
+  const [bumped, setBumped] = useState(false);
+
+  useEffect(() => {
+    const bumpTimer = setTimeout(() => {
+      setN(to);
+      setBumped(true);
+    }, 520);
+    const closeTimer = setTimeout(onClose, 2600);
+    return () => {
+      clearTimeout(bumpTimer);
+      clearTimeout(closeTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="kit-streak" role="presentation" onClick={onClose}>
+      <div className="kit-streak__box" onClick={(e) => e.stopPropagation()}>
+        <span className="kit-streak__eyebrow">Day Logged</span>
+        <div className="kit-streak__badge">
+          <span className="kit-streak__ring" />
+          <span className="kit-streak__ring kit-streak__ring--2" />
+          <span key={n} className={`kit-streak__num${bumped ? " is-bumped" : ""}`}>{n}</span>
+        </div>
+        <span className="kit-streak__label">day streak</span>
+        <p className="kit-streak__sub">{bumped ? "Keep the chain going." : "Locking in your day…"}</p>
       </div>
     </div>
   );

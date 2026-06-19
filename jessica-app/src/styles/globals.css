@@ -525,7 +525,7 @@ input:disabled {
 }
 
 .bottom-nav button.active {
-  color: #B46CFF;
+  color: var(--accent);
 }
 
 .debug-fab {

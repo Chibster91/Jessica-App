@@ -108,12 +108,6 @@ export function formatWeekOf(start: string, end: string): string {
   return `${s.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${e.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
-export function getDayLetter(date: string): string {
-  const [y, m, d] = date.split("-").map(Number);
-  const dow = new Date(y, m - 1, d).getDay(); // 0=Sun
-  return ["S", "M", "T", "W", "R", "F", "S"][dow];
-}
-
 export function getShortDayName(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   const dow = new Date(y, m - 1, d).getDay();

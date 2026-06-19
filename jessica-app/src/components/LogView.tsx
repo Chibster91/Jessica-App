@@ -41,6 +41,7 @@ import {
   type ImportReviewItem,
 } from "../importMatching";
 import "../styles/log.css";
+import { LibraryBarcodeScan } from "./LibraryAddScreens";
 import { ConfirmDialog, NutritionSheet, type NutritionFood } from "./Overlays";
 
 type MacroTotals = { calories: number; protein: number; carbs: number; fat: number };
@@ -197,7 +198,8 @@ export function LogView(props: LogViewProps) {
     customFoodScanInputRef, openAddFood, closeAddFood, pendingCategory, activeAddFoodTab, setActiveAddFoodTab,
     modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, setSelectedFood, selectedFoodDetail,
     selectedPortion, isLoadingDetail, selectFood, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm,
-    isCustomFormOpen, setIsCustomFormOpen, isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError,
+    isCustomFormOpen, setIsCustomFormOpen, isBarcodeScanOpen, openBarcodeScan, closeBarcodeScan, saveScannedBarcodeFood,
+    isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError,
     customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, filteredCustomFoods,
     recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, setIsRecipeFormOpen, recipeForm, setRecipeForm,
     recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods,
@@ -580,6 +582,19 @@ export function LogView(props: LogViewProps) {
 
       {pendingCategory && (
         <section className="add-food-screen" aria-labelledby="meal-category-title" {...tapProbeProps("add-food-modal")}>
+          {isBarcodeScanOpen ? (
+            <LibraryBarcodeScan
+              onSaveFood={saveScannedBarcodeFood}
+              onClose={closeBarcodeScan}
+              onBack={closeBarcodeScan}
+              onManual={() => {
+                closeBarcodeScan();
+                setActiveAddFoodTab("custom");
+                openCustomFoodForm();
+              }}
+            />
+          ) : (
+          <>
           <div className="add-food-top">
             <h2 id="meal-category-title" className="add-food-title">Add to {pendingCategory}</h2>
             <button type="button" className="add-food-close" onClick={closeAddFood} aria-label="Close add food">
@@ -595,6 +610,9 @@ export function LogView(props: LogViewProps) {
               {activeAddFoodTab === "search" && (
                 <button type="button" onClick={searchModalFood}>Search</button>
               )}
+              <button type="button" className="add-food-scan-btn" aria-label="Scan barcode" onClick={openBarcodeScan}>
+                Scan
+              </button>
             </div>
           </div>
 
@@ -1142,6 +1160,8 @@ export function LogView(props: LogViewProps) {
             )}
 
           </div>
+          </>
+          )}
         </section>
       )}
 

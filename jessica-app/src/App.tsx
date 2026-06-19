@@ -134,8 +134,7 @@ function App() {
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => getSavedThemeMode());
   const [weightEntries, setWeightEntries] = useState<WeightEntry[]>(() => getSavedWeightEntries());
   const [completedDays, setCompletedDays] = useState<string[]>(() => getSavedCompletedDays());
-  const [showStreakPopup, setShowStreakPopup] = useState(false);
-  const [streakPopupDate, setStreakPopupDate] = useState(today);
+  const [streakCelebration, setStreakCelebration] = useState<{ from: number; to: number } | null>(null);
   const [topFoods, setTopFoods] = useState<TopFoodEntry[]>(() => getSavedTopFoods());
   const [homeSelectedDate, setHomeSelectedDate] = useState<string | null>(null);
   const [goalsView, setGoalsView] = useState<"daily" | "weekly">("weekly");
@@ -314,9 +313,11 @@ function App() {
 
   function markDayComplete() {
     if (completedDays.includes(selectedDate)) return;
-    setCompletedDays((prev) => [...prev, selectedDate]);
-    setStreakPopupDate(selectedDate);
-    setShowStreakPopup(true);
+    const from = getCompletedStreak(shiftDate(selectedDate, -1), completedDays);
+    const nextCompletedDays = [...completedDays, selectedDate];
+    setCompletedDays(nextCompletedDays);
+    const to = getCompletedStreak(selectedDate, nextCompletedDays);
+    setStreakCelebration({ from, to });
   }
 
   function handleFinishToggle() {
@@ -329,7 +330,7 @@ function App() {
 
   function reopenDayLogging() {
     setCompletedDays((prev) => prev.filter((date) => date !== selectedDate));
-    setShowStreakPopup(false);
+    setStreakCelebration(null);
   }
 
   function getCompletedStreak(referenceDate = today, days = completedDays): number {
@@ -648,11 +649,8 @@ function App() {
       onCloseDebugPanel={() => setIsDebugPanelOpen(false)}
       onCopyDebugLog={copyDebugLog}
       onClearDebugLog={clearDebugLog}
-      showStreakPopup={showStreakPopup}
-      streakPopupDate={streakPopupDate}
-      completedDays={completedDays}
-      getCompletedStreak={getCompletedStreak}
-      onCloseStreakPopup={() => setShowStreakPopup(false)}
+      streakCelebration={streakCelebration}
+      onCloseStreakCelebration={() => setStreakCelebration(null)}
     />
   );
 
