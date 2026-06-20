@@ -48,12 +48,13 @@ import {
 } from "./appSupport";
 import { importCandidateCache, importUsdaCandidateCache } from "./importMatching";
 
-type ThemeMode = "dark" | "light";
+type ThemeMode = "dark" | "light" | "system";
 
 const themeStorageKey = "theme-mode";
 
 function getSavedThemeMode(): ThemeMode {
-  return localStorage.getItem(themeStorageKey) === "light" ? "light" : "dark";
+  const saved = localStorage.getItem(themeStorageKey);
+  return saved === "light" || saved === "system" ? saved : "dark";
 }
 
 
@@ -288,8 +289,20 @@ function App() {
   useEffect(() => { saveTopFoods(topFoods); }, [topFoods]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = themeMode;
     localStorage.setItem(themeStorageKey, themeMode);
+
+    if (themeMode !== "system") {
+      document.documentElement.dataset.theme = themeMode;
+      return;
+    }
+
+    const media = window.matchMedia("(prefers-color-scheme: light)");
+    const applySystemTheme = () => {
+      document.documentElement.dataset.theme = media.matches ? "light" : "dark";
+    };
+    applySystemTheme();
+    media.addEventListener("change", applySystemTheme);
+    return () => media.removeEventListener("change", applySystemTheme);
   }, [themeMode]);
 
   function changeSelectedDate(date: string) {
@@ -616,7 +629,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedDate, log, importConfirmedDates]
   );
-  const weightUnit = getPreferredWeightUnit(goals);
+  const weightUnit = getPreferredWeightUnit(goals, profile);
   const sortedWeightEntriesNewest = useMemo(
     () => sortWeightEntriesNewestFirst(weightEntries),
     [weightEntries]

@@ -1,8 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import "../styles/eggOracle.css";
+import { loadCycleData, saveCycleData } from "../cycleStorage";
 import { CycleLogSheet, type CycleLogSheetSaveData } from "./Overlays";
-
-const STORAGE_KEY = "eggOracleTrackingFirst.v2";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,9 +21,10 @@ type EggOracleLog = {
   symptoms?: string[];
 };
 
-type EggOracleData = {
+export type EggOracleData = {
   cycleLengthFallback: number;
   periodLengthFallback: number;
+  trackFertile: boolean;
   logs: Record<string, Partial<EggOracleLog>>;
 };
 
@@ -135,33 +135,6 @@ function buildMonthDays(monthDate: Date): Date[] {
 
 // ─── Data helpers ─────────────────────────────────────────────────────────────
 
-function defaultData(): EggOracleData {
-  return { cycleLengthFallback: 44, periodLengthFallback: 5, logs: {} };
-}
-
-function loadData(): EggOracleData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultData();
-    const parsed = JSON.parse(raw) as Partial<EggOracleData>;
-    return {
-      ...defaultData(),
-      ...parsed,
-      logs: parsed.logs && typeof parsed.logs === "object" ? parsed.logs : {},
-    };
-  } catch {
-    return defaultData();
-  }
-}
-
-function saveData(data: EggOracleData): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // localStorage can fail in privacy/sandbox modes — app still runs
-  }
-}
-
 function clampNumber(value: unknown, fallback: number, min: number, max: number): number {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -193,6 +166,7 @@ function normalizeImportedData(value: unknown): EggOracleData {
   return {
     cycleLengthFallback: clampNumber(obj.cycleLengthFallback, 44, 15, 60),
     periodLengthFallback: clampNumber(obj.periodLengthFallback, 5, 1, 14),
+    trackFertile: typeof obj.trackFertile === "boolean" ? obj.trackFertile : true,
     logs: cleanedLogs,
   };
 }
@@ -355,7 +329,7 @@ function getDayInfo(data: EggOracleData, date: Date): DayInfo {
 
 function runLogicTests() {
   const data: EggOracleData = {
-    cycleLengthFallback: 28, periodLengthFallback: 5,
+    cycleLengthFallback: 28, periodLengthFallback: 5, trackFertile: true,
     logs: {
       "2026-01-01": { periodStart: true, periodFlow: "medium" },
       "2026-01-02": { periodFlow: "light" },
@@ -371,7 +345,7 @@ function runLogicTests() {
   console.assert(getDayInfo(data, fromISO("2026-02-12")).ovulation === true, "Feb 12 ovulation");
 
   const dataWithEnds: EggOracleData = {
-    cycleLengthFallback: 28, periodLengthFallback: 5,
+    cycleLengthFallback: 28, periodLengthFallback: 5, trackFertile: true,
     logs: {
       "2026-01-01": { periodStart: true, periodFlow: "medium" },
       "2026-01-04": { periodEnd: true, periodFlow: "light" },
@@ -386,7 +360,7 @@ function runLogicTests() {
   console.assert(getDayInfo(dataWithEnds, fromISO("2026-01-03")).knownPeriod === true, "Known period day");
 
   const dataWithOPK: EggOracleData = {
-    cycleLengthFallback: 44, periodLengthFallback: 5,
+    cycleLengthFallback: 44, periodLengthFallback: 5, trackFertile: true,
     logs: {
       "2026-01-01": { periodStart: true, periodFlow: "medium" },
       "2026-02-14": { periodStart: true, periodFlow: "medium" },
@@ -398,7 +372,7 @@ function runLogicTests() {
   console.assert(toISO(opkCycle.fertileStart) === "2026-02-25", "OPK shifts fertile window");
 
   const dataWithMucus: EggOracleData = {
-    cycleLengthFallback: 44, periodLengthFallback: 5,
+    cycleLengthFallback: 44, periodLengthFallback: 5, trackFertile: true,
     logs: {
       "2026-05-01": { periodStart: true, periodFlow: "medium" },
       "2026-05-23": { cervicalMucus: "egg-white" },
@@ -557,49 +531,6 @@ function StatsPage({ data }: StatsPageProps) {
   );
 }
 
-export function CycleSettingsCard() {
-  const [data, setData] = useState<EggOracleData>(() => loadData());
-  useEffect(() => saveData(data), [data]);
-  return (
-    <div className="eo-page">
-      <section className="panel">
-        <p className="panel-eyebrow">Manual defaults</p>
-        <p style={{ color: "var(--fg-2)", fontSize: "0.82rem", margin: "0 0 1rem" }}>
-          Used until you have enough real cycle data.
-        </p>
-        <div className="profile-form-grid">
-          <label>
-            Default cycle length (days)
-            <div className="goals-input-row">
-              <input
-                type="number"
-                min="15"
-                max="60"
-                value={data.cycleLengthFallback}
-                onChange={(e) => setData((prev) => ({ ...prev, cycleLengthFallback: clampNumber(e.target.value, 44, 15, 60) }))}
-              />
-              <span>days</span>
-            </div>
-          </label>
-          <label>
-            Default period length (days)
-            <div className="goals-input-row">
-              <input
-                type="number"
-                min="1"
-                max="14"
-                value={data.periodLengthFallback}
-                onChange={(e) => setData((prev) => ({ ...prev, periodLengthFallback: clampNumber(e.target.value, 5, 1, 14) }))}
-              />
-              <span>days</span>
-            </div>
-          </label>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 // ─── Root component ───────────────────────────────────────────────────────────
 
 type CycleViewProps = {
@@ -608,12 +539,12 @@ type CycleViewProps = {
 };
 
 export default function CycleView({ bottomNav, healthTabs }: CycleViewProps) {
-  const [data, setData] = useState<EggOracleData>(() => loadData());
+  const [data, setData] = useState<EggOracleData>(() => loadCycleData());
   const [tab, setTab] = useState<"calendar" | "stats">("calendar");
   const [monthDate, setMonthDate] = useState(() => new Date());
   const [selectedISO, setSelectedISO] = useState<string | null>(null);
 
-  useEffect(() => saveData(data), [data]);
+  useEffect(() => saveCycleData(data), [data]);
 
   const today = new Date();
   const cycle = findCycleForDate(data, today);

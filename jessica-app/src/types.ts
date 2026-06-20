@@ -130,6 +130,8 @@ export type HeightUnit = "ftIn" | "cm" | "in";
 
 export type WeightUnit = "kg" | "lb";
 
+export type EnergyUnit = "cal" | "kj";
+
 export type LibrarySelection =
   | { type: "recent"; food: Food & { loggedCount?: number; lastLoggedDate?: string } }
   | { type: "custom"; food: Food }
@@ -188,6 +190,17 @@ export type Profile = {
   startingWeightKg: number;
   profileCreatedAt: string;
   profileUpdatedAt: string;
+  // Display & settings preferences — optional so profiles saved before these
+  // existed still load; always read with a `?? default` fallback.
+  weightUnit?: WeightUnit;
+  energyUnit?: EnergyUnit;
+  showStreak?: boolean;
+  showMacros?: boolean;
+  quickAdd?: boolean;
+  barcodeScanner?: boolean;
+  notifications?: boolean;
+  logReminder?: boolean;
+  weightReminder?: boolean;
 };
 
 export type ProfileForm = {

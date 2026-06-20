@@ -1,4 +1,4 @@
-import type { Goals, ProfileUnits, WeightEntry, WeightRange, WeightUnit } from "./types";
+import type { Goals, Profile, ProfileUnits, WeightEntry, WeightRange, WeightUnit } from "./types";
 
 export const mealCategories = ["Breakfast", "Lunch", "Dinner", "Snacks"];
 
@@ -171,8 +171,8 @@ export function sortWeightEntriesOldestFirst(entries: WeightEntry[]) {
   return [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }
 
-export function getPreferredWeightUnit(goals: Goals | null): WeightUnit {
-  return goals?.calculatorInputs?.weightUnit ?? "lb";
+export function getPreferredWeightUnit(goals: Goals | null, profile?: Profile | null): WeightUnit {
+  return profile?.weightUnit ?? goals?.calculatorInputs?.weightUnit ?? "lb";
 }
 
 export function getWeightRangeStartDate(range: WeightRange, referenceDate: string) {

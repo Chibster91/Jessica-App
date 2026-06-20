@@ -1,10 +1,9 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/profile.css";
-import { CycleSettingsCard } from "./CycleView";
+import { loadCycleData, saveCycleData } from "../cycleStorage";
 import { Sheet } from "./Overlays";
 import {
   formatEntryDate,
-  formatHeightValue,
   formatProfileNumber,
   formatWeightValue,
   getLocalDateString,
@@ -24,13 +23,15 @@ import {
   poundsPerKilogram,
   shiftDate,
   toProfileActivityLevel,
+  type EnergyUnit,
   type GoalType,
   type MacroPreset,
   type Profile,
   type ProfileActivityLevel,
   type ProfileCalculation,
   type ProfileForm,
-  type Sex
+  type Sex,
+  type WeightUnit
 } from "../appSupport";
 
 type ProfileViewProps = {
@@ -49,8 +50,8 @@ type ProfileViewProps = {
   setIsProfileWizardOpen: Dispatch<SetStateAction<boolean>>;
   profileSaveStatus: string;
   setProfileSaveStatus: Dispatch<SetStateAction<string>>;
-  themeMode: "dark" | "light";
-  setThemeMode: Dispatch<SetStateAction<"dark" | "light">>;
+  themeMode: ThemeMode;
+  setThemeMode: Dispatch<SetStateAction<ThemeMode>>;
   setCycleTrackingPreference: (trackCycle: boolean) => void;
   cancelProfileChanges: () => void;
   saveProfile: () => void;
@@ -60,6 +61,8 @@ type ProfileViewProps = {
   onConnectDrive: () => void;
   onDeleteAllData: () => void;
 };
+
+type ThemeMode = "dark" | "light" | "system";
 
 type DeleteStats = {
   logDays: number;
@@ -145,6 +148,27 @@ function SwitchRow({ label, checked, onChange }: { label: string; checked: boole
       <span className="kit-prof-row__label">{label}</span>
       <span className={`kit-toggle${checked ? " is-on" : ""}`}><span className="kit-toggle__thumb" /></span>
     </button>
+  );
+}
+
+function SegmentedControl<T extends string>({ options, value, onChange, ariaLabel }: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; ariaLabel?: string }) {
+  return (
+    <div className="kit-seg" role="group" aria-label={ariaLabel}>
+      {options.map((o) => (
+        <button key={o.value} type="button" className={`kit-seg__btn${value === o.value ? " is-on" : ""}`} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ControlRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="kit-prof-row kit-prof-row--control">
+      <span className="kit-prof-row__label">{label}</span>
+      {children}
+    </div>
   );
 }
 
@@ -272,10 +296,35 @@ function EditHeight({ profile, patchProfile, onClose }: EditSheetProps) {
   );
 }
 
+function EditCycle({ onClose }: { onClose: () => void }) {
+  const initial = loadCycleData();
+  const [cycleLength, setCycleLength] = useState(initial.cycleLengthFallback);
+  const [periodLength, setPeriodLength] = useState(initial.periodLengthFallback);
+  const [trackFertile, setTrackFertile] = useState(initial.trackFertile);
+  return (
+    <Sheet title="Cycle" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { saveCycleData({ ...loadCycleData(), cycleLengthFallback: cycleLength, periodLengthFallback: periodLength, trackFertile }); onClose(); }}>Save</button>}>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Average cycle length</div>
+        <NumStepper value={cycleLength} onChange={setCycleLength} unit="days" min={15} max={60} />
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", margin: 0, lineHeight: 1.45 }}>
+          The textbook cycle is 28 days — a starting point only. FoodVault re-learns your real average as you log, so predictions get sharper over time.
+        </p>
+      </div>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Average period length</div>
+        <NumStepper value={periodLength} onChange={setPeriodLength} unit="days" min={1} max={14} />
+      </div>
+      <SwitchRow label="Show fertile window & ovulation" checked={trackFertile} onChange={setTrackFertile} />
+    </Sheet>
+  );
+}
+
 function EditCurrentWeight({ profile, patchProfile, onClose }: EditSheetProps) {
   const [w, setW] = useState(parseFloat(kgToLb(profile.weightKg).toFixed(1)));
   return (
-    <Sheet title="Current weight" onClose={onClose}
+    <Sheet title="Start weight" onClose={onClose}
       footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
         onClick={() => { patchProfile({ weightKg: lbToKg(w) }); onClose(); }}>Save</button>}>
       <WtStepper value={w} onChange={setW} />
@@ -453,6 +502,7 @@ export function ProfileView({
   const [manualCalorieDraftError, setManualCalorieDraftError] = useState("");
   const [profileTab, setProfileTab] = useState<"info" | "settings">("info");
   const [editing, setEditing] = useState<string | null>(null);
+  const [infoSheet, setInfoSheet] = useState<"privacy" | "help" | null>(null);
 
   function openDeleteModal() {
     let logDays = 0;
@@ -566,7 +616,8 @@ export function ProfileView({
     const goalDateDisplay = goalDateStr ? formatEntryDate(goalDateStr) : null;
     const avatarInitial = (profile.name || "?").charAt(0).toUpperCase();
     const sexDisplay = profile.sex === "female" ? "Female" : "Male";
-    const heightDisplay = formatHeightValue(profile.heightCm, profile.units);
+    const { ft: heightFt, ins: heightIns } = cmToFtIn(profile.heightCm);
+    const heightDisplay = `${heightFt}'${heightIns}" · ${Math.round(profile.heightCm)} cm`;
     // ── computed display values ──────────────────────────────────
     const paceLabel = (() => {
       if (profile.goal === "maintain") return "Maintain";
@@ -579,12 +630,16 @@ export function ProfileView({
     const goalLabel = profile.goal === "lose" ? "Lose weight" : profile.goal === "gain" ? "Gain weight" : "Maintain weight";
     const actLabel = profileActivityLabels[toProfileActivityLevel(profile.activityLevel)].title;
     const rateStr = profile.goal === "maintain" ? "—" : paceLabel;
+    const cycleData = loadCycleData();
+    const defaultWeightUnit: WeightUnit = profile.units === "metric" ? "kg" : "lb";
 
     const close = () => setEditing(null);
 
     return (
       <main className="app">
         {profileSaveStatus && <p className="profile-toast">{profileSaveStatus}</p>}
+
+        <h1 className="kit-prof-title">Profile</h1>
 
         <div className="health-tabs pf-tabs" role="tablist" aria-label="Profile sections">
           <button type="button" role="tab" aria-selected={profileTab === "info"}
@@ -610,15 +665,23 @@ export function ProfileView({
               <Row label="Height" value={heightDisplay}          onEdit={() => setEditing("height")} />
             </Section>
 
+            {profile.trackCycle !== false && (
+              <Section title="Cycle">
+                <Row label="Cycle length"  value={`${cycleData.cycleLengthFallback} days`} sub="avg" onEdit={() => setEditing("cycle")} />
+                <Row label="Period length" value={`${cycleData.periodLengthFallback} days`} sub="avg" onEdit={() => setEditing("cycle")} />
+                <Row label="Fertile &amp; ovulation" value={cycleData.trackFertile ? "On" : "Off"} onEdit={() => setEditing("cycle")} />
+              </Section>
+            )}
+
             <Section title="Body">
-              <Row label="Current weight" value={weightDisplay}    onEdit={() => setEditing("currentWeight")} />
+              <Row label="Start weight" value={weightDisplay}    onEdit={() => setEditing("currentWeight")} />
               <Row label="Goal weight"    value={goalWeightDisplay ?? "—"} onEdit={() => setEditing("goalWeight")} />
+              <Row label="Weekly rate"    value={rateStr}  onEdit={() => setEditing("goal")} />
             </Section>
 
             <Section title="Goal">
               <Row label="Goal type" value={goalLabel}  onEdit={() => setEditing("goal")} />
               <Row label="Activity"  value={actLabel}   onEdit={() => setEditing("activity")} />
-              <Row label="Weekly rate" value={rateStr}  onEdit={() => setEditing("goal")} />
             </Section>
 
             <Section title="Targets">
@@ -648,32 +711,79 @@ export function ProfileView({
         {profileTab === "settings" && (
           <>
             <Section title="Appearance">
-              <SwitchRow label="Dark theme" checked={themeMode === "dark"} onChange={(on) => setThemeMode(on ? "dark" : "light")} />
+              <ControlRow label="Theme">
+                <SegmentedControl<ThemeMode>
+                  ariaLabel="Theme"
+                  options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "system", label: "System" }]}
+                  value={themeMode}
+                  onChange={setThemeMode}
+                />
+              </ControlRow>
+            </Section>
+
+            <Section title="Units">
+              <ControlRow label="Weight">
+                <SegmentedControl<WeightUnit>
+                  ariaLabel="Weight unit"
+                  options={[{ value: "lb", label: "lb" }, { value: "kg", label: "kg" }]}
+                  value={profile.weightUnit ?? defaultWeightUnit}
+                  onChange={(v) => patchProfile({ weightUnit: v })}
+                />
+              </ControlRow>
+              <ControlRow label="Energy">
+                <SegmentedControl<EnergyUnit>
+                  ariaLabel="Energy unit"
+                  options={[{ value: "cal", label: "cal" }, { value: "kj", label: "kJ" }]}
+                  value={profile.energyUnit ?? "cal"}
+                  onChange={(v) => patchProfile({ energyUnit: v })}
+                />
+              </ControlRow>
+            </Section>
+
+            <Section title="Home screen">
+              <SwitchRow label="Show streak counter"  checked={profile.showStreak ?? true} onChange={(v) => patchProfile({ showStreak: v })} />
+              <SwitchRow label="Show macro breakdown" checked={profile.showMacros ?? true} onChange={(v) => patchProfile({ showMacros: v })} />
+            </Section>
+
+            <Section title="Food logging">
+              <SwitchRow label="Quick-add calories" checked={profile.quickAdd ?? true}       onChange={(v) => patchProfile({ quickAdd: v })} />
+              <SwitchRow label="Barcode scanner"    checked={profile.barcodeScanner ?? true} onChange={(v) => patchProfile({ barcodeScanner: v })} />
             </Section>
 
             <Section title="Cycle tracking">
               <SwitchRow label="Show cycle tab" checked={profile.trackCycle !== false} onChange={(v) => setCycleTrackingPreference(v)} />
-              {profile.trackCycle !== false && (
-                <div style={{ padding: "0 0.1rem" }}><CycleSettingsCard /></div>
-              )}
+            </Section>
+
+            <Section title="Notifications">
+              <SwitchRow label="Push notifications"       checked={profile.notifications ?? true}  onChange={(v) => patchProfile({ notifications: v })} />
+              <SwitchRow label="Daily log reminder"       checked={profile.logReminder ?? true}    onChange={(v) => patchProfile({ logReminder: v })} />
+              <SwitchRow label="Weight check-in reminder" checked={profile.weightReminder ?? false} onChange={(v) => patchProfile({ weightReminder: v })} />
             </Section>
 
             <Section title="Data &amp; account">
               <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={onOpenExport}>
-                <span className="kit-prof-row__label">Export all data (JSON)</span>
-                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
+                <span className="kit-prof-row__label">Export my data</span>
+                <span className="kit-prof-row__chev">›</span>
               </button>
               <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={onOpenImport}>
-                <span className="kit-prof-row__label">Import JSON</span>
-                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
+                <span className="kit-prof-row__label">Import data</span>
+                <span className="kit-prof-row__chev">›</span>
               </button>
               <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={onConnectDrive}>
-                <span className="kit-prof-row__label">Connect Google Drive</span>
-                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
+                <span className="kit-prof-row__label">Connected apps</span>
+                <span className="kit-prof-row__chev">›</span>
+              </button>
+              <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={() => setInfoSheet("privacy")}>
+                <span className="kit-prof-row__label">Privacy &amp; data</span>
+                <span className="kit-prof-row__chev">›</span>
+              </button>
+              <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link" type="button" onClick={() => setInfoSheet("help")}>
+                <span className="kit-prof-row__label">Help &amp; support</span>
+                <span className="kit-prof-row__chev">›</span>
               </button>
               <button className="kit-prof-row kit-prof-row--tap kit-prof-row--link kit-prof-row--danger" type="button" onClick={openDeleteModal}>
                 <span className="kit-prof-row__label">Delete all data</span>
-                <span className="kit-prof-row__right"><span className="kit-prof-row__chev">›</span></span>
+                <span className="kit-prof-row__chev">›</span>
               </button>
             </Section>
           </>
@@ -689,6 +799,25 @@ export function ProfileView({
         {editing === "goal"          && <EditGoal profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "calories"      && <EditCalories profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "macros"        && <EditMacros profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "cycle"         && <EditCycle onClose={close} />}
+
+        {infoSheet === "privacy" && (
+          <Sheet title="Privacy &amp; data" onClose={() => setInfoSheet(null)}>
+            <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
+              FoodVault stores everything — your profile, food logs, recipes, and weight entries — only in this browser&rsquo;s local storage. Nothing is sent to a server except food searches (looked up against the USDA FoodData Central database) and, if you choose to connect it, an optional Google Drive backup. Clearing your browser data or switching devices without backing up will lose anything stored locally.
+            </p>
+          </Sheet>
+        )}
+
+        {infoSheet === "help" && (
+          <Sheet title="Help &amp; support" onClose={() => setInfoSheet(null)}>
+            <div style={{ display: "grid", gap: "0.9rem", fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+              <p style={{ margin: 0 }}>FoodVault calculates your targets from the <strong>Mifflin-St Jeor</strong> formula (BMR), scaled by your activity level (TDEE), then adjusted by your goal and weekly rate.</p>
+              <p style={{ margin: 0 }}>You can override the calculated calorie target or macros at any time from the Targets section — toggle &ldquo;Override manually&rdquo; in the Calorie target or Macro targets editor.</p>
+              <p style={{ margin: 0 }}>This is a personal project with no support team behind it — there&rsquo;s no ticket system or live chat, just the app itself.</p>
+            </div>
+          </Sheet>
+        )}
 
         {isDeleteModalOpen && (
           <div className="modal-backdrop" role="dialog" aria-modal aria-labelledby="pf-dlg-title">

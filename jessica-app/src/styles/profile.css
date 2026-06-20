@@ -1382,6 +1382,7 @@
 }
 
 /* ── Profile v2: row-based read view ───────────────────────── */
+.kit-prof-title { font-size: 1.25rem; font-weight: 800; margin: 0; padding: 0.3rem 0.1rem 0; }
 .kit-prof-group { display: grid; gap: 0.45rem; margin-bottom: 0.75rem; }
 
 .kit-prof-section {
@@ -1421,14 +1422,12 @@
 .kit-prof-row__label { flex: 1; font-size: 0.88rem; font-weight: 500; }
 .kit-prof-row__right {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 1px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
   flex-shrink: 0;
 }
-.kit-prof-row--link .kit-prof-row__right,
-.kit-prof-row--control .kit-prof-row__right { flex-direction: row; align-items: center; }
-.kit-prof-row__val { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); }
+.kit-prof-row__val { font-size: 0.88rem; font-weight: 700; color: var(--text-primary); white-space: nowrap; }
 .kit-prof-row__val--accent { color: var(--accent); }
 .kit-prof-row__sub { font-size: 0.68rem; color: var(--text-muted); font-weight: 400; }
 .kit-prof-row__chev { color: var(--text-muted); font-size: 1.05rem; margin-left: 0.25rem; align-self: center; }
@@ -1486,3 +1485,23 @@
   transition: background var(--dur-base) var(--ease-spring);
 }
 .kit-toggle.is-on .kit-toggle__thumb { background: var(--accent-fg); }
+
+/* ── Compact segmented control (Settings rows) ────────────── */
+.kit-seg {
+  display: inline-flex; gap: 2px; flex-shrink: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  padding: 2px;
+}
+.kit-seg__btn {
+  border: none; background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.78rem; font-weight: 700;
+  padding: 5px 11px;
+  border-radius: calc(var(--radius-control) - 3px);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.kit-seg__btn.is-on { background: var(--accent); color: var(--accent-fg); }
