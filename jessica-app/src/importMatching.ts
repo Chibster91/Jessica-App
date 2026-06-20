@@ -879,11 +879,30 @@ function buildImportCandidatesFromIndex(
     .filter((candidate): candidate is ImportFoodCandidate => candidate !== null));
 }
 
+/**
+ * USDA "Packaged" candidates come back as search previews: their nutrition is a
+ * placeholder (0 calories, "Details required" serving) because the per-food
+ * detail fetch only runs when a food is tapped in normal search, never during
+ * import. Logging such a candidate would overwrite the real calories/macros the
+ * import file already carries with zeroes.
+ */
+function isPlaceholderCandidateFood(food: Food): boolean {
+  return food.isSearchPreview === true || food.calories <= 0;
+}
+
 function resolveImportItemFromCandidate(
   item: FoodLogImportDraft,
   imported: ImportFoodResolution,
   candidate: ImportFoodCandidate
 ): ImportFoodResolution {
+  if (isPlaceholderCandidateFood(candidate.food)) {
+    // Keep the imported food's own nutrition instead of an empty preview.
+    return {
+      food: imported.food,
+      quantity: imported.quantity,
+      importAudit: makeImportAudit(item, "new", imported.food.id, "new"),
+    };
+  }
   return {
     food: candidate.food,
     quantity: getCalorieScaledImportQuantity(imported, candidate.food),

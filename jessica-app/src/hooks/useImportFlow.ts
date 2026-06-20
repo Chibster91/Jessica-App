@@ -864,6 +864,38 @@ export function useImportFlow({
     closeImportReviewManualSearch();
   }
 
+  function importAllAsIs() {
+    // Bulk migration path: trust the file's own name + nutrition for every item,
+    // skip database matching entirely, and don't add anything to the custom food
+    // library (each log entry carries its nutrition inline). Only valid for the
+    // file-import review ("preview" mode), not the day-by-day stepper.
+    if (importReviewMode !== "preview" || importDrafts.length === 0) return;
+
+    const resolver: ImportFoodBatchResolver = {
+      byDraftId: new Map(
+        importDrafts.map((item) => [item.id, buildImportFoodFromDraft(item, createNegativeFoodId())])
+      ),
+      addedFoodIds: new Set<number>(),
+    };
+
+    skipCustomFoodLibraryRef.current = true;
+    importFoodBatchResolverRef.current = resolver;
+    setImportReviewItems([]);
+    setImportReviewSelections({});
+    setImportReviewAppliedSelections({});
+    setImportReviewActions({});
+    setExpandedImportReviewGroups({});
+    setImportReviewManualCandidates({});
+    setRememberedImportMatches({});
+    setImportReviewRememberedRows({});
+    setImportReviewManualTarget(null);
+    setImportReviewManualQuery("");
+    setImportReviewManualGroups([]);
+    setUnresolvedImportReviewIds([]);
+    setImportReviewMode(null);
+    finalizeFoodLogImport(resolver, importDrafts);
+  }
+
   function applyAllImportReview() {
     const pending = importReviewItems.filter((review) => !importReviewActions[review.item.id]);
     if (pending.length === 0) return;
@@ -926,6 +958,7 @@ export function useImportFlow({
     applyAllImportReview,
     rejectImportReviewItem,
     expandImportReviewGroup,
+    importAllAsIs,
     openImportReviewManualSearch,
     closeImportReviewManualSearch,
     searchImportReviewManualFoods,

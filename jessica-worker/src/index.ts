@@ -84,6 +84,8 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:5173",
   "http://localhost:4173",
   "http://127.0.0.1:4173",
+  // LAN address for testing the dev build on a phone over local Wi-Fi.
+  "http://192.168.1.144:5173",
 ]);
 
 export default {

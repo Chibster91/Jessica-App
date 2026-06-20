@@ -380,6 +380,43 @@ button {
   padding: 0;
 }
 
+/* Uniform rounded-square action buttons in the Review Matches header. */
+.import-review-hdr-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.import-review-hdr-btn {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  padding: 0.2rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: 0.52rem;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: break-word;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.import-review-hdr-btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+.import-review-hdr-btn--close {
+  font-size: 1.1rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
 .import-preview-errors,
 .import-inline-errors {
   display: grid;
@@ -1202,6 +1239,15 @@ button {
     conic-gradient(var(--accent) calc(var(--p, 0) * 1%), var(--border) 0);
   display: grid;
   place-items: center;
+}
+.log-gauge-ring.is-over {
+  background:
+    radial-gradient(closest-side, var(--surface) 70%, transparent 71%),
+    conic-gradient(var(--danger) 100%, var(--danger) 0);
+}
+.log-gauge-ring.is-over span,
+.log-gauge-ring.is-over strong {
+  color: var(--danger);
 }
 .log-gauge-ring > div {
   text-align: center;

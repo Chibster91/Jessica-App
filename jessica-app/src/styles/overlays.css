@@ -787,7 +787,8 @@
 .kit-addfood {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  /* Above the bottom nav (z-index 100) so the footer Save button isn't hidden behind it. */
+  z-index: 200;
   background: var(--surface-app);
   display: flex;
   flex-direction: column;

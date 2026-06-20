@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/Jessica-App/',
+  server: {
+    host: true,
+  },
   plugins: [
     react(),
     VitePWA({
