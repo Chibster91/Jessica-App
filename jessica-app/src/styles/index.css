@@ -40,11 +40,13 @@
   --cycle-mucus:       #34d399;
 
   /* ---- Status ---- */
-  --danger:      #f87171;
-  --danger-deep: #7f1d1d;
-  --danger-fg:   #fee2e2;
-  --success:     #80ed99;
-  --warning:     #ffb86b;
+  --danger:        #f87171;
+  --danger-deep:   #7f1d1d;
+  --danger-fg:     #fee2e2;
+  --danger-text:   #fca5a5;
+  --danger-warm-2: #ff7b7b;
+  --success:       #80ed99;
+  --warning:       #ffb86b;
 
   /* ---- Semantic surfaces ---- */
   --surface-app:    var(--gray-900);
@@ -139,7 +141,10 @@
   --shadow-accent: 0 8px 22px rgba(22, 196, 168, 0.35);
 
   /* ---- Overlay ---- */
-  --overlay: rgba(0, 0, 0, 0.55);
+  --overlay:      rgba(0, 0, 0, 0.55);
+  --scrim:        rgba(6, 8, 12, 0.55);
+  --scrim-deep:   rgba(6, 8, 12, 0.6);
+  --scrim-deeper: rgba(6, 8, 12, 0.66);
 
   /* ---- Motion ---- */
   --ease-out:    cubic-bezier(0.22, 0.61, 0.36, 1);

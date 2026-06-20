@@ -272,8 +272,8 @@
 .w-cta {
   background: var(--accent);
   border: 0;
-  border-radius: var(--radius-md, 10px);
-  color: #fff;
+  border-radius: var(--radius-control);
+  color: var(--accent-fg);
   font-weight: 700;
   padding: 14px;
   width: 100%;
@@ -303,7 +303,7 @@
   gap: 4px;
   background: var(--surface);
   border: var(--ui-border);
-  border-radius: var(--radius-pill, 999px);
+  border-radius: var(--radius-pill);
   padding: 3px;
 }
 
@@ -321,7 +321,7 @@
 .w-range-pills button.is-active,
 .w-history-head .month-btn {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .w-zoom,
@@ -451,7 +451,7 @@
 }
 
 .w-hist-main .delta.gain {
-  color: var(--danger-warm-2, #ff7b7b);
+  color: var(--danger-warm-2);
 }
 
 .w-hist-main .delta.loss {
@@ -505,7 +505,7 @@
 }
 
 .weight-chart-header span {
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.72rem;
 }
 
@@ -528,9 +528,9 @@
 }
 
 .weight-range-controls button.active {
-  background: #B46CFF;
-  border-color: #B46CFF;
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .weight-chart-shell {
@@ -651,7 +651,7 @@
 
 .weight-wheel-picker option:checked {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .weight-wheel-wrap-decimal {
@@ -694,7 +694,7 @@
 }
 
 .weight-chart-axis {
-  stroke: #343845;
+  stroke: var(--border-default);
   stroke-width: 1;
 }
 
@@ -706,7 +706,7 @@
 
 .weight-chart-line {
   fill: none;
-  stroke: #B46CFF;
+  stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 3;
@@ -730,13 +730,13 @@
 }
 
 .weight-chart-dot {
-  fill: #f3e8ff;
-  stroke: #B46CFF;
+  fill: var(--text-primary);
+  stroke: var(--accent);
   stroke-width: 2;
 }
 
 .weight-chart-label {
-  fill: #B7BCC7;
+  fill: var(--text-secondary);
   font-size: 0.62rem;
   pointer-events: none;
 }
@@ -754,64 +754,8 @@
 
 .weight-chart-point-card span,
 .weight-chart-point-card small {
-  color: #B7BCC7;
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
-}
-
-.weight-entry-list {
-  margin-top: 0.75rem;
-  text-align: left;
-}
-
-.weight-entry-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.75rem;
-  border-top: var(--ui-border);
-  padding: 0.4rem 0;
-}
-
-.weight-entry-info {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.55rem;
-  flex: 1 1 12rem;
-  min-width: 0;
-}
-
-.weight-entry-note {
-  color: #B7BCC7;
-  font-size: 0.85rem;
-  width: 100%;
-  overflow-wrap: anywhere;
-}
-
-.weight-entry-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-shrink: 0;
-}
-
-.weight-entry-actions button {
-  padding: 0.35rem 0.65rem;
-  font-size: 0.85rem;
-}
-
-.weight-change-loss {
-  color: var(--macro-protein);
-  font-size: 0.9rem;
-}
-
-.weight-change-gain {
-  color: #ff7b7b;
-  font-size: 0.9rem;
-}
-
-.weight-change-neutral {
-  color: #B7BCC7;
-  font-size: 0.9rem;
 }
 
 .weight-form-popover {
@@ -856,7 +800,6 @@
 :root[data-theme="light"] .w-hist-row,
 :root[data-theme="light"] .w-segs span,
 :root[data-theme="light"] .weight-chart-point-card,
-:root[data-theme="light"] .weight-entry-row,
 :root[data-theme="light"] .weight-form-popover {
   background: var(--surface);
   border-color: var(--border);
@@ -867,7 +810,7 @@
 :root[data-theme="light"] .weight-form .primary-button {
   background: var(--accent);
   border: 0;
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 :root[data-theme="light"] .weight-wheel-wrap {

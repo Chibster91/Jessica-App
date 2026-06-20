@@ -34,12 +34,12 @@ function getEditAmountUnits(item: LogItem | null) {
 
   const units: AmountUnit[] =
     item.measurementType === "liquid"
-      ? ["ml", "cup", "tbsp", "tsp", "serving"]
+      ? ["serving", "ml", "cup", "tbsp", "tsp"]
       : item.measurementType === "spoonable"
-      ? ["g", "oz", "tbsp", "tsp", "serving"]
-      : ["g", "oz", "serving"];
+      ? ["serving", "g", "oz", "tbsp", "tsp"]
+      : ["serving", "g", "oz"];
 
-  if (item.amountUnit && !units.includes(item.amountUnit)) units.unshift(item.amountUnit);
+  if (item.amountUnit && !units.includes(item.amountUnit)) units.push(item.amountUnit);
 
   return units;
 }
@@ -117,12 +117,37 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
     setEditItemAmountUnit(item.amountUnit ?? "serving");
   }
 
+  function changeEditAmountUnit(unit: AmountUnit) {
+    setEditItemAmountUnit(unit);
+    if (!itemToEdit) return;
+
+    setEditItemAmount(unit === "serving" ? String(itemToEdit.quantity ?? 1) : "1");
+  }
+
+  function getEditPreviewFood() {
+    if (!itemToEdit || editItemAmountUnit === "serving") return itemToEdit;
+
+    const amount = parseDecimalInput(editItemAmount);
+    if (!Number.isFinite(amount) || amount <= 0) return itemToEdit;
+
+    const measuredBasis = getMeasuredServingBasis(itemToEdit);
+    if (!measuredBasis) return itemToEdit;
+
+    const basisAmount = convertAmountToBasisUnit(amount, editItemAmountUnit, measuredBasis.unit, getFoodDensity(itemToEdit));
+    if (basisAmount === null) return itemToEdit;
+
+    const amountScale = getScaleFromServingBasis(itemToEdit, basisAmount);
+    if (amountScale === null) return itemToEdit;
+
+    return scaleFoodNutrition(itemToEdit, amountScale, `${formatAmountLabel(basisAmount)} ${measuredBasis.unit}`);
+  }
+
   function saveEditedFoodItem(amountOverride?: string) {
     if (!itemToEdit) return;
 
-    const amount = parseDecimalInput(amountOverride ?? editItemAmount);
+    const effectiveUnit: AmountUnit = editItemAmountUnit;
+    const amount = parseDecimalInput(effectiveUnit === "serving" ? amountOverride ?? editItemAmount : editItemAmount);
     if (!Number.isFinite(amount) || amount <= 0) return;
-    const effectiveUnit: AmountUnit = amountOverride !== undefined ? "serving" : editItemAmountUnit;
     const amountLabel = formatAmountLabel(amount);
 
     setLog(
@@ -252,7 +277,9 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
     setEditItemAmount,
     editItemAmountUnit,
     setEditItemAmountUnit,
+    changeEditAmountUnit,
     getEditAmountUnits,
+    getEditPreviewFood,
     openEditFoodItem,
     saveEditedFoodItem,
     itemToRemove,

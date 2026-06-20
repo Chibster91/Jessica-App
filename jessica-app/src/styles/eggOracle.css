@@ -14,8 +14,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: linear-gradient(135deg, rgba(239,68,68,0.14), rgba(168,85,247,0.12));
-  border: 1px solid rgba(239,68,68,0.28);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cycle-period) 14%, transparent), color-mix(in srgb, var(--cycle-ovulation) 12%, transparent));
+  border: 1px solid color-mix(in srgb, var(--cycle-period) 28%, transparent);
   border-radius: var(--ui-radius);
   padding: 12px 14px;
   margin-bottom: 4px;
@@ -140,9 +140,9 @@
   gap: 3px;
 }
 
-.eo-cell--period { background: rgba(248, 113, 113, 0.18); border-color: rgba(248, 113, 113, 0.35); }
-.eo-cell--predicted { background: rgba(248, 113, 113, 0.07); border-color: rgba(248, 113, 113, 0.15); }
-.eo-cell--fertile { background: rgba(251, 191, 36, 0.14); border-color: rgba(251, 191, 36, 0.3); }
+.eo-cell--period { background: color-mix(in srgb, var(--cycle-period) 18%, transparent); border-color: color-mix(in srgb, var(--cycle-period) 35%, transparent); }
+.eo-cell--predicted { background: color-mix(in srgb, var(--cycle-period) 7%, transparent); border-color: color-mix(in srgb, var(--cycle-period) 15%, transparent); }
+.eo-cell--fertile { background: color-mix(in srgb, var(--cycle-fertile-100) 14%, transparent); border-color: color-mix(in srgb, var(--cycle-fertile-100) 30%, transparent); }
 .eo-cell--ovulation { background: var(--accent-bg); border-color: var(--accent-border); }
 .eo-cell--outside { opacity: 0.3; }
 
@@ -168,11 +168,11 @@
   border-radius: 50%;
 }
 
-.eo-dot--period { background: #f87171; }
-.eo-dot--fertile { background: #d97706; }
+.eo-dot--period { background: var(--cycle-period); }
+.eo-dot--fertile { background: var(--cycle-fertile); }
 .eo-dot--ovulation { background: var(--accent); width: 7px; height: 7px; }
-.eo-dot--intercourse { background: #f472b6; }
-.eo-dot--mucus { background: #34d399; }
+.eo-dot--intercourse { background: var(--cycle-intercourse); }
+.eo-dot--mucus { background: var(--cycle-mucus); }
 .eo-dot--note { background: var(--fg-2); }
 
 /* Badge indicators */
@@ -186,9 +186,9 @@
   padding: 1px 3px;
 }
 
-.eo-badge--start { background: #f87171; color: #fff; }
-.eo-badge--end { background: #fca5a5; color: #7f1d1d; }
-.eo-badge--lh { background: var(--accent); color: #171921; }
+.eo-badge--start { background: var(--cycle-period); color: var(--accent-fg); }
+.eo-badge--end { background: var(--danger-text); color: var(--danger-deep); }
+.eo-badge--lh { background: var(--accent); color: var(--text-inverse); }
 
 /* Legend */
 .eo-legend {
@@ -217,18 +217,18 @@
 }
 
 .eo-swatch--period {
-  background: rgba(248, 113, 113, 0.22);
-  border: 1.5px solid rgba(248, 113, 113, 0.62);
+  background: color-mix(in srgb, var(--cycle-period) 22%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--cycle-period) 62%, transparent);
 }
 
 .eo-swatch--fertile {
-  background: rgba(251, 191, 36, 0.18);
-  border: 1.5px solid rgba(251, 191, 36, 0.38);
+  background: color-mix(in srgb, var(--cycle-fertile-100) 18%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--cycle-fertile-100) 38%, transparent);
 }
 
 .eo-swatch--ovulation {
-  background: rgba(168, 85, 247, 0.16);
-  border: 1.5px solid rgba(168, 85, 247, 0.48);
+  background: color-mix(in srgb, var(--cycle-ovulation) 16%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--cycle-ovulation) 48%, transparent);
 }
 
 /* Stats */

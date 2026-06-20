@@ -215,6 +215,18 @@ export function useAddFoodModal({
     setIsLoadingDetail(false);
   }
 
+  function changeAmountUnit(unit: AmountUnit) {
+    setAmountUnit(unit);
+    if (!selectedFood) return;
+
+    if (unit === "serving") {
+      const measuredBasis = getMeasuredServingBasis(selectedFood);
+      setPortionAmount(String(measuredBasis?.amount ?? parseServingSize(selectedFood.servingSize)?.amount ?? 1));
+    } else {
+      setPortionAmount("1");
+    }
+  }
+
   function openCustomFoodForm() {
     setSelectedFood(null);
     setSelectedFoodDetail(null);
@@ -421,8 +433,8 @@ export function useAddFoodModal({
     if (!selectedFood || !pendingCategory) return;
     if (selectedFood.isSearchPreview) return;
 
-    const effectiveQuantity = qtyOverride ?? quantity;
-    const effectiveUnit: AmountUnit = qtyOverride !== undefined ? "serving" : amountUnit;
+    const effectiveUnit: AmountUnit = amountUnit;
+    const effectiveQuantity = effectiveUnit === "serving" ? qtyOverride ?? quantity : quantity;
 
     const servings = effectiveUnit === "serving" ? Number(effectiveQuantity) : hasUsableSearchNutrition(selectedFood) ? 1 : Number(effectiveQuantity);
     const amount = Number(portionAmount);
@@ -444,7 +456,7 @@ export function useAddFoodModal({
     const selectedFoodServing = getFoodForSelectedPortion(
       selectedFood,
       selectedFoodDetail,
-      selectedPortion,
+      effectiveUnit === "serving" ? selectedPortion : undefined,
       effectiveUnit !== "serving" && amountScale !== null
         ? basisAmount ?? amount
         : Number(portionAmount)
@@ -537,6 +549,17 @@ export function useAddFoodModal({
     selectedPortionBaseCalories !== null && amountUnit === "serving" && Number.isFinite(rawServingQuantity) && rawServingQuantity > 0
       ? Math.round(selectedPortionBaseCalories * rawServingQuantity)
       : selectedPortionBaseCalories;
+  const previewFoodServing = useMemo(() => {
+    if (!selectedFood) return null;
+    const amountForPortion =
+      amountUnit !== "serving" && portionAmountInBasisUnits !== null ? portionAmountInBasisUnits : rawPortionAmount;
+    return getFoodForSelectedPortion(
+      selectedFood,
+      selectedFoodDetail,
+      amountUnit === "serving" ? selectedPortion : undefined,
+      amountForPortion
+    );
+  }, [selectedFood, selectedFoodDetail, selectedPortion, amountUnit, portionAmountInBasisUnits, rawPortionAmount]);
   const filteredCustomFoods = useMemo(
     () => customFoods.filter((food) => matchesFoodQuery(food, customQuery)),
     [customFoods, customQuery]
@@ -623,6 +646,7 @@ export function useAddFoodModal({
     servingBasisText,
     amountUnit,
     setAmountUnit,
+    changeAmountUnit,
     portionOptions,
     selectedPortionValue,
     setSelectedPortionValue,
@@ -632,6 +656,7 @@ export function useAddFoodModal({
     setPortionAmount,
     allowedAmountUnits,
     selectedPortionCalories,
+    previewFoodServing,
     addSelectedFood,
     canAddSelectedFood,
   };

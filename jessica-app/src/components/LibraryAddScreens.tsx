@@ -284,7 +284,7 @@ export function LibraryManualEntry({
         </div>
 
         {saveError && (
-          <p style={{ color: "var(--color-danger, #f87171)", fontSize: "0.84rem", margin: 0 }}>
+          <p style={{ color: "var(--danger)", fontSize: "0.84rem", margin: 0 }}>
             {saveError}
           </p>
         )}
@@ -586,7 +586,7 @@ export function LibraryUrlImport({ onSaveRecipe, onClose, onBack }: LibraryUrlIm
           />
         </div>
         {error && (
-          <p style={{ color: "var(--danger, #d33)", fontSize: "0.82rem", margin: 0 }}>{error}</p>
+          <p style={{ color: "var(--danger)", fontSize: "0.82rem", margin: 0 }}>{error}</p>
         )}
         <button
           className="kit-btn kit-btn--primary"

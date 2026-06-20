@@ -57,7 +57,7 @@
 }
 
 .empty-meal {
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
@@ -150,7 +150,7 @@ textarea {
 button {
   overflow-wrap: anywhere;
   touch-action: manipulation;
-  -webkit-tap-highlight-color: rgba(22, 196, 168, 0.22);
+  -webkit-tap-highlight-color: var(--accent-soft);
 }
 
 .grid,
@@ -277,12 +277,12 @@ button {
   z-index: 150;
   padding: 0.45rem 0.6rem;
   border-radius: 999px;
-  background: #B46CFF;
-  border: 1px solid #B46CFF;
-  color: #F2F2F0;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--text-primary);
   font-size: 0.72rem;
   font-weight: 700;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-card);
 }
 
 .debug-backdrop {
@@ -319,7 +319,7 @@ button {
 .floating-field {
   display: grid;
   gap: 0.35rem;
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 
@@ -384,7 +384,7 @@ button {
 .import-inline-errors {
   display: grid;
   gap: 0.25rem;
-  color: #fca5a5;
+  color: var(--danger-text);
   font-size: 0.85rem;
 }
 
@@ -460,8 +460,8 @@ button {
 }
 
 .import-review-row.is-unresolved {
-  border-color: #fca5a5;
-  box-shadow: 0 0 0 2px rgba(252, 165, 165, 0.16);
+  border-color: var(--danger-text);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger-text) 16%, transparent);
 }
 
 .import-review-collapsed-row {
@@ -576,15 +576,15 @@ button {
 }
 
 .import-review-row .secondary-button.is-applied {
-  color: #171921;
+  color: var(--text-inverse);
   background: var(--accent);
   border-color: var(--accent);
 }
 
 .import-review-row .secondary-button.is-rejected {
-  color: #171921;
-  background: #fca5a5;
-  border-color: #fca5a5;
+  color: var(--text-inverse);
+  background: var(--danger-text);
+  border-color: var(--danger-text);
 }
 
 .import-resolving-popover {
@@ -691,7 +691,7 @@ button {
 .import-preview-item label {
   display: grid;
   gap: 0.3rem;
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.8rem;
 }
 
@@ -724,7 +724,7 @@ button {
   margin: 0;
   font-size: 0.85rem;
   font-weight: 700;
-  color: #B7BCC7;
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -777,7 +777,7 @@ button {
 .import-step-progress-fill {
   height: 100%;
   border-radius: 2px;
-  background: var(--accent, #6C8EBF);
+  background: var(--accent);
   transition: width 0.25s ease;
 }
 
@@ -872,59 +872,21 @@ button {
   padding: 0.75rem;
   border: var(--ui-border);
   border-radius: var(--ui-radius);
-  background: #262932;
-  color: #F2F2F0;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   text-align: left;
 }
 
 .drive-import-file span {
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.82rem;
 }
 
 .drive-export-link {
-  color: #B46CFF;
+  color: var(--accent);
   font-size: 0.9rem;
   font-weight: 800;
   overflow-wrap: anywhere;
-}
-
-.serving-overlay {
-  z-index: 280;
-}
-
-.serving-popover h2 {
-  font-size: 1rem;
-  line-height: 1.2;
-}
-
-.serving-basis-text {
-  margin: 0;
-  color: #B7BCC7;
-  font-size: 0.78rem;
-}
-
-.serving-unit-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.25rem;
-}
-
-.serving-unit-tabs button {
-  min-height: 2.25rem;
-  padding: 0.35rem 0.25rem;
-  border: var(--ui-border);
-  border-radius: var(--control-radius);
-  background: #262932;
-  color: #B7BCC7;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.serving-unit-tabs button.active {
-  border-color: #B46CFF;
-  background: #262932;
-  color: #F2F2F0;
 }
 
 @media (min-width: 480px) {
@@ -1151,7 +1113,7 @@ button {
   right: 10px;
   background: none;
   border: none;
-  color: var(--fg-2, #8b8fa8);
+  color: var(--fg-2);
   font-size: 1.1rem;
   line-height: 1;
   padding: 2px 5px;
@@ -1170,7 +1132,7 @@ button {
   top: 34px;
   right: 8px;
   z-index: 10;
-  background: var(--surface-2, #23263a);
+  background: var(--surface-2);
   border: var(--ui-border);
   border-radius: var(--ui-radius);
   overflow: hidden;
@@ -1190,7 +1152,7 @@ button {
 }
 .log-menu-dropdown button:hover { background: var(--surface); }
 .log-menu-dropdown .danger-menu-item {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .import-inline-status,
@@ -1252,7 +1214,6 @@ button {
   color: var(--fg-2);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  transform: translateY(199);
 }
 .log-gauge-ring strong {
   font-size: 1.4rem;
@@ -1413,7 +1374,7 @@ button {
   font-weight: 700;
 }
 .meal-settings-menu button:disabled { opacity: 0.45; }
-.meal-settings-menu .danger-menu-item { color: #fca5a5; }
+.meal-settings-menu .danger-menu-item { color: var(--danger-text); }
 
 .meal-menu-backdrop {
   position: fixed;
@@ -1453,7 +1414,7 @@ button {
   font-weight: 600;
 }
 
-.food-ctx-menu .danger-menu-item { color: #fca5a5; }
+.food-ctx-menu .danger-menu-item { color: var(--danger-text); }
 
 .food-ctx-meal-options {
   display: grid;
@@ -1528,7 +1489,7 @@ button {
   background: var(--accent);
   border: 0;
   border-radius: 50%;
-  color: #fff;
+  color: var(--accent-fg);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
@@ -1700,6 +1661,35 @@ button {
   width: 100%;
 }
 
+.add-food-search-btn,
+.add-food-scan-btn {
+  white-space: nowrap;
+  padding: 0.6rem 0.9rem;
+  font-weight: 700;
+  border-radius: var(--radius-control);
+}
+
+.add-food-search-btn {
+  background: var(--accent);
+  border: 0;
+  color: var(--accent-fg);
+}
+
+.add-food-search-btn:hover {
+  background: var(--accent-hover);
+}
+
+.add-food-scan-btn {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+}
+
+.add-food-scan-btn:hover {
+  background: var(--surface-card);
+  border-color: var(--border-strong);
+}
+
 .add-food-content {
   flex: 1;
   min-height: 0;
@@ -1731,12 +1721,25 @@ button {
 
 .add-food-tab.is-active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .add-food-tab-action {
   display: grid;
   margin: 0 0 0.75rem;
+}
+
+.add-food-tab-action button {
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--accent-fg);
+  font-weight: 700;
+  padding: 0.7rem 1rem;
+}
+
+.add-food-tab-action button:hover {
+  background: var(--accent-hover);
 }
 
 .add-food-results {
@@ -1799,7 +1802,6 @@ button {
 :root[data-theme="light"] .meal-settings-menu button,
 :root[data-theme="light"] .food-ctx-menu,
 :root[data-theme="light"] .food-ctx-menu button,
-:root[data-theme="light"] .serving-unit-tabs button,
 :root[data-theme="light"] .finish-toggle,
 :root[data-theme="light"] .import-step-progress-bar,
 :root[data-theme="light"] .import-step-weight-badge {
@@ -1815,7 +1817,7 @@ button {
 :root[data-theme="light"] .ingredient-confirm button:first-of-type:not(.secondary-button):not(.danger-button) {
   background: var(--accent);
   border: 0;
-  color: #fff;
+  color: var(--accent-fg);
 }
 
 .modal-backdrop,

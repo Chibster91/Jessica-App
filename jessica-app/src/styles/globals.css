@@ -5,7 +5,7 @@
 }
 
 .panel {
-  background: #1E2026;
+  background: var(--surface-card);
   border: var(--ui-border);
   border-radius: var(--ui-radius);
   padding: 1.5rem;
@@ -55,7 +55,7 @@ textarea {
   min-width: 0;
   box-sizing: border-box;
   text-align: left;
-  background: #262932;
+  background: var(--surface-raised);
   border: var(--ui-border);
   display: flex;
   flex-direction: column;
@@ -80,7 +80,7 @@ textarea {
 }
 
 .food-card-brand {
-  color: var(--fg-2, #9aa2b8);
+  color: var(--fg-2);
   font-size: 0.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,14 +89,14 @@ textarea {
 }
 
 .food-card-cal {
-  color: var(--fg-2, #9aa2b8);
+  color: var(--fg-2);
   font-size: 0.78rem;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .food-card-logged {
-  color: var(--fg-2, #9aa2b8);
+  color: var(--fg-2);
   font-size: 0.72rem;
 }
 
@@ -168,14 +168,14 @@ textarea {
 }
 
 .tab-row button {
-  background: #262932;
+  background: var(--surface-raised);
   border: var(--ui-border);
   border-radius: var(--control-radius);
 }
 
 .tab-row button.active {
-  background: #262932;
-  border-color: #B46CFF;
+  background: var(--surface-raised);
+  border-color: var(--accent);
 }
 
 .modal-results {
@@ -239,8 +239,8 @@ textarea {
   padding: 0.6rem 0.8rem;
   border: var(--ui-border);
   border-radius: var(--control-radius);
-  background: #262932;
-  color: #F2F2F0;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font-weight: 600;
   cursor: pointer;
   overflow: hidden;
@@ -269,11 +269,11 @@ textarea {
 }
 
 .scan-status {
-  color: #B7BCC7;
+  color: var(--text-secondary);
 }
 
 .form-error {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .ocr-debug {
@@ -291,7 +291,7 @@ textarea {
   margin: 0;
   padding: 0.75rem;
   border-radius: var(--ui-radius);
-  background: #262932;
+  background: var(--surface-raised);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -426,11 +426,11 @@ textarea {
 }
 
 .modal-error {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .modal-hint {
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.9rem;
   margin: 0 0 0.75rem;
   text-align: left;
@@ -451,11 +451,23 @@ textarea {
 .wz-next-btn {
   background: var(--accent);
   border: 0;
-  border-radius: var(--radius-md, 10px);
-  color: #fff;
+  border-radius: var(--radius-control);
+  color: var(--accent-fg);
   font-weight: 700;
   padding: 14px;
-  box-shadow: none;
+  box-shadow: var(--shadow-accent);
+}
+
+.primary-button:hover,
+.add-food-button:hover,
+.wz-next-btn:hover {
+  background: var(--accent-hover);
+}
+
+.primary-button:active,
+.add-food-button:active,
+.wz-next-btn:active {
+  background: var(--accent-press);
 }
 
 button:disabled,
@@ -465,28 +477,37 @@ input:disabled {
 }
 
 .danger-button {
-  background: #7f1d1d;
-  color: #fee2e2;
-  border-color: #b91c1c;
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger-border);
+}
+
+.danger-button:hover {
+  background: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 
 .secondary-button {
   margin-top: 0.75rem;
-  background: var(--surface-2);
-  border: var(--ui-border);
-  border-radius: var(--control-radius);
-  color: var(--fg);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
   font-weight: 700;
+}
+
+.secondary-button:hover {
+  background: var(--surface-card);
+  border-color: var(--border-strong);
 }
 
 .form-actions button:not(:first-of-type):not(.primary-button):not(.danger-button),
 .floating-actions button.secondary-button,
 .weight-form .secondary-button,
 .pf-dlg-foot button.secondary-button {
-  background: var(--surface-2);
-  border: var(--ui-border);
-  border-radius: var(--control-radius);
-  color: var(--fg);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -496,7 +517,7 @@ input:disabled {
   bottom: 0;
   left: 0;
   right: 0;
-  background: #15161A;
+  background: var(--surface-nav);
   border-top: var(--ui-border);
   display: flex;
   justify-content: space-around;
@@ -512,7 +533,7 @@ input:disabled {
   padding: 0.4rem 1.25rem;
   background: none;
   border: none;
-  color: #B7BCC7;
+  color: var(--text-secondary);
   font-size: 0.72rem;
   cursor: pointer;
   border-radius: var(--control-radius);
@@ -520,8 +541,8 @@ input:disabled {
 }
 
 .bottom-nav button:hover {
-  color: #F2F2F0;
-  background: #262932;
+  color: var(--text-primary);
+  background: var(--surface-raised);
 }
 
 .bottom-nav button.active {
@@ -667,7 +688,7 @@ input:disabled {
 /* Macro progress bars (day view + home screen cards) */
 .macro-bar-track {
   height: 5px;
-  background: #343845;
+  background: var(--border-default);
   border-radius: 3px;
   overflow: hidden;
   margin-top: 0.3rem;
@@ -675,14 +696,14 @@ input:disabled {
 
 .macro-bar-fill {
   height: 100%;
-  background: #B46CFF;
+  background: var(--accent);
   border-radius: 3px;
   min-width: 2px;
   transition: width 0.3s ease;
 }
 
 .macro-bar-fill.over {
-  background: #f87171;
+  background: var(--danger);
 }
 
 :root[data-theme="light"] body,
@@ -715,7 +736,7 @@ input:disabled {
 
 :root[data-theme="light"] .modal-backdrop,
 :root[data-theme="light"] .floating-overlay {
-  background: rgba(22, 24, 28, 0.28);
+  background: var(--popup-overlay);
 }
 
 :root[data-theme="light"] .tab-row button.active,
@@ -737,5 +758,5 @@ input:disabled {
 :root[data-theme="light"] .wz-next-btn {
   background: var(--accent);
   border: 0;
-  color: #fff;
+  color: var(--accent-fg);
 }

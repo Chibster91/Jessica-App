@@ -166,7 +166,7 @@ export function HomeView({
             <div className="dash-cal-bar-bg">
               <div className="dash-cal-bar-fill" style={{ width: `${calPct}%` }} />
             </div>
-            <span className="dash-cal-number" style={{ color: remaining < 0 ? "#f87171" : "#f3f4f6" }}>
+            <span className="dash-cal-number" style={{ color: remaining < 0 ? "var(--danger)" : "var(--text-primary)" }}>
               {displayStats.calories.toLocaleString()}
             </span>
             <span className="dash-cal-sub">
@@ -218,7 +218,7 @@ export function HomeView({
                     </g>
                   ))
                 ) : (
-                  <circle cx="50" cy="50" r="48" fill="#3E505B" />
+                  <circle cx="50" cy="50" r="48" fill="var(--border-default)" />
                 )}
               </svg>
             </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import type { AmountUnit, PortionOption } from "../appSupport";
 import "../styles/overlays.css";
 
 // ── Sheet shell ──────────────────────────────────────────────────────────────
@@ -115,11 +116,46 @@ export type NutritionFood = {
   fat?: number;
 };
 
+export type NutritionUnitPicker = {
+  amountUnit: AmountUnit;
+  allowedAmountUnits: AmountUnit[];
+  onAmountUnitChange: (unit: AmountUnit) => void;
+  amount: string;
+  onAmountChange: (value: string) => void;
+  portionOptions: PortionOption[];
+  selectedPortionValue: string;
+  onPortionChange: (value: string) => void;
+  canAdd: boolean;
+};
+
+export type NutritionIngredientRow = {
+  key: string | number;
+  name: string;
+  quantityLabel: string;
+  calories: number;
+  onClick: () => void;
+};
+
+export type NutritionMealPicker = {
+  categories: string[];
+  onAdd: (category: string, qty: string) => void;
+};
+
+export type NutritionAction = {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+};
+
 type NutritionSheetProps = {
   food: NutritionFood;
   meal?: string;
-  mode?: "add" | "logged";
+  mode?: "add" | "logged" | "view";
   initialQuantity?: string;
+  unitPicker?: NutritionUnitPicker;
+  ingredients?: NutritionIngredientRow[];
+  mealPicker?: NutritionMealPicker;
+  actions?: NutritionAction[];
   onAdd?: (qty: string) => void;
   onSave?: (qty: string) => void;
   onRemove?: () => void;
@@ -136,6 +172,10 @@ export function NutritionSheet({
   meal,
   mode = "add",
   initialQuantity = "1",
+  unitPicker,
+  ingredients,
+  mealPicker,
+  actions,
   onAdd,
   onSave,
   onRemove,
@@ -144,7 +184,8 @@ export function NutritionSheet({
   const [qtyStr, setQtyStr] = useState(initialQuantity || "1");
   const [confirming, setConfirming] = useState(false);
 
-  const q = qtyStr === "" ? 0 : parseFloat(qtyStr) || 0;
+  const isUnitMode = Boolean(unitPicker && unitPicker.amountUnit !== "serving");
+  const q = isUnitMode ? 1 : qtyStr === "" ? 0 : parseFloat(qtyStr) || 0;
 
   const hasMacros = food.protein != null && food.carbs != null && food.fat != null;
   const baseP = hasMacros ? food.protein! : Math.round((food.calories * 0.25) / 4);
@@ -159,6 +200,8 @@ export function NutritionSheet({
   ];
   const maxKcal = Math.max(...macros.map((m) => m.kcal), 1);
   const logged = mode === "logged";
+  const isView = mode === "view";
+  const disableAdd = Boolean(unitPicker && !unitPicker.canAdd);
 
   const handleAction = () => {
     const qty = clampQtyStr(qtyStr);
@@ -172,16 +215,54 @@ export function NutritionSheet({
         title={food.name}
         onClose={onClose}
         footer={
-          <div style={{ display: "grid", gap: "0.55rem" }}>
-            <button className="kit-btn kit-btn--primary" onClick={handleAction}>
-              {logged ? "Save changes" : `Add to ${meal ?? "log"}`}
-            </button>
-            {logged && onRemove && (
-              <button className="kit-remove-link" onClick={() => setConfirming(true)}>
-                Remove from log
+          isView ? (
+            (mealPicker || (actions && actions.length > 0)) && (
+              <div style={{ display: "grid", gap: "0.6rem" }}>
+                {actions && actions.length > 0 && (
+                  <div className="kit-view-actions">
+                    {actions.map((action) => (
+                      <button
+                        key={action.label}
+                        type="button"
+                        className={action.danger ? "kit-btn kit-btn--danger" : "kit-btn kit-btn--secondary"}
+                        onClick={action.onClick}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {mealPicker && (
+                  <div className="kit-mealpicker">
+                    <span className="kit-field__label">Add to today</span>
+                    <div className="kit-mealpicker__grid">
+                      {mealPicker.categories.map((category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          className="kit-mealpicker__btn"
+                          onClick={() => mealPicker.onAdd(category, clampQtyStr(qtyStr))}
+                        >
+                          {category}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          ) : (
+            <div style={{ display: "grid", gap: "0.55rem" }}>
+              <button className="kit-btn kit-btn--primary" onClick={handleAction} disabled={disableAdd}>
+                {logged ? "Save changes" : `Add to ${meal ?? "log"}`}
               </button>
-            )}
-          </div>
+              {logged && onRemove && (
+                <button className="kit-remove-link" onClick={() => setConfirming(true)}>
+                  Remove from log
+                </button>
+              )}
+            </div>
+          )
         }
       >
         {logged && meal && <p className="kit-nutri-context">Logged in {meal}</p>}
@@ -195,25 +276,73 @@ export function NutritionSheet({
           <span className="kit-nutri-serv">{food.serving}</span>
         </div>
 
-        <div className="kit-qty">
-          <span className="kit-qty__label">Quantity</span>
-          <div className="kit-qty__field">
-            <input
-              className="kit-qty__input"
-              type="text"
-              inputMode="decimal"
-              value={qtyStr}
-              aria-label="Quantity"
-              onChange={(e) =>
-                setQtyStr(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
-              }
-              onBlur={() => {
-                if (qtyStr === "" || parseFloat(qtyStr) <= 0) setQtyStr("1");
-              }}
-            />
-            <span className="kit-qty__x">× serving</span>
+        {unitPicker && unitPicker.allowedAmountUnits.length > 1 && (
+          <div className="kit-unit-tabs" role="group" aria-label="Serving unit">
+            {unitPicker.allowedAmountUnits.map((unit) => (
+              <button
+                key={unit}
+                type="button"
+                className={unitPicker.amountUnit === unit ? "is-active" : ""}
+                onClick={() => unitPicker.onAmountUnitChange(unit)}
+              >
+                {unit === "serving" ? "Serving" : unit}
+              </button>
+            ))}
           </div>
-        </div>
+        )}
+
+        {unitPicker && !isUnitMode && unitPicker.portionOptions.length > 0 && (
+          <label className="kit-qty kit-qty--select">
+            <span className="kit-qty__label">Portion</span>
+            <select
+              value={unitPicker.selectedPortionValue}
+              onChange={(e) => unitPicker.onPortionChange(e.target.value)}
+            >
+              {unitPicker.portionOptions.map((portion) => (
+                <option key={portion.value} value={portion.value}>
+                  {portion.label} ({portion.gramWeight}g)
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {isUnitMode ? (
+          <div className="kit-qty">
+            <span className="kit-qty__label">Amount</span>
+            <div className="kit-qty__field">
+              <input
+                className="kit-qty__input"
+                type="text"
+                inputMode="decimal"
+                value={unitPicker!.amount}
+                aria-label="Amount"
+                onChange={(e) => unitPicker!.onAmountChange(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))}
+              />
+              <span className="kit-qty__x">{unitPicker!.amountUnit}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="kit-qty">
+            <span className="kit-qty__label">Quantity</span>
+            <div className="kit-qty__field">
+              <input
+                className="kit-qty__input"
+                type="text"
+                inputMode="decimal"
+                value={qtyStr}
+                aria-label="Quantity"
+                onChange={(e) =>
+                  setQtyStr(e.target.value.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"))
+                }
+                onBlur={() => {
+                  if (qtyStr === "" || parseFloat(qtyStr) <= 0) setQtyStr("1");
+                }}
+              />
+              <span className="kit-qty__x">× serving</span>
+            </div>
+          </div>
+        )}
 
         <div className="kit-nutri-macros">
           {macros.map((m) => (
@@ -231,8 +360,26 @@ export function NutritionSheet({
           <div><span>Fiber</span><strong>{Math.round(cal * 0.012)} g</strong></div>
           <div><span>Sugar</span><strong>{Math.round(cal * 0.03)} g</strong></div>
           <div><span>Sodium</span><strong>{Math.round(cal * 0.6)} mg</strong></div>
-          <div><span>Serving</span><strong>{qtyStr === "" ? "0" : qtyStr}×</strong></div>
+          <div>
+            <span>{isUnitMode ? "Amount" : "Serving"}</span>
+            <strong>
+              {isUnitMode ? `${unitPicker!.amount} ${unitPicker!.amountUnit}` : `${qtyStr === "" ? "0" : qtyStr}×`}
+            </strong>
+          </div>
         </div>
+
+        {ingredients && ingredients.length > 0 && (
+          <div className="kit-ingredient-list">
+            <span className="kit-field__label">Ingredients</span>
+            {ingredients.map((row) => (
+              <button key={row.key} type="button" className="kit-ingredient-row" onClick={row.onClick}>
+                <span>{row.name}</span>
+                <span>{row.quantityLabel}</span>
+                <span>{row.calories} cal</span>
+              </button>
+            ))}
+          </div>
+        )}
       </Sheet>
 
       {confirming && (
@@ -391,7 +538,7 @@ export function CycleLogSheet({
 
   const ctxColor =
     dayContext?.startsWith("Estimated") ? "var(--accent)"
-    : dayContext === "Period logged" ? "#ef4444"
+    : dayContext === "Period logged" ? "var(--cycle-period)"
     : "var(--text-muted)";
 
   return (
@@ -419,7 +566,7 @@ export function CycleLogSheet({
                 className={`kit-cycle-action kit-cycle-action--period${periodOn ? " is-on is-open" : ""}`}
                 onClick={() => setPeriodOn((p) => !p)}
               >
-                <span className="kit-cycle-action__dot" style={{ background: "#ef4444" }} />
+                <span className="kit-cycle-action__dot" style={{ background: "var(--cycle-period)" }} />
                 <span className="kit-cycle-action__lbl">
                   {periodOn ? (flow ? `Period · ${flow} flow` : "Period logged") : "Log period"}
                 </span>
@@ -478,7 +625,7 @@ export function CycleLogSheet({
                 className={`kit-cycle-action${lhTest ? " is-on" : ""}${expanded === "lh" ? " is-open" : ""}`}
                 onClick={() => toggleExpanded("lh")}
               >
-                <span className="kit-cycle-action__dot" style={{ background: "#a855f7" }} />
+                <span className="kit-cycle-action__dot" style={{ background: "var(--cycle-ovulation)" }} />
                 <span className="kit-cycle-action__lbl">
                   {lhTest ? `LH: ${lhTest}` : "Add LH test"}
                 </span>

@@ -42,7 +42,7 @@
 }
 
 .lib-addrow:hover {
-  background: var(--accent-soft, rgba(22,196,168,0.18));
+  background: var(--accent-soft);
 }
 
 .lib-addrow-plus {
@@ -50,7 +50,7 @@
   height: 32px;
   border-radius: var(--control-radius);
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-fg);
   display: grid;
   place-items: center;
   font-size: 1.3rem;
@@ -81,6 +81,10 @@
   line-height: 1;
   color: var(--accent);
   padding-right: 2px;
+}
+
+.lib-addrow--plain {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 /* ---- Food row ---- */
@@ -190,10 +194,19 @@
   overflow-wrap: anywhere;
 }
 
-.nutrition-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.4rem 1rem;
+.lib-view-nutrition {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--ui-radius);
+  padding: 0.6rem 0.75rem;
+  color: var(--accent);
+  font-family: var(--sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .library-edit-form {
@@ -201,7 +214,7 @@
   padding-top: 1rem;
 }
 
-/* ---- Ingredient list (recipe detail) ---- */
+/* ---- Ingredient list (recipe builder, editable) ---- */
 .ingredient-list {
   display: grid;
   gap: 0.3rem;
@@ -209,7 +222,6 @@
 
 :root[data-theme="light"] .lib-foodrow,
 :root[data-theme="light"] .lib-foodrow-name,
-:root[data-theme="light"] .nutrition-grid,
 :root[data-theme="light"] .library-detail,
 :root[data-theme="light"] .library-edit-form {
   border-color: var(--border);

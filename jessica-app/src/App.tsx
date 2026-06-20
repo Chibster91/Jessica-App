@@ -721,6 +721,8 @@ function App() {
         recipes,
         setRecipes,
         recentFoods,
+        log,
+        setLog,
       }}
       logProps={{
         goals,

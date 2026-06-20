@@ -1,21 +1,28 @@
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/library.css";
 import {
+  createClientId,
   getBrandDisplayName,
   getFoodDisplayName,
   getFoodIconUrl,
   getFoodServingDisplay,
   getIngredientCalories,
+  mealCategories,
   type Food,
-  type Recipe
+  type LogItem,
+  type MealCategory,
+  type Recipe,
 } from "../appSupport";
 import { useFoodLibrary } from "../hooks/useFoodLibrary";
+import { NutritionSheet, Sheet } from "./Overlays";
 import {
   LibraryManualEntry,
   LibraryBarcodeScan,
   LibraryUrlImport,
   LibraryPhotoImport,
 } from "./LibraryAddScreens";
+
+type NutritionPreview = { food: Food | Recipe; quantity: number };
 
 type RecentFood = Food & { loggedCount: number; lastLoggedDate: string };
 
@@ -26,6 +33,8 @@ type FoodLibraryViewProps = {
   recipes: Recipe[];
   setRecipes: Dispatch<SetStateAction<Recipe[]>>;
   recentFoods: RecentFood[];
+  log: LogItem[];
+  setLog: Dispatch<SetStateAction<LogItem[]>>;
 };
 
 export function FoodLibraryView({
@@ -34,10 +43,29 @@ export function FoodLibraryView({
   setCustomFoods,
   recipes,
   setRecipes,
-  recentFoods
+  recentFoods,
+  log,
+  setLog,
 }: FoodLibraryViewProps) {
   type AddScreen = "scan" | "manual-food" | "manual-recipe" | "url-import" | "photo-import" | "recipe-menu";
   const [addScreen, setAddScreen] = useState<AddScreen | null>(null);
+  const [nutritionPreview, setNutritionPreview] = useState<NutritionPreview | null>(null);
+
+  function addFoodToToday(food: Food | Recipe, category: MealCategory, qty: string) {
+    const quantity = parseFloat(qty) || 1;
+    setLog([
+      ...log,
+      {
+        ...food,
+        category,
+        quantity,
+        amount: quantity,
+        amountUnit: "serving",
+        servingLabel: quantity === 1 ? food.servingSize : `${quantity} x ${food.servingSize}`,
+        logId: createClientId(),
+      },
+    ]);
+  }
 
   const {
     foodLibraryTab,
@@ -51,7 +79,6 @@ export function FoodLibraryView({
     libraryCustomFoods,
     libraryRecipes,
     isCreatingLibraryCustomFood,
-    isCreatingLibraryRecipe,
     editingCustomFoodId,
     editingRecipeId,
     editCustomFood,
@@ -78,7 +105,6 @@ export function FoodLibraryView({
     libraryRecipeIngredients,
     updateLibraryRecipeIngredientQuantity,
     removeLibraryRecipeIngredient,
-    saveNewLibraryRecipe,
     saveLibraryRecipe,
   } = useFoodLibrary({ customFoods, setCustomFoods, recipes, setRecipes, recentFoods });
   return (
@@ -143,7 +169,7 @@ export function FoodLibraryView({
             <button
               className={`lib-foodrow${librarySelection?.food.id === food.id ? " selected" : ""}`}
               key={food.id} type="button"
-              onClick={() => setLibrarySelection({ type: "recent", food })}
+              onClick={() => { setLibrarySelection({ type: "recent", food }); setNutritionPreview({ food, quantity: 1 }); }}
             >
               <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
               <span className="lib-foodrow-main">
@@ -163,7 +189,7 @@ export function FoodLibraryView({
             <button
               className={`lib-foodrow${librarySelection?.food.id === food.id ? " selected" : ""}`}
               key={food.id} type="button"
-              onClick={() => setLibrarySelection({ type: "custom", food })}
+              onClick={() => { setLibrarySelection({ type: "custom", food }); setNutritionPreview({ food, quantity: 1 }); }}
             >
               <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
               <span className="lib-foodrow-main">
@@ -183,7 +209,7 @@ export function FoodLibraryView({
             <button
               className={`lib-foodrow${librarySelection?.food.id === recipe.id ? " selected" : ""}`}
               key={recipe.id} type="button"
-              onClick={() => setLibrarySelection({ type: "recipe", food: recipe })}
+              onClick={() => { setLibrarySelection({ type: "recipe", food: recipe }); setNutritionPreview({ food: recipe, quantity: 1 }); }}
             >
               <span className="lib-foodrow-icon"><img src={getFoodIconUrl(recipe)} alt="" /></span>
               <span className="lib-foodrow-main">
@@ -196,39 +222,28 @@ export function FoodLibraryView({
         </div>
 
         <aside className="library-detail">
-                {!librarySelection && !isCreatingLibraryCustomFood && !isCreatingLibraryRecipe && (
+                {!librarySelection && !isCreatingLibraryCustomFood && (
                   <p className="empty-meal">Select a food to view details.</p>
                 )}
-    
-                {librarySelection && (
+
+                {librarySelection && librarySelection.type !== "recipe" && (
                   <>
                     <div className="library-detail-heading">
                       <img src={getFoodIconUrl(librarySelection.food)} alt="" />
                       <h2>{librarySelection.food.name}</h2>
                     </div>
                     <p>{getBrandDisplayName(librarySelection.food.brand)}</p>
-                    <div className="nutrition-grid">
-                      <span>Serving</span>
-                      <strong>{getFoodServingDisplay(librarySelection.food)}</strong>
-                      <span>Calories</span>
-                      <strong>{librarySelection.food.calories}</strong>
-                      <span>Protein</span>
-                      <strong>{Number(librarySelection.food.protein.toFixed(1))}g</strong>
-                      <span>Carbs</span>
-                      <strong>{Number(librarySelection.food.carbs.toFixed(1))}g</strong>
-                      <span>Fat</span>
-                      <strong>{Number(librarySelection.food.fat.toFixed(1))}g</strong>
-                      <span>Fiber</span>
-                      <strong>{Number((librarySelection.food.fiber ?? 0).toFixed(1))}g</strong>
-                      <span>Sugar</span>
-                      <strong>{Number((librarySelection.food.sugar ?? 0).toFixed(1))}g</strong>
-                      <span>Sodium</span>
-                      <strong>{Number((librarySelection.food.sodium ?? 0).toFixed(1))}mg</strong>
-                    </div>
+                    <button
+                      type="button"
+                      className="lib-view-nutrition"
+                      onClick={() => setNutritionPreview({ food: librarySelection.food, quantity: 1 })}
+                    >
+                      View nutrition · {librarySelection.food.calories} cal per {getFoodServingDisplay(librarySelection.food)}
+                    </button>
                     {librarySelection.food.notes && <p>{librarySelection.food.notes}</p>}
                   </>
                 )}
-    
+
                 {librarySelection?.type === "recent" && (
                   <p className="empty-meal">Recent foods are read-only shortcuts from your log history.</p>
                 )}
@@ -399,171 +414,6 @@ export function FoodLibraryView({
                   </div>
                 )}
     
-                {librarySelection?.type === "recipe" && (
-                  <>
-                    <div className="ingredient-list">
-                      {librarySelection.food.ingredients.map((ingredient) => (
-                        <div className="ingredient-row" key={ingredient.food.id}>
-                          <span>{ingredient.food.name}</span>
-                          <span>x {ingredient.quantity}</span>
-                          <span>{getIngredientCalories(ingredient)} cal</span>
-                        </div>
-                      ))}
-                    </div>
-    
-                    {editingRecipeId !== librarySelection.food.id && (
-                      <div className="form-actions">
-                        <button type="button" onClick={() => editRecipe(librarySelection.food)}>
-                          Edit
-                        </button>
-                        <button type="button" onClick={() => deleteRecipe(librarySelection.food.id)}>
-                          Delete
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-    
-                {(isCreatingLibraryRecipe ||
-                  (librarySelection?.type === "recipe" && editingRecipeId === librarySelection.food.id)) && (
-                  <div className="recipe-builder library-edit-form">
-                    {isCreatingLibraryRecipe && <h2>Create Recipe</h2>}
-                    <div className="custom-food-form">
-                      <label>
-                        Recipe name
-                        <input
-                          value={libraryRecipeForm.name}
-                          onChange={(e) =>
-                            setLibraryRecipeForm({ ...libraryRecipeForm, name: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Serving size
-                        <input
-                          value={libraryRecipeForm.servingSize}
-                          onChange={(e) =>
-                            setLibraryRecipeForm({ ...libraryRecipeForm, servingSize: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Serving unit
-                        <input
-                          value={libraryRecipeForm.servingUnit}
-                          onChange={(e) =>
-                            setLibraryRecipeForm({ ...libraryRecipeForm, servingUnit: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Notes
-                        <textarea
-                          value={libraryRecipeForm.notes}
-                          onChange={(e) =>
-                            setLibraryRecipeForm({ ...libraryRecipeForm, notes: e.target.value })
-                          }
-                        />
-                      </label>
-                    </div>
-    
-                    <div className="search-row">
-                      <input
-                        value={recipeIngredientQuery}
-                        placeholder="Search USDA and custom foods..."
-                        onChange={(e) => setRecipeIngredientQuery(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
-                      />
-                      <button type="button" onClick={searchRecipeIngredientFoods}>
-                        Search
-                      </button>
-                    </div>
-    
-                    {recipeIngredientOptions.length > 0 && (
-                      <div className="ingredient-picker">
-                        {recipeIngredientOptions.map((food) => (
-                          <button
-                            className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
-                            key={food.id}
-                            type="button"
-                            onClick={() => selectRecipeIngredient(food)}
-                          >
-                            <strong>{getFoodDisplayName(food)}</strong>
-                            <span>
-                              {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-    
-                    {isSearchingRecipeIngredients && <p className="empty-meal">Searching foods...</p>}
-    
-                    {pendingRecipeIngredient && (
-                      <div className="ingredient-confirm">
-                        <div>
-                          <strong>{getFoodDisplayName(pendingRecipeIngredient)}</strong>
-                          <span>
-                            {pendingRecipeIngredient.calories} cal per{" "}
-                            {pendingRecipeIngredient.servingSize}
-                          </span>
-                        </div>
-                        <label>
-                          Quantity
-                          <input
-                            type="number"
-                            min="0.1"
-                            step="0.1"
-                            value={pendingRecipeIngredientQuantity}
-                            onChange={(e) => setPendingRecipeIngredientQuantity(e.target.value)}
-                          />
-                        </label>
-                        <button type="button" onClick={confirmLibraryRecipeIngredient}>
-                          Add ingredient
-                        </button>
-                        <button type="button" onClick={() => setPendingRecipeIngredient(null)}>
-                          Cancel
-                        </button>
-                      </div>
-                    )}
-    
-                    <div className="ingredient-list">
-                      {libraryRecipeIngredients.map((ingredient) => (
-                        <div className="ingredient-row" key={ingredient.food.id}>
-                          <span>{ingredient.food.name}</span>
-                          <input
-                            type="number"
-                            min="0.1"
-                            step="0.1"
-                            value={ingredient.quantity}
-                            onChange={(e) =>
-                              updateLibraryRecipeIngredientQuantity(ingredient.food.id, e.target.value)
-                            }
-                          />
-                          <span>{getIngredientCalories(ingredient)} cal</span>
-                          <button
-                            type="button"
-                            onClick={() => removeLibraryRecipeIngredient(ingredient.food.id)}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-    
-                    <div className="form-actions">
-                      <button
-                        type="button"
-                        onClick={isCreatingLibraryRecipe ? saveNewLibraryRecipe : saveLibraryRecipe}
-                      >
-                        {isCreatingLibraryRecipe ? "Create" : "Save"}
-                      </button>
-                      <button type="button" onClick={cancelLibraryEditing}>
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
         </aside>
       </div>
 
@@ -596,21 +446,21 @@ export function FoodLibraryView({
             </div>
           </div>
           <div className="library-list" style={{ padding: "0.5rem 0" }}>
-            <button type="button" className="lib-addrow" onClick={() => setAddScreen("manual-recipe")}>
+            <button type="button" className="lib-addrow lib-addrow--plain" onClick={() => setAddScreen("manual-recipe")}>
               <span className="lib-addrow-main">
                 <strong>Enter manually</strong>
                 <span>Type in the name and nutrition yourself</span>
               </span>
               <span className="lib-addrow-chev">›</span>
             </button>
-            <button type="button" className="lib-addrow" onClick={() => setAddScreen("photo-import")}>
+            <button type="button" className="lib-addrow lib-addrow--plain" onClick={() => setAddScreen("photo-import")}>
               <span className="lib-addrow-main">
                 <strong>Import from screenshot</strong>
                 <span>Read a recipe photo on your device</span>
               </span>
               <span className="lib-addrow-chev">›</span>
             </button>
-            <button type="button" className="lib-addrow" onClick={() => setAddScreen("url-import")}>
+            <button type="button" className="lib-addrow lib-addrow--plain" onClick={() => setAddScreen("url-import")}>
               <span className="lib-addrow-main">
                 <strong>Import from URL</strong>
                 <span>Paste a link to a recipe page</span>
@@ -643,6 +493,191 @@ export function FoodLibraryView({
           onClose={() => setAddScreen(null)}
           onBack={() => setAddScreen("recipe-menu")}
         />
+      )}
+
+      {nutritionPreview && (() => {
+        const isRecipePreview = "ingredients" in nutritionPreview.food;
+        return (
+          <NutritionSheet
+            key={nutritionPreview.food.id}
+            food={{
+              name: getFoodDisplayName(nutritionPreview.food),
+              calories: nutritionPreview.food.calories,
+              serving: getFoodServingDisplay(nutritionPreview.food),
+              protein: nutritionPreview.food.protein,
+              carbs: nutritionPreview.food.carbs,
+              fat: nutritionPreview.food.fat,
+            }}
+            mode="view"
+            initialQuantity={String(nutritionPreview.quantity)}
+            ingredients={
+              isRecipePreview && (nutritionPreview.food as Recipe).ingredients.length > 0
+                ? (nutritionPreview.food as Recipe).ingredients.map((ingredient) => ({
+                    key: ingredient.food.id,
+                    name: ingredient.food.name,
+                    quantityLabel: `x ${ingredient.quantity}`,
+                    calories: getIngredientCalories(ingredient),
+                    onClick: () => setNutritionPreview({ food: ingredient.food, quantity: ingredient.quantity }),
+                  }))
+                : undefined
+            }
+            mealPicker={{
+              categories: mealCategories,
+              onAdd: (category, qty) => {
+                addFoodToToday(nutritionPreview.food, category, qty);
+                setNutritionPreview(null);
+              },
+            }}
+            actions={
+              isRecipePreview
+                ? [
+                    {
+                      label: "Edit recipe",
+                      onClick: () => {
+                        editRecipe(nutritionPreview.food as Recipe);
+                        setNutritionPreview(null);
+                      },
+                    },
+                    {
+                      label: "Delete recipe",
+                      danger: true,
+                      onClick: () => {
+                        deleteRecipe(nutritionPreview.food.id);
+                        setNutritionPreview(null);
+                      },
+                    },
+                  ]
+                : undefined
+            }
+            onClose={() => setNutritionPreview(null)}
+          />
+        );
+      })()}
+
+      {editingRecipeId !== null && (
+        <Sheet
+          title="Edit Recipe"
+          onClose={cancelLibraryEditing}
+          footer={
+            <div className="kit-view-actions">
+              <button type="button" className="kit-btn kit-btn--primary" onClick={saveLibraryRecipe}>
+                Save
+              </button>
+              <button type="button" className="kit-btn kit-btn--secondary" onClick={cancelLibraryEditing}>
+                Cancel
+              </button>
+            </div>
+          }
+        >
+          <div className="custom-food-form">
+            <label>
+              Recipe name
+              <input
+                value={libraryRecipeForm.name}
+                onChange={(e) => setLibraryRecipeForm({ ...libraryRecipeForm, name: e.target.value })}
+              />
+            </label>
+            <label>
+              Serving size
+              <input
+                value={libraryRecipeForm.servingSize}
+                onChange={(e) => setLibraryRecipeForm({ ...libraryRecipeForm, servingSize: e.target.value })}
+              />
+            </label>
+            <label>
+              Serving unit
+              <input
+                value={libraryRecipeForm.servingUnit}
+                onChange={(e) => setLibraryRecipeForm({ ...libraryRecipeForm, servingUnit: e.target.value })}
+              />
+            </label>
+            <label>
+              Notes
+              <textarea
+                value={libraryRecipeForm.notes}
+                onChange={(e) => setLibraryRecipeForm({ ...libraryRecipeForm, notes: e.target.value })}
+              />
+            </label>
+          </div>
+
+          <div className="search-row">
+            <input
+              value={recipeIngredientQuery}
+              placeholder="Search USDA and custom foods..."
+              onChange={(e) => setRecipeIngredientQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
+            />
+            <button type="button" onClick={searchRecipeIngredientFoods}>
+              Search
+            </button>
+          </div>
+
+          {recipeIngredientOptions.length > 0 && (
+            <div className="ingredient-picker">
+              {recipeIngredientOptions.map((food) => (
+                <button
+                  className={pendingRecipeIngredient?.id === food.id ? "selected" : ""}
+                  key={food.id}
+                  type="button"
+                  onClick={() => selectRecipeIngredient(food)}
+                >
+                  <strong>{getFoodDisplayName(food)}</strong>
+                  <span>
+                    {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {isSearchingRecipeIngredients && <p className="empty-meal">Searching foods...</p>}
+
+          {pendingRecipeIngredient && (
+            <div className="ingredient-confirm">
+              <div>
+                <strong>{getFoodDisplayName(pendingRecipeIngredient)}</strong>
+                <span>
+                  {pendingRecipeIngredient.calories} cal per {pendingRecipeIngredient.servingSize}
+                </span>
+              </div>
+              <label>
+                Quantity
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={pendingRecipeIngredientQuantity}
+                  onChange={(e) => setPendingRecipeIngredientQuantity(e.target.value)}
+                />
+              </label>
+              <button type="button" onClick={confirmLibraryRecipeIngredient}>
+                Add ingredient
+              </button>
+              <button type="button" onClick={() => setPendingRecipeIngredient(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          <div className="ingredient-list">
+            {libraryRecipeIngredients.map((ingredient) => (
+              <div className="ingredient-row" key={ingredient.food.id}>
+                <span>{ingredient.food.name}</span>
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={ingredient.quantity}
+                  onChange={(e) => updateLibraryRecipeIngredientQuantity(ingredient.food.id, e.target.value)}
+                />
+                <span>{getIngredientCalories(ingredient)} cal</span>
+                <button type="button" onClick={() => removeLibraryRecipeIngredient(ingredient.food.id)}>
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </Sheet>
       )}
 
       {bottomNav}

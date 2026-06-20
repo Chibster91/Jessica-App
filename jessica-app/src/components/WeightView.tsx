@@ -488,7 +488,7 @@ export function WeightView({
                       {trendLinePoints && <polyline className="weight-chart-trend-line" points={trendLinePoints} />}
                       <polyline className="weight-chart-line" points={chartLinePoints} />
                       {selectedChartPoint && (
-                        <line x1={selectedChartPoint.x} y1={chartTop} x2={selectedChartPoint.x} y2={chartHeight - chartBottom} stroke="#B46CFF" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
+                        <line x1={selectedChartPoint.x} y1={chartTop} x2={selectedChartPoint.x} y2={chartHeight - chartBottom} stroke="var(--text-muted)" strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
                       )}
                       {chartPoints.map((point) => (
                         <circle

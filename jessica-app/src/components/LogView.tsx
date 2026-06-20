@@ -188,7 +188,8 @@ export function LogView(props: LogViewProps) {
     contextMenuItem, setContextMenuItem, contextMenuY, setContextMenuY, moveToMealItem, setMoveToMealItem,
     moveItemToMeal, moveToDayItem, setMoveToDayItem, moveToDayDate, setMoveToDayDate, moveToDayStep, setMoveToDayStep,
     moveItemToDifferentDay, itemToEdit, setItemToEdit, openEditFoodItem, saveEditedFoodItem, itemToRemove, setItemToRemove,
-    confirmRemoveFood,
+    confirmRemoveFood, editItemAmount, editItemAmountUnit, changeEditAmountUnit, setEditItemAmount, getEditAmountUnits,
+    getEditPreviewFood,
   } = useLogItemActions({ selectedDate, log, setLog, recipes, setRecipes });
   const visibleMealCategories = useMemo(() => getMealCategoriesForLog(log), [log]);
   function getCategoryTotals(category: MealCategory) {
@@ -207,6 +208,8 @@ export function LogView(props: LogViewProps) {
     selectRecipeIngredient, pendingRecipeIngredientQuantity, setPendingRecipeIngredientQuantity,
     confirmRecipeIngredient, recipeIngredients, updateRecipeIngredientQuantity, removeRecipeIngredient, createRecipe,
     filteredRecipes, quantity, addSelectedFood,
+    amountUnit, changeAmountUnit, allowedAmountUnits, portionOptions, selectedPortionValue, setSelectedPortionValue,
+    portionAmount, setPortionAmount, previewFoodServing, canAddSelectedFood,
   } = useAddFoodModal({ selectedDate, log, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods });
   const sortedRecentFoods = [...recentFoods].sort((a, b) => {
     const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
@@ -607,9 +610,7 @@ export function LogView(props: LogViewProps) {
                 onChange={(e) => updateAddFoodSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submitAddFoodSearch()}
               />
-              {activeAddFoodTab === "search" && (
-                <button type="button" onClick={searchModalFood}>Search</button>
-              )}
+              <button type="button" className="add-food-search-btn" onClick={submitAddFoodSearch}>Search</button>
               <button type="button" className="add-food-scan-btn" aria-label="Scan barcode" onClick={openBarcodeScan}>
                 Scan
               </button>
@@ -1166,13 +1167,14 @@ export function LogView(props: LogViewProps) {
       )}
 
       {pendingCategory && selectedFood && !isCustomFormOpen && !isRecipeFormOpen && (() => {
+        const servingFood = previewFoodServing ?? selectedFood;
         const nutriFood: NutritionFood = {
           name: getFoodDisplayName(selectedFood),
-          calories: selectedFood.calories,
-          serving: selectedFood.servingSize,
-          protein: selectedFood.protein,
-          carbs: selectedFood.carbs,
-          fat: selectedFood.fat,
+          calories: servingFood.calories,
+          serving: servingFood.servingSize,
+          protein: servingFood.protein,
+          carbs: servingFood.carbs,
+          fat: servingFood.fat,
         };
         return (
           <NutritionSheet
@@ -1180,6 +1182,17 @@ export function LogView(props: LogViewProps) {
             meal={pendingCategory}
             mode="add"
             initialQuantity={quantity}
+            unitPicker={{
+              amountUnit,
+              allowedAmountUnits,
+              onAmountUnitChange: changeAmountUnit,
+              amount: portionAmount,
+              onAmountChange: setPortionAmount,
+              portionOptions,
+              selectedPortionValue,
+              onPortionChange: setSelectedPortionValue,
+              canAdd: canAddSelectedFood,
+            }}
             onAdd={(qty) => addSelectedFood(qty)}
             onClose={() => setSelectedFood(null)}
           />
@@ -1822,19 +1835,32 @@ export function LogView(props: LogViewProps) {
         </div>
       )}
 
-      {itemToEdit && (
+      {itemToEdit && (() => {
+        const previewFood = getEditPreviewFood() ?? itemToEdit;
+        return (
         <NutritionSheet
           food={{
             name: getFoodDisplayName(itemToEdit),
-            calories: itemToEdit.calories,
-            serving: itemToEdit.servingSize,
-            protein: itemToEdit.protein,
-            carbs: itemToEdit.carbs,
-            fat: itemToEdit.fat,
+            calories: previewFood.calories,
+            serving: previewFood.servingSize,
+            protein: previewFood.protein,
+            carbs: previewFood.carbs,
+            fat: previewFood.fat,
           }}
           meal={itemToEdit.category}
           mode="logged"
           initialQuantity={String(itemToEdit.quantity)}
+          unitPicker={{
+            amountUnit: editItemAmountUnit,
+            allowedAmountUnits: getEditAmountUnits(itemToEdit),
+            onAmountUnitChange: changeEditAmountUnit,
+            amount: editItemAmount,
+            onAmountChange: setEditItemAmount,
+            portionOptions: [],
+            selectedPortionValue: "",
+            onPortionChange: () => {},
+            canAdd: true,
+          }}
           onSave={(qty) => saveEditedFoodItem(qty)}
           onRemove={() => {
             const logId = itemToEdit.logId;
@@ -1843,7 +1869,8 @@ export function LogView(props: LogViewProps) {
           }}
           onClose={() => setItemToEdit(null)}
         />
-      )}
+        );
+      })()}
 
       {itemToRemove && (
         <ConfirmDialog
