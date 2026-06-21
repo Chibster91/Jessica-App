@@ -90,6 +90,22 @@ function computeGoalDate(profile: Profile): string | null {
   return shiftDate(getLocalDateString(), Math.ceil((diff / profile.weeklyRateKg) * 7));
 }
 
+// Whole days from `from` to `to` (both "YYYY-MM-DD", parsed as local dates).
+function daysBetween(from: string, to: string): number {
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  return Math.round((new Date(ty, tm - 1, td).getTime() - new Date(fy, fm - 1, fd).getTime()) / 86400000);
+}
+
+// True when the profile has a weight-change goal with distance left to cover,
+// i.e. a target date is meaningful.
+function hasReachableGoal(profile: Profile): boolean {
+  if (profile.goal === "maintain" || !profile.goalWeightKg) return false;
+  return profile.goal === "lose"
+    ? profile.weightKg > profile.goalWeightKg
+    : profile.weightKg < profile.goalWeightKg;
+}
+
 const stepSubtitles: Record<number, string> = {
   0: "Name, age, height & weight",
   1: "Activity level",
@@ -387,6 +403,51 @@ function EditGoal({ profile, patchProfile, onClose }: EditSheetProps) {
   );
 }
 
+function EditTargetDate({ profile, patchProfile, onClose }: EditSheetProps) {
+  const today = getLocalDateString();
+  const tomorrow = shiftDate(today, 1);
+  const diffKg = Math.abs(profile.weightKg - (profile.goalWeightKg ?? profile.weightKg));
+  const current = computeGoalDate(profile);
+  const [date, setDate] = useState(current && current > today ? current : shiftDate(today, 60));
+
+  const days = Math.max(1, daysBetween(today, date));
+  const rateKg = diffKg > 0 ? (diffKg * 7) / days : 0;
+  const lbPerWeek = kgToLb(rateKg);
+  const tdee = computeTdee(profile);
+  const adjustment = Math.round(lbPerWeek * 500);
+  const resultCalories = profile.goal === "gain" ? tdee + adjustment : tdee - adjustment;
+  const floor = profile.sex === "female" ? 1200 : 1500;
+  const tooAggressive = profile.goal !== "gain" && resultCalories < floor;
+
+  return (
+    <Sheet title="Target date" onClose={onClose}
+      footer={<button className="kit-btn kit-btn--primary" style={{ width: "100%" }} type="button"
+        onClick={() => { patchProfile({ weeklyRateKg: rateKg }); onClose(); }}>Save</button>}>
+      <div className="kit-prof-input-wrap">
+        <div className="kit-field__label">Reach goal weight by</div>
+        <input className="kit-qty__input" style={{ width: "100%", textAlign: "center", padding: "0.6rem 0.5rem" }}
+          type="date" value={date} min={tomorrow}
+          onChange={(e) => { if (e.target.value) setDate(e.target.value); }} />
+      </div>
+      <div style={{ background: "var(--surface-raised)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", padding: "0.8rem 0.9rem" }}>
+        <div style={{ fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 4 }}>That pace is</div>
+        <div style={{ fontSize: "1.8rem", fontWeight: 800, lineHeight: 1 }}>
+          {profile.goal === "gain" ? "+" : "−"}{formatProfileNumber(lbPerWeek, 1)}
+          <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: 700, marginLeft: "0.3rem" }}>lb/week</span>
+        </div>
+        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 4 }}>
+          ≈ {resultCalories.toLocaleString()} cal/day
+        </div>
+      </div>
+      {tooAggressive && (
+        <p style={{ fontSize: "0.75rem", color: "var(--accent-warm, var(--text-secondary))", margin: 0, lineHeight: 1.45 }}>
+          This pace drops you below {floor.toLocaleString()} cal/day. Consider a later date for a gentler, more sustainable plan.
+        </p>
+      )}
+    </Sheet>
+  );
+}
+
 function EditCalories({ profile, patchProfile, onClose }: EditSheetProps) {
   const activeCalories = profile.useManualCalories && profile.manualCalorieOverride
     ? profile.manualCalorieOverride
@@ -677,6 +738,8 @@ export function ProfileView({
               <Row label="Start weight" value={weightDisplay}    onEdit={() => setEditing("currentWeight")} />
               <Row label="Goal weight"    value={goalWeightDisplay ?? "—"} onEdit={() => setEditing("goalWeight")} />
               <Row label="Weekly rate"    value={rateStr}  onEdit={() => setEditing("goal")} />
+              <Row label="Target date"    value={goalDateDisplay ?? "—"}
+                onEdit={hasReachableGoal(profile) ? () => setEditing("targetDate") : undefined} />
             </Section>
 
             <Section title="Goal">
@@ -694,7 +757,6 @@ export function ProfileView({
             <Section title="Estimates">
               <Row label="BMR"            value={`${bmr.toLocaleString()} cal`}  sub="Basal metabolic rate" />
               <Row label="TDEE"           value={`${tdee.toLocaleString()} cal`} sub="Total daily energy" />
-              <Row label="Est. goal date" value={goalDateDisplay ?? "—"} accent />
             </Section>
 
             <button
@@ -797,6 +859,7 @@ export function ProfileView({
         {editing === "goalWeight"    && <EditGoalWeight profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "activity"      && <EditActivity profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "goal"          && <EditGoal profile={profile} patchProfile={patchProfile} onClose={close} />}
+        {editing === "targetDate"    && <EditTargetDate profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "calories"      && <EditCalories profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "macros"        && <EditMacros profile={profile} patchProfile={patchProfile} onClose={close} />}
         {editing === "cycle"         && <EditCycle onClose={close} />}
