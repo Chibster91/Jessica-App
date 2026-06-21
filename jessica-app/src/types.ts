@@ -358,6 +358,7 @@ export type DebugLogEntry = {
 
 export type GoogleTokenResponse = {
   access_token?: string;
+  expires_in?: number;
   error?: string;
   error_description?: string;
 };

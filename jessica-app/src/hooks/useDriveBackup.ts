@@ -38,7 +38,7 @@ export function useDriveBackup({
   const [exportStatus, setExportStatus] = useState("");
   const [exportDriveLink, setExportDriveLink] = useState("");
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
-  const [driveAccessToken, setDriveAccessToken] = useState<string | null>(null);
+  const [driveToken, setDriveToken] = useState<{ value: string; expiresAt: number } | null>(null);
   const [googleDriveClientId, setGoogleDriveClientId] = useState(() => getConfiguredGoogleClientId());
   const [driveImportFiles, setDriveImportFiles] = useState<GoogleDriveFile[]>([]);
   const [driveImportStatus, setDriveImportStatus] = useState("");
@@ -69,11 +69,18 @@ export function useDriveBackup({
     });
   }
 
+  // Cache a token only until shortly before Google expires it (default 1 hour).
+  // The 60s safety margin avoids using a token that lapses mid-request.
+  function storeDriveToken(value: string, expiresInSeconds?: number) {
+    const lifetime = (expiresInSeconds && expiresInSeconds > 0 ? expiresInSeconds : 3600) - 60;
+    setDriveToken({ value, expiresAt: Date.now() + lifetime * 1000 });
+  }
+
   async function getGoogleDriveAccessToken(
     clientId: string,
     pendingAction?: Pick<OAuthPendingAction, "action" | "fileId" | "fileName">
   ): Promise<string> {
-    if (driveAccessToken) return driveAccessToken;
+    if (driveToken && driveToken.expiresAt > Date.now()) return driveToken.value;
 
     if (isPwaStandalone()) {
       if (!pendingAction) throw new Error("PWA OAuth requires a pending action.");
@@ -109,11 +116,18 @@ export function useDriveBackup({
             reject(new Error(response.error_description || response.error || "Google sign-in failed."));
             return;
           }
+          storeDriveToken(response.access_token, response.expires_in);
           resolve(response.access_token);
         },
       });
       tokenClient.requestAccessToken({ prompt: "consent" });
     });
+  }
+
+  // If Google rejects the cached token (revoked access, clock skew), drop it so
+  // the next user action re-authenticates instead of replaying a dead token.
+  function clearTokenIfUnauthorized(response: Response) {
+    if (response.status === 401) setDriveToken(null);
   }
 
   async function getGoogleDriveUploadError(response: Response) {
@@ -168,7 +182,7 @@ export function useDriveBackup({
       const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) throw new Error(await getGoogleDriveRequestError(response, "file list"));
+      if (!response.ok) { clearTokenIfUnauthorized(response); throw new Error(await getGoogleDriveRequestError(response, "file list")); }
       const result = (await response.json()) as GoogleDriveFileListResponse;
       const files = result.files ?? [];
       setDriveImportFiles(files);
@@ -188,7 +202,7 @@ export function useDriveBackup({
       const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) throw new Error(await getGoogleDriveRequestError(response, "file download"));
+      if (!response.ok) { clearTokenIfUnauthorized(response); throw new Error(await getGoogleDriveRequestError(response, "file download")); }
       await loadFoodLogImportText(await response.text(), fileName);
       setDriveImportStatus("");
       setIsDriveImportOpen(false);
@@ -215,7 +229,7 @@ export function useDriveBackup({
     const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!response.ok) throw new Error(await getGoogleDriveRequestError(response, "file lookup"));
+    if (!response.ok) { clearTokenIfUnauthorized(response); throw new Error(await getGoogleDriveRequestError(response, "file lookup")); }
     const result = (await response.json()) as GoogleDriveFileListResponse;
     return result.files?.[0]?.id ?? null;
   }
@@ -253,7 +267,7 @@ export function useDriveBackup({
         },
         body,
       });
-      if (!response.ok) throw new Error(await getGoogleDriveUploadError(response));
+      if (!response.ok) { clearTokenIfUnauthorized(response); throw new Error(await getGoogleDriveUploadError(response)); }
       const uploaded = (await response.json()) as GoogleDriveUploadResponse;
       setExportDriveLink(uploaded.webViewLink ?? "");
       setExportStatus(
@@ -294,12 +308,13 @@ export function useDriveBackup({
     const params = new URLSearchParams(hash.substring(1));
     const token = params.get("access_token");
     if (!token) return;
+    const expiresIn = Number(params.get("expires_in"));
     window.history.replaceState(null, "", window.location.origin + window.location.pathname + window.location.search);
     const pendingRaw = localStorage.getItem(oauthPendingActionKey);
     localStorage.removeItem(oauthPendingActionKey);
 
     queueMicrotask(() => {
-      setDriveAccessToken(token);
+      storeDriveToken(token, Number.isFinite(expiresIn) ? expiresIn : undefined);
       if (!pendingRaw) return;
 
       try {
