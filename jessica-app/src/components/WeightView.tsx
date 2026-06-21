@@ -12,6 +12,7 @@ import {
   getWeightRangeLabel,
   getWeightTickLabel,
   roundToIncrement,
+  shiftDate,
   type Goals,
   type WeightEntry,
   type WeightRange,
@@ -294,6 +295,26 @@ export function WeightView({
     const expectedGoalDate = projectedGoalDays !== null
       ? new Date(todayTime + projectedGoalDays * 86400000).toISOString().slice(0, 10)
       : null;
+    // The goal date the user chose in their profile: today + the time the
+    // planned weekly rate needs to cover the weight still remaining. Mirrors
+    // the profile's target-date math so the two views always agree.
+    const summaryCurrentWeightKg = currentWeightEntry
+      ? convertWeightValue(currentWeightEntry.weight, currentWeightEntry.unit, "kg")
+      : null;
+    const plannedGoalDate = (() => {
+      if (
+        !profile ||
+        !profile.goalWeightKg ||
+        profile.goal === "maintain" ||
+        profile.weeklyRateKg <= 0 ||
+        summaryCurrentWeightKg === null
+      ) {
+        return null;
+      }
+      const remainingKg = Math.abs(summaryCurrentWeightKg - profile.goalWeightKg);
+      if (remainingKg <= 0) return null;
+      return shiftDate(today, Math.ceil((remainingKg / profile.weeklyRateKg) * 7));
+    })();
     const ringSegmentsOn = Math.round(progressPct / 20);
     const selectedChartBmi = selectedChartPoint && profile
       ? convertWeightValue(selectedChartPoint.weight, selectedChartPoint.unit, "kg") / ((profile.heightCm / 100) ** 2)
@@ -387,7 +408,7 @@ export function WeightView({
                   <span className="lbl">Goal</span>
                   <span className="val">{goalWeight !== null ? formatWeightValue(goalWeight, displayUnit) : "Not set"}</span>
                   <span className="bmi">BMI {goalBmi !== null ? Number(goalBmi.toFixed(1)) : "--"}</span>
-                  <span className="date">{expectedGoalDate ? formatShortDate(expectedGoalDate) : "Goal date --"}</span>
+                  <span className="date">{plannedGoalDate ? formatShortDate(plannedGoalDate) : "Goal date --"}</span>
                 </div>
               </div>
 
