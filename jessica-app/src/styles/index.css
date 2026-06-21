@@ -247,6 +247,25 @@
   box-sizing: border-box;
 }
 
+/* Stop accidental taps on plain text (e.g. "Dinner") from selecting it and
+   popping up the "search the web" context menu. Form fields and anything
+   explicitly marked .selectable stay selectable so they can still be edited. */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 #root {
   width: 100%;
   max-width: 100%;
