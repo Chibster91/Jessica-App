@@ -681,6 +681,7 @@ function App() {
         setHomeSelectedDate,
         changeSelectedDate,
         toggleHomeDate,
+        completedDays,
         today,
         getCompletedStreak,
         goalsView,

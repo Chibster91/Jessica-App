@@ -1,5 +1,6 @@
 import {
   useMemo,
+  useState,
   type CSSProperties,
   type Dispatch,
   type ReactNode,
@@ -42,6 +43,7 @@ import {
 } from "../importMatching";
 import "../styles/log.css";
 import { LibraryBarcodeScan } from "./LibraryAddScreens";
+import { CalendarSheet } from "./CalendarSheet";
 import { ConfirmDialog, NutritionSheet, type NutritionFood } from "./Overlays";
 
 type MacroTotals = { calories: number; protein: number; carbs: number; fat: number };
@@ -192,6 +194,7 @@ export function LogView(props: LogViewProps) {
     confirmRemoveFood, editItemAmount, editItemAmountUnit, changeEditAmountUnit, setEditItemAmount, getEditAmountUnits,
     getEditPreviewFood,
   } = useLogItemActions({ selectedDate, log, setLog, recipes, setRecipes });
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const visibleMealCategories = useMemo(() => getMealCategoriesForLog(log), [log]);
   function getCategoryTotals(category: MealCategory) {
     return getLogCategoryTotals(log, category);
@@ -308,18 +311,28 @@ export function LogView(props: LogViewProps) {
               <button type="button" onClick={() => moveSelectedDate(-1)} aria-label="Previous day">
                 ‹
               </button>
-              <label className="log-date-label" aria-label="Pick date">
+              <button
+                type="button"
+                className="log-date-label"
+                aria-label="Pick date"
+                onClick={() => setIsCalendarOpen(true)}
+              >
                 <strong>{formatEntryDate(selectedDate)}</strong>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => changeSelectedDate(e.target.value)}
-                />
-              </label>
+              </button>
               <button type="button" onClick={() => moveSelectedDate(1)} aria-label="Next day">
                 ›
               </button>
             </div>
+
+            {isCalendarOpen && (
+              <CalendarSheet
+                selectedDate={selectedDate}
+                completedDays={completedDays}
+                goals={goals}
+                onPick={(date) => { changeSelectedDate(date); setIsCalendarOpen(false); }}
+                onClose={() => setIsCalendarOpen(false)}
+              />
+            )}
 
             {importStatus && <p className="import-inline-status">{importStatus}</p>}
             {importErrors.length > 0 && importDrafts.length === 0 && (

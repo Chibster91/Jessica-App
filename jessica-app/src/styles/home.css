@@ -12,6 +12,11 @@
   font-weight: var(--weight-bold);
   text-align: center;
   flex: 1;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.2rem;
+  font-family: inherit;
 }
 .dash-week-arrow {
   background: var(--surface-raised);

@@ -1110,7 +1110,7 @@ button {
   justify-content: space-between;
   padding: 4px 0;
 }
-.log-date-row > button {
+.log-date-row > button:not(.log-date-label) {
   background: var(--surface-2);
   border: var(--ui-border);
   color: var(--fg);
@@ -1127,21 +1127,17 @@ button {
   flex-shrink: 0;
 }
 .log-date-label {
-  position: relative;
   flex: 1;
   text-align: center;
   cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 4px;
 }
 .log-date-label strong {
   font-size: 1rem;
   font-weight: 700;
   color: var(--fg-2);
-}
-.log-date-label input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .log-menu-button {

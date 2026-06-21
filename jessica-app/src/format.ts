@@ -114,6 +114,49 @@ export function getShortDayName(date: string): string {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dow];
 }
 
+export function addMonths(date: string, delta: number): string {
+  const [year, month, day] = date.split("-").map(Number);
+  const target = new Date(year, month - 1 + delta, 1);
+  const daysInTarget = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  const clampedDay = Math.min(day, daysInTarget);
+  return getLocalDateString(new Date(target.getFullYear(), target.getMonth(), clampedDay));
+}
+
+export function getMonthLabel(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+/**
+ * Returns Monday-start weeks fully covering the month containing `date`,
+ * including leading/trailing days from adjacent months so every row has 7
+ * cells. Each entry is a "YYYY-MM-DD" string. Dates are zero-padded, so the
+ * string comparison used to detect the last week is also a date comparison.
+ */
+export function getMonthGridWeeks(date: string): string[][] {
+  const [year, month] = date.split("-").map(Number);
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+  const firstOfMonth = `${monthPrefix}-01`;
+  const dow = new Date(year, month - 1, 1).getDay(); // 0=Sun … 6=Sat
+  const daysToMonday = dow === 0 ? -6 : 1 - dow;
+  const lastDay = new Date(year, month, 0).getDate();
+  const lastOfMonth = `${monthPrefix}-${String(lastDay).padStart(2, "0")}`;
+
+  const weeks: string[][] = [];
+  let cursor = shiftDate(firstOfMonth, daysToMonday);
+  let lastCellSoFar = "";
+  while (lastCellSoFar < lastOfMonth) {
+    const week = Array.from({ length: 7 }, (_, i) => shiftDate(cursor, i));
+    weeks.push(week);
+    lastCellSoFar = week[6];
+    cursor = shiftDate(cursor, 7);
+  }
+  return weeks;
+}
+
 export function formatDateRange(startDate: string, endDate: string) {
   const [sy, sm, sd] = startDate.split("-").map(Number);
   const [ey, em, ed] = endDate.split("-").map(Number);

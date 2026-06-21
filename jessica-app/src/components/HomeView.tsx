@@ -1,5 +1,6 @@
-import { useMemo, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/home.css";
+import { CalendarSheet } from "./CalendarSheet";
 import {
   convertWeightValue,
   formatShortDate,
@@ -25,6 +26,7 @@ type HomeViewProps = {
   setHomeSelectedDate: Dispatch<SetStateAction<string | null>>;
   changeSelectedDate: (date: string) => void;
   toggleHomeDate: (date: string) => void;
+  completedDays: string[];
   today: string;
   getCompletedStreak: (referenceDate?: string, days?: string[]) => number;
   goalsView: "daily" | "weekly";
@@ -43,6 +45,7 @@ export function HomeView({
   setHomeSelectedDate,
   changeSelectedDate,
   toggleHomeDate,
+  completedDays,
   today,
   getCompletedStreak,
   goalsView,
@@ -51,6 +54,7 @@ export function HomeView({
   startingWeightEntry,
   weightUnit
 }: HomeViewProps) {
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const weekStats = useMemo(
       () =>
@@ -155,9 +159,19 @@ export function HomeView({
         {/* Week navigation */}
         <div className="dash-week-nav">
           <button type="button" className="dash-week-arrow" onClick={() => { setHomeSelectedDate(null); changeSelectedDate(shiftDate(selectedDate, -7)); }} aria-label="Previous week">‹</button>
-          <span className="dash-week-label">Week of: {weekLabel}</span>
+          <button type="button" className="dash-week-label" onClick={() => setIsCalendarOpen(true)} aria-label="Open calendar">Week of: {weekLabel}</button>
           <button type="button" className="dash-week-arrow" onClick={() => { setHomeSelectedDate(null); changeSelectedDate(shiftDate(selectedDate, 7)); }} aria-label="Next week">›</button>
         </div>
+
+        {isCalendarOpen && (
+          <CalendarSheet
+            selectedDate={selectedDate}
+            completedDays={completedDays}
+            goals={goals}
+            onPick={(date) => { setHomeSelectedDate(null); changeSelectedDate(date); setIsCalendarOpen(false); }}
+            onClose={() => setIsCalendarOpen(false)}
+          />
+        )}
 
         {/* CALORIES CARD */}
         <section className="dash-card">
