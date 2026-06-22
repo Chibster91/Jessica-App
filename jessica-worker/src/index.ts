@@ -142,6 +142,11 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
     .filter((food: FdcSearchResultFood) => !isExperimentalFood(food));
 
   const seen = new Set<number | string>();
+  const nutritionQualityById = new Map<number, number>(
+    dataFoods.map((food: FdcSearchResultFood) => [food.fdcId, nutritionQualityScore(food)])
+  );
+  const rankWithQuality = (food: WorkerFood) =>
+    rankSearchResult(food, query) + (nutritionQualityById.get(food.id) ?? 0);
 
   const foods: WorkerFood[] = dataFoods
     .map((food: FdcSearchResultFood) => {
@@ -161,7 +166,7 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
       };
     })
     .filter((food: WorkerFood) => !isExperimentalFood(food))
-    .sort((a: WorkerFood, b: WorkerFood) => rankSearchResult(b, query) - rankSearchResult(a, query))
+    .sort((a: WorkerFood, b: WorkerFood) => rankWithQuality(b) - rankWithQuality(a))
     .filter((food: WorkerFood) => {
       const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
       if (seen.has(key)) return false;
@@ -518,6 +523,37 @@ function rankSearchResult(food: WorkerFood, query: string): number {
   if (queryWords.length > 1 && matchedWords.length === 1) score -= 45;
 
   return score;
+}
+
+/** Count nutrients on a search result that carry a real positive value. USDA's
+ * branded set holds many duplicate records per product; the complete ones list
+ * far more populated nutrients than the sparse/empty duplicates. */
+function countPopulatedSearchNutrients(food: FdcSearchResultFood): number {
+  return (food.foodNutrients ?? []).reduce((count, n) => {
+    const value = n.value ?? n.amount;
+    return typeof value === "number" && Number.isFinite(value) && value > 0 ? count + 1 : count;
+  }, 0);
+}
+
+/** Whether a search result carries an energy nutrient at all (a 0-kcal value
+ * still counts — diet drinks are legitimately zero). Records missing it
+ * entirely have no usable calorie data for a tracker. */
+function hasEnergyData(food: FdcSearchResultFood): boolean {
+  return (food.foodNutrients ?? []).some((n) => {
+    const value = n.value ?? n.amount;
+    if (typeof value !== "number" || !Number.isFinite(value)) return false;
+    const name = (n.nutrientName ?? n.name ?? "").toLowerCase();
+    return n.nutrientNumber === "208" || n.nutrientId === 1008 || n.nutrientId === 2047 || n.nutrientId === 2048 || name.includes("energy");
+  });
+}
+
+/** Ranking adjustment that sinks records with no calorie data and rewards
+ * nutritionally complete records, so the trustworthy duplicate surfaces first. */
+function nutritionQualityScore(food: FdcSearchResultFood): number {
+  // A record with no calorie data at all is useless to a tracker; bury it
+  // beneath any usable result rather than showing a misleading "0 cal".
+  if (!hasEnergyData(food)) return -500;
+  return Math.min(countPopulatedSearchNutrients(food), 15) * 2;
 }
 
 function isExperimentalFood(food: FdcSearchResultFood | WorkerFood): boolean {
