@@ -108,7 +108,7 @@ export type AddFoodTab = "search" | "recent" | "custom" | "recipes";
 
 export type AppView = "home" | "day" | "library" | "profile" | "weight" | "egg-oracle";
 
-export type FoodLibraryTab = "recent" | "custom" | "recipes";
+export type FoodLibraryTab = "recent" | "custom" | "recipes" | "database";
 
 export type Sex = "female" | "male";
 

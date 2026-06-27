@@ -182,7 +182,7 @@ type ImportManualGroupUi = {
 
 export function LogView(props: LogViewProps) {
   const {
-    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, applyAllImportReview, rejectImportReviewItem, expandImportReviewGroup, importAllAsIs, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, clearFoodDebugData, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
+    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, applyAllImportReview, rejectImportReviewItem, expandImportReviewGroup, importAllAsIs, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
   } = props;
   const {
     mealCardRefs, longPressRef, suppressNextClickRef, isLogMenuOpen, setIsLogMenuOpen, expandedMeals, toggleMeal,
@@ -214,6 +214,7 @@ export function LogView(props: LogViewProps) {
     filteredRecipes, quantity, addSelectedFood,
     amountUnit, changeAmountUnit, allowedAmountUnits, portionOptions, selectedPortionValue, setSelectedPortionValue,
     portionAmount, setPortionAmount, previewFoodServing, canAddSelectedFood,
+    usdaEnabled, toggleUsda,
   } = useAddFoodModal({ selectedDate, log, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods });
   const sortedRecentFoods = [...recentFoods].sort((a, b) => {
     const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
@@ -368,6 +369,7 @@ export function LogView(props: LogViewProps) {
                     >
                       Export
                     </button>
+                    {/* Hidden from the menu to avoid accidental taps near Export; logic kept intact.
                     <button
                       type="button"
                       className="danger-menu-item"
@@ -375,6 +377,7 @@ export function LogView(props: LogViewProps) {
                     >
                       Debug clear food data
                     </button>
+                    */}
                   </div>
                 </>
               )}
@@ -627,6 +630,15 @@ export function LogView(props: LogViewProps) {
               <button type="button" className="add-food-search-btn" onClick={submitAddFoodSearch}>Search</button>
               <button type="button" className="add-food-scan-btn" aria-label="Scan barcode" onClick={openBarcodeScan}>
                 Scan
+              </button>
+            </div>
+            <div className="add-food-usda-row">
+              <button
+                type="button"
+                className={`add-food-usda-btn${usdaEnabled ? " is-active" : ""}`}
+                onClick={toggleUsda}
+              >
+                USDA {usdaEnabled ? "on" : "off"}
               </button>
             </div>
           </div>

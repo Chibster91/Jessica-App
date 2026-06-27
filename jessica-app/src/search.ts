@@ -267,6 +267,44 @@ export const WORKER_BASE_URL = "https://jessica-worker.snack-bunker.workers.dev"
 
 export const foodDetailCache = new Map<number, FoodDetail>();
 
+// ── Fuzzy token matching ─────────────────────────────────────────────────────
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const row = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = row[j];
+      row[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, row[j], row[j - 1]);
+      prev = tmp;
+    }
+  }
+  return row[n];
+}
+
+function tokenMatchesWords(token: string, words: string[]): boolean {
+  for (const w of words) {
+    if (w === token) return true;
+    if (w.startsWith(token)) return true;
+    if (w.includes(token)) return true;
+    if (token.length >= 4 && Math.abs(w.length - token.length) <= 2 && levenshtein(token, w) <= 1) return true;
+  }
+  return false;
+}
+
+export function matchesLocalFoodQuery(name: string, category: string, query: string): boolean {
+  const tokens = normalizeSearchText(query).split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+  const nameWords = normalizeSearchText(name).split(/\s+/).filter(Boolean);
+  const catWords = normalizeSearchText(category).split(/\s+/).filter(Boolean);
+  const allWords = [...nameWords, ...catWords];
+  return tokens.every(token => tokenMatchesWords(token, allWords));
+}
+
 // ── Local food database ──────────────────────────────────────────────────────
 
 export type LocalFoodEntry = {
@@ -327,15 +365,7 @@ export async function searchLocalFoods(query: string): Promise<Food[]> {
   if (!queryText) return [];
 
   return foods
-  .filter(entry => {
-    const name = normalizeSearchText(entry.name);
-    const cat = normalizeSearchText(entry.category);
-    const tokens = queryText.split(/\s+/);
-    return tokens.every(token =>
-      new RegExp(`\\b${token}s?\\b`, "i").test(name) ||
-      new RegExp(`\\b${token}s?\\b`, "i").test(cat)
-);
-  })
+  .filter(entry => matchesLocalFoodQuery(entry.name, entry.category, queryText))
   .map(localFoodToFood)
   .sort((a, b) => getFoodSearchScore(b, query) - getFoodSearchScore(a, query))
   .slice(0, 10);
@@ -467,7 +497,8 @@ export async function searchFoodsGrouped(
   query: string,
   customFoods: Food[] = [],
   recentFoods: Food[] = [],
-  recipes: Recipe[] = []
+  recipes: Recipe[] = [],
+  usdaEnabled = true
 ): Promise<SearchResultGroup[]> {
   const q = query.trim().toLowerCase();
   if (!q) return [];
@@ -490,24 +521,27 @@ export async function searchFoodsGrouped(
   // Local DB foods
   const localResults = await searchLocalFoods(query);
 
-  // USDA packaged foods
-  const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
-  const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
-  const localIds = new Set(localResults.map(f => f.id));
-  const usdaById = new Map<number, Food>();
-  for (const foods of resultSets) {
-    if (!Array.isArray(foods)) continue;
-    for (const food of foods) {
-      const isDuplicatedLocally = localResults.some(local =>
-        normalizeSearchText(local.name).replace(/\s+/g, "") ===
-        normalizeSearchText(food.name).replace(/\s+/g, "")
-      );
-      if (!localIds.has(food.id) && !usdaById.has(food.id) && !isDuplicatedLocally) {
-        usdaById.set(food.id, food);
+  // USDA packaged foods — only when caller has enabled it
+  let usdaResults: Food[] = [];
+  if (usdaEnabled) {
+    const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
+    const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
+    const localIds = new Set(localResults.map(f => f.id));
+    const usdaById = new Map<number, Food>();
+    for (const foods of resultSets) {
+      if (!Array.isArray(foods)) continue;
+      for (const food of foods) {
+        const isDuplicatedLocally = localResults.some(local =>
+          normalizeSearchText(local.name).replace(/\s+/g, "") ===
+          normalizeSearchText(food.name).replace(/\s+/g, "")
+        );
+        if (!localIds.has(food.id) && !usdaById.has(food.id) && !isDuplicatedLocally) {
+          usdaById.set(food.id, food);
+        }
       }
     }
+    usdaResults = rankSearchResults([...usdaById.values()], query);
   }
-  const usdaResults = rankSearchResults([...usdaById.values()], query);
 
   const groups: SearchResultGroup[] = [];
 

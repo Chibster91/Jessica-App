@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/library.css";
 import {
   createClientId,
@@ -7,6 +7,8 @@ import {
   getFoodIconUrl,
   getFoodServingDisplay,
   getIngredientCalories,
+  getAllLocalFoods,
+  matchesLocalFoodQuery,
   mealCategories,
   type Food,
   type LogItem,
@@ -50,7 +52,6 @@ export function FoodLibraryView({
   type AddScreen = "scan" | "manual-food" | "manual-recipe" | "url-import" | "photo-import" | "recipe-menu";
   const [addScreen, setAddScreen] = useState<AddScreen | null>(null);
   const [nutritionPreview, setNutritionPreview] = useState<NutritionPreview | null>(null);
-
   function addFoodToToday(food: Food | Recipe, category: MealCategory, qty: string) {
     const quantity = parseFloat(qty) || 1;
     setLog([
@@ -107,6 +108,27 @@ export function FoodLibraryView({
     removeLibraryRecipeIngredient,
     saveLibraryRecipe,
   } = useFoodLibrary({ customFoods, setCustomFoods, recipes, setRecipes, recentFoods });
+
+  const [dbFoods, setDbFoods] = useState<Food[]>([]);
+  useEffect(() => { getAllLocalFoods().then(setDbFoods); }, []);
+  const dbFoodsByCategory = useMemo(() => {
+    const filtered = libraryQuery
+      ? dbFoods.filter(f => matchesLocalFoodQuery(f.name, f.category ?? "", libraryQuery))
+      : dbFoods;
+    const map = new Map<string, Food[]>();
+    for (const food of filtered) {
+      const cat = food.category ?? "Other";
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(food);
+    }
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([cat, foods]) => ({
+        cat,
+        foods: [...foods].sort((a, b) => getFoodDisplayName(a).localeCompare(getFoodDisplayName(b))),
+      }));
+  }, [dbFoods, libraryQuery]);
+
   return (
     <main className="app">
       <div className="lib-screen">
@@ -129,6 +151,12 @@ export function FoodLibraryView({
             onClick={() => { setFoodLibraryTab("recipes"); setLibrarySelection(null); cancelLibraryEditing(); }}
             role="tab" aria-selected={foodLibraryTab === "recipes"}
           >Recipes</button>
+          <button
+            className={foodLibraryTab === "database" ? "active" : ""}
+            type="button"
+            onClick={() => { setFoodLibraryTab("database"); setLibrarySelection(null); cancelLibraryEditing(); }}
+            role="tab" aria-selected={foodLibraryTab === "database"}
+          >Database</button>
         </div>
 
         <div className="lib-search-row">
@@ -218,6 +246,29 @@ export function FoodLibraryView({
               </span>
               <span className="lib-foodrow-cal">{recipe.calories}<small>cal</small></span>
             </button>
+          ))}
+
+          {foodLibraryTab === "database" && dbFoodsByCategory.length === 0 && (
+            <p className="empty-meal">{dbFoods.length === 0 ? "Loading…" : "No foods match this search."}</p>
+          )}
+          {foodLibraryTab === "database" && dbFoodsByCategory.map(({ cat, foods }) => (
+            <div key={cat} className="lib-db-group">
+              <div className="lib-db-category-header">{cat}</div>
+              {foods.map(food => (
+                <button
+                  className={`lib-foodrow${nutritionPreview?.food.id === food.id ? " selected" : ""}`}
+                  key={food.id} type="button"
+                  onClick={() => setNutritionPreview({ food, quantity: 1 })}
+                >
+                  <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
+                  <span className="lib-foodrow-main">
+                    <span className="lib-foodrow-name">{getFoodDisplayName(food)}</span>
+                    <span className="lib-foodrow-meta">{cat} · {getFoodServingDisplay(food)}</span>
+                  </span>
+                  <span className="lib-foodrow-cal">{food.calories}<small>cal</small></span>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
 

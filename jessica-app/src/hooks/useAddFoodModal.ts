@@ -70,6 +70,14 @@ export function useAddFoodModal({
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingCategory, setPendingCategory] = useState<MealCategory | null>(null);
   const [activeAddFoodTab, setActiveAddFoodTab] = useState<AddFoodTab>("search");
+  const [usdaEnabled, setUsdaEnabled] = useState(() => localStorage.getItem("usdaEnabled") === "1");
+  function toggleUsda() {
+    setUsdaEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem("usdaEnabled", next ? "1" : "0");
+      return next;
+    });
+  }
   const [modalQuery, setModalQuery] = useState("");
   const [modalFoods, setModalFoods] = useState<Food[]>([]);
   const [customQuery, setCustomQuery] = useState("");
@@ -159,7 +167,7 @@ export function useAddFoodModal({
   async function searchModalFood() {
     if (!modalQuery.trim()) return;
 
-    const groups = await searchFoodsGrouped(modalQuery, customFoods, getRecentFoods(selectedDate), recipes);
+    const groups = await searchFoodsGrouped(modalQuery, customFoods, getRecentFoods(selectedDate), recipes, usdaEnabled);
     const foodsById = new Map<number, Food>();
     for (const group of groups) {
       for (const food of group.foods) {
@@ -659,5 +667,7 @@ export function useAddFoodModal({
     previewFoodServing,
     addSelectedFood,
     canAddSelectedFood,
+    usdaEnabled,
+    toggleUsda,
   };
 }

@@ -164,6 +164,21 @@
   margin-left: 1px;
 }
 
+/* ---- Database tab groups ---- */
+.lib-db-group {
+  display: contents;
+}
+
+.lib-db-category-header {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-2);
+  padding: 0.5rem 0 0.2rem;
+  margin-top: 0.25rem;
+}
+
 /* ---- Detail panel ---- */
 .library-detail {
   display: grid;
