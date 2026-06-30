@@ -2,6 +2,10 @@
 **/.codex
 .env
 **/.env
+.env.local
+**/.env.local
+**/.env.*.local
+**/.dev.vars
 food-log-*.json
 jessica-app/public/Icons/old icon/
 

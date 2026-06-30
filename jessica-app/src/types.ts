@@ -2,6 +2,9 @@ export type Food = {
   id: number;
   name: string;
   brand: string | null;
+  /** USDA consumer brand ("Nutella"), distinct from `brand` (brandOwner / parent company).
+   * Captured for brand-intent search scoring; may be null for non-branded foods. */
+  brandName?: string | null;
   category?: string | null;
   measurementType?: "solid" | "liquid" | "spoonable";
   dataType?: string | null;

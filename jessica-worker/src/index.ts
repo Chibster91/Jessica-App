@@ -1,8 +1,17 @@
 import type { FdcFoodDetail, FdcFoodNutrient, FdcSearchResponse, FdcSearchResultFood } from "./fdc-types";
 
 const DETAIL_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
-const SEARCH_RESULT_LIMIT = 15;
+// Total merged-result cap, and the slots guaranteed to each tier before leftovers are shared.
+const SEARCH_RESULT_LIMIT = 25;
+const SEARCH_TIER_MIN = 10;
 const USDA_SEARCH_PAGE_SIZE = 50;
+// Tier 1 = USDA's quality ladder (lab-analyzed → curated → survey); Tier 2 = Branded.
+// Survey (FNDDS) is requested separately: USDA returns HTTP 400 (not an empty list) when a query
+// has no Survey matches, so bundling it with Foundation/SR Legacy would take those down too.
+// Promise.allSettled below keeps that 400 harmless.
+const TIER1_CORE_DATA_TYPES = "Foundation,SR Legacy";
+const TIER1_SURVEY_DATA_TYPE = "Survey (FNDDS)";
+const TIER2_DATA_TYPES = "Branded";
 const UNIT_LABELS: Record<string, string> = {
   MLT: "ml",
   GRM: "g",
@@ -45,15 +54,23 @@ type CacheEntry<T> = { expiresAt: number; value: T };
 
 type SearchRequest = {
   query: string;
+  tier: number;
+  dataType?: string;
   brandOwner?: string;
-  brandedOnly?: boolean;
+  requireAllWords?: boolean;
 };
+
+/** Result of one settled USDA request — keeps the tier so failed requests don't break index alignment. */
+type SettledSearch =
+  | { ok: true; tier: number; response: FdcSearchResponse }
+  | { ok: false; error: unknown };
 
 /** Shape returned by the worker's search endpoint (GET /). */
 export type WorkerFood = {
   id: number;
   name: string;
   brand: string | null;
+  brandName: string | null;
   category: string | null;
   ingredients: string | null;
   dataType: string | undefined;
@@ -119,61 +136,75 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
     return missingUsdaApiKey();
   }
 
-  let resultSets: FdcSearchResponse[];
-  try {
-    resultSets = await Promise.all(expandSearchRequests(query).map((request) => searchUsdaFoods(request, apiKey)));
-  } catch (error) {
-    if (isUsdaRequestError(error)) {
-      return json(
-        {
-          error: error.message,
-          status: error.status,
-          detail: error.detail,
-        },
-        error.status
-      );
-    }
+  const requests = expandSearchRequests(query);
+  // Settle each request independently so one failure (e.g. USDA's 400 for a dataType with no
+  // matches) can't sink the whole search; only surface an error if every request failed.
+  const settled: SettledSearch[] = await Promise.all(
+    requests.map((request) =>
+      searchUsdaFoods(request, apiKey).then(
+        (response): SettledSearch => ({ ok: true, tier: request.tier, response }),
+        (error): SettledSearch => ({ ok: false, error })
+      )
+    )
+  );
 
+  const fulfilled = settled.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok);
+  if (fulfilled.length === 0) {
+    const error = (settled.find((r) => !r.ok) as Extract<SettledSearch, { ok: false }> | undefined)?.error;
+    if (isUsdaRequestError(error)) {
+      return json({ error: error.message, status: error.status, detail: error.detail }, error.status);
+    }
     throw error;
   }
-  // Filter raw USDA results before any scoring or mapping
-  const dataFoods = resultSets
-    .flatMap((data: FdcSearchResponse) => data.foods ?? [])
-    .filter((food: FdcSearchResultFood) => !isExperimentalFood(food));
 
-  const seen = new Set<number | string>();
-  const nutritionQualityById = new Map<number, number>(
-    dataFoods.map((food: FdcSearchResultFood) => [food.fdcId, nutritionQualityScore(food)])
+  // Tag each raw result with the tier of the request that produced it; drop experimental.
+  const tagged = fulfilled.flatMap((r) =>
+    (r.response.foods ?? [])
+      .filter((food: FdcSearchResultFood) => !isExperimentalFood(food))
+      .map((food: FdcSearchResultFood) => ({ food, tier: r.tier }))
   );
-  const rankWithQuality = (food: WorkerFood) =>
-    rankSearchResult(food, query) + (nutritionQualityById.get(food.id) ?? 0);
 
-  const foods: WorkerFood[] = dataFoods
-    .map((food: FdcSearchResultFood) => {
-      return {
-        id: food.fdcId,
-        name: food.description,
-        brand: food.brandOwner ?? null,
-        category: food.foodCategory ?? null,
-        ingredients: food.ingredients ?? null,
-        dataType: food.dataType,
-        servingSize: "Details required",
-        calories: 0,
-        protein: 0,
-        carbs: 0,
-        fat: 0,
-        isSearchPreview: true,
-      };
-    })
-    .filter((food: WorkerFood) => !isExperimentalFood(food))
-    .sort((a: WorkerFood, b: WorkerFood) => rankWithQuality(b) - rankWithQuality(a))
-    .filter((food: WorkerFood) => {
-      const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, SEARCH_RESULT_LIMIT);
+  const nutritionQualityById = new Map<number, number>(
+    tagged.map(({ food }) => [food.fdcId, nutritionQualityScore(food)])
+  );
+
+  // Map to WorkerFood, dedup by fdcId, score within tier.
+  const seen = new Set<number | string>();
+  const ranked: { food: WorkerFood; tier: number; score: number }[] = [];
+  for (const { food: raw, tier } of tagged) {
+    const food: WorkerFood = {
+      id: raw.fdcId,
+      name: raw.description,
+      brand: raw.brandOwner ?? null,
+      brandName: raw.brandName ?? null,
+      // Branded foods carry their category in brandedFoodCategory; foundation/SR use foodCategory.
+      category: raw.brandedFoodCategory ?? raw.foodCategory ?? null,
+      ingredients: raw.ingredients ?? null,
+      dataType: raw.dataType,
+      servingSize: "Details required",
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+      isSearchPreview: true,
+    };
+    if (isExperimentalFood(food)) continue;
+    const key = food.id || `${food.name}-${food.brand}-${food.calories}-${food.servingSize}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    ranked.push({
+      food,
+      tier,
+      score: rankSearchResult(food, query) + (nutritionQualityById.get(food.id) ?? 0),
+    });
+  }
+
+  // Tier-aware cap: Tier 1 (quality) ranked above Tier 2 (branded), but both tiers are
+  // guaranteed slots so neither starves the other before the client re-ranks — leaving room
+  // for client scoring to promote a strong branded brand-intent match above weak Tier 1 noise.
+  const tier1 = ranked.filter((r) => r.tier === 1).sort((a, b) => b.score - a.score);
+  const tier2 = ranked.filter((r) => r.tier === 2).sort((a, b) => b.score - a.score);
+  const foods: WorkerFood[] = applyTierCap(tier1, tier2).map((r) => r.food);
 
   return json(foods);
 }
@@ -184,8 +215,12 @@ async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<
   searchUrl.searchParams.set("pageSize", String(USDA_SEARCH_PAGE_SIZE));
   searchUrl.searchParams.set("api_key", apiKey);
 
-  if (request.brandedOnly) {
-    searchUrl.searchParams.set("dataType", "Branded");
+  if (request.dataType) {
+    searchUrl.searchParams.set("dataType", request.dataType);
+  }
+
+  if (request.requireAllWords) {
+    searchUrl.searchParams.set("requireAllWords", "true");
   }
 
   if (request.brandOwner) {
@@ -198,6 +233,26 @@ async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<
   }
 
   return r.json() as Promise<FdcSearchResponse>;
+}
+
+/** Cap merged results while guaranteeing each tier a minimum number of slots, so a flood of
+ * one tier can't crowd the other out before the client re-ranks. Leftover slots after the
+ * per-tier minimums go to whichever tier still has candidates (Tier 1 first). */
+function applyTierCap<T>(tier1: T[], tier2: T[]): T[] {
+  let take1 = Math.min(tier1.length, SEARCH_TIER_MIN);
+  let take2 = Math.min(tier2.length, SEARCH_TIER_MIN);
+  let remaining = SEARCH_RESULT_LIMIT - take1 - take2;
+
+  if (remaining > 0) {
+    const add1 = Math.min(remaining, tier1.length - take1);
+    take1 += add1;
+    remaining -= add1;
+  }
+  if (remaining > 0) {
+    take2 += Math.min(remaining, tier2.length - take2);
+  }
+
+  return [...tier1.slice(0, take1), ...tier2.slice(0, take2)];
 }
 
 async function handleDetail(url: URL, env: WorkerEnv): Promise<Response> {
@@ -412,8 +467,12 @@ function expandSearchRequests(query: string): SearchRequest[] {
   const queryWithoutPunctuation = normalizeSearchForMatching(query);
   const brandMatch = getKnownBrandMatch(normalizedQuery);
   const requests: SearchRequest[] = [
-    { query },
-    { query, brandedOnly: true },
+    // Tier 1 — quality whole foods, strict word matching to cut partial-match noise.
+    // Survey is its own request so its empty-query 400 can't sink Foundation/SR Legacy.
+    { query, tier: 1, dataType: TIER1_CORE_DATA_TYPES, requireAllWords: true },
+    { query, tier: 1, dataType: TIER1_SURVEY_DATA_TYPE, requireAllWords: true },
+    // Tier 2 — branded/packaged products, also strict.
+    { query, tier: 2, dataType: TIER2_DATA_TYPES, requireAllWords: true },
   ];
 
   if (brandMatch) {
@@ -422,15 +481,15 @@ function expandSearchRequests(query: string): SearchRequest[] {
 
     if (productQuery) {
       requests.push(
-        { query: productQuery, brandOwner: brandMatch.brandOwner, brandedOnly: true },
-        { query: productQueryWithCategory, brandOwner: brandMatch.brandOwner, brandedOnly: true }
+        { query: productQuery, tier: 2, dataType: TIER2_DATA_TYPES, brandOwner: brandMatch.brandOwner, requireAllWords: true },
+        { query: productQueryWithCategory, tier: 2, dataType: TIER2_DATA_TYPES, brandOwner: brandMatch.brandOwner, requireAllWords: true }
       );
     }
   }
 
   const categoryQuery = addLikelyProductCategory(queryWithoutPunctuation);
   if (categoryQuery !== queryWithoutPunctuation) {
-    requests.push({ query: categoryQuery, brandedOnly: true });
+    requests.push({ query: categoryQuery, tier: 2, dataType: TIER2_DATA_TYPES, requireAllWords: true });
   }
 
   return dedupeSearchRequests(requests.filter((request) => request.query.trim()));
@@ -476,7 +535,8 @@ function dedupeSearchRequests(requests: SearchRequest[]): SearchRequest[] {
     const key = [
       normalizeSearchForMatching(request.query),
       normalizeSearchForMatching(request.brandOwner || ""),
-      request.brandedOnly ? "branded" : "all",
+      request.dataType || "all",
+      request.requireAllWords ? "strict" : "loose",
     ].join("|");
 
     if (seen.has(key)) return false;
@@ -564,7 +624,9 @@ function isExperimentalFood(food: FdcSearchResultFood | WorkerFood): boolean {
   ];
   return candidates.some((v) => {
     const t = normalizeSearchText(v ?? "");
-    return t.includes("experimental") || t.includes("survey");
+    // Survey (FNDDS) is now a Tier 1 data type, so it is no longer stripped here;
+    // only true "Experimental" lab foods are excluded.
+    return t.includes("experimental");
   });
 }
 

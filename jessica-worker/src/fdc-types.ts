@@ -27,6 +27,8 @@ export interface FdcSearchResultFood {
   dataType?: string;
   description: string;
   brandOwner?: string;
+  // Consumer brand ("Nutella"), distinct from brandOwner (parent company). Branded foods only.
+  brandName?: string;
   gtinUpc?: string;
   ingredients?: string;
   ndbNumber?: string;
@@ -38,6 +40,8 @@ export interface FdcSearchResultFood {
   foodNutrients?: FdcSearchNutrient[];
   // Present in real API responses for Foundation/SR Legacy foods; not in spec:
   foodCategory?: string;
+  // Branded foods carry their category here instead of foodCategory:
+  brandedFoodCategory?: string;
 }
 
 /** Response envelope from GET /v1/foods/search (SearchResult schema). */

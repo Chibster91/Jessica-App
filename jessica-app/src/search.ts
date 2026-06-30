@@ -134,6 +134,28 @@ export function getSearchSynonyms(query: string) {
   return [...new Set((directSynonyms ?? compactSynonyms ?? []).map(normalizeSearchText))];
 }
 
+/** Category-taxonomy terms (NOT product/brand names) that denote a base/staple food.
+ * Matched against a food's category string to nudge a brand's flagship product above its
+ * derivatives — any brand whose category contains one of these benefits equally. */
+const BASE_FOOD_CATEGORY_TERMS = [
+  "butter", "spread", "cheese", "milk", "yogurt", "oil", "cereal", "bread", "sauce", "juice",
+];
+
+/** Count combo/bundle signals in a raw (punctuation-intact) product name. Multi-product
+ * packaged names ("X & Go!", "A + B", "12 oz pack") are derivatives, not the base product.
+ * Runs on the raw name because normalizeSearchText strips the "&"/"+" punctuation. Deliberately
+ * omits " with " / " and " — those appear in legitimate descriptions ("spread with cocoa",
+ * "mac and cheese"). */
+function countComboSignals(rawName: string): number {
+  const text = rawName.toLowerCase();
+  let signals = 0;
+  if (/\s&\s/.test(text)) signals++;
+  if (/\s\+\s/.test(text)) signals++;
+  if (/go!/.test(text) || /\bto go\b/.test(text)) signals++;
+  if (/\b\d+\s*(oz|ct|count|pack|pk)\b/.test(text)) signals++;
+  return signals;
+}
+
 export function getFoodSearchScore(food: Food, query: string) {
   const queryText = normalizeSearchText(query);
   const queryWords = getSearchTokens(query);
@@ -141,12 +163,27 @@ export function getFoodSearchScore(food: Food, query: string) {
 
   const nameText = normalizeSearchText(food.name);
   const brandText = normalizeSearchText(food.brand ?? "");
-  const servingText = normalizeSearchText(food.servingSize);
+  const brandNameText = normalizeSearchText(food.brandName ?? "");
+  const categoryText = normalizeSearchText(food.category ?? "");
   const dataTypeText = normalizeSearchText(food.dataType ?? "");
-  const searchableText = `${nameText} ${brandText} ${servingText}`.trim();
-  const compactName = nameText.replace(/\s+/g, "");
+  // Include brandName + category (servingSize was the constant "details required" — dead noise).
+  // This lets a bare-brand query match via the existing substring/word signals below.
+  const searchableText = `${nameText} ${brandText} ${brandNameText} ${categoryText}`.trim();
+
+  // Brand-intent: the user typed a bare brand name ("nutella"). Only for Branded foods with a
+  // real brandName, so it never touches a Foundation/whole food.
+  const brandIntent = dataTypeText === "branded" && brandNameText !== "" && queryText === brandNameText;
+  // Under brand-intent, a product name that merely echoes its own brand ("Nutella & Go!…") is not
+  // evidence it's the right product — strip the brand words so the name-position bonuses below
+  // reward the actual food name, not brand-stuffing. Otherwise match against the full name.
+  const brandNameTokens = getSearchTokens(brandNameText);
+  const nameForMatching = brandIntent
+    ? nameText.split(/\s+/).filter((word) => !brandNameTokens.includes(word)).join(" ")
+    : nameText;
+
+  const compactName = nameForMatching.replace(/\s+/g, "");
   const compactQuery = queryText.replace(/\s+/g, "");
-  const matchedNameWords = queryWords.filter((word) => nameText.includes(word));
+  const matchedNameWords = queryWords.filter((word) => nameForMatching.includes(word));
   const matchedSearchWords = queryWords.filter((word) => searchableText.includes(word));
   const synonymMatches = getSearchSynonyms(query).filter(
     (synonym) => nameText.includes(synonym) || brandText.includes(synonym)
@@ -155,15 +192,19 @@ export function getFoodSearchScore(food: Food, query: string) {
   
 
   // Foundation/SR descriptions are authoritative — boost when all query words appear in the name itself.
-  if (dataTypeText === "foundation" || dataTypeText === "sr legacy") {
-    if (matchedNameWords.length === queryWords.length && queryWords.length > 0) score += 30;
-  }
+  const isWholeFoodData = dataTypeText === "foundation" || dataTypeText === "sr legacy";
+  const allQueryWordsInName = matchedNameWords.length === queryWords.length && queryWords.length > 0;
+  if (isWholeFoodData && allQueryWordsInName) score += 30;
+  // Whole-food priority: keep Foundation/SR Legacy (USDA's highest-quality data) above branded
+  // products for the same query — the client re-rank would otherwise flatten the worker's tier
+  // order, letting a brand named after a staple ("Milk") outrank the real whole food.
+  if (isWholeFoodData && allQueryWordsInName) score += 90;
   if (searchableText.includes(queryText)) score += 130;
   if (matchedSearchWords.length === queryWords.length) score += 95;
-  if (nameText.includes(queryText) || compactName.includes(compactQuery)) score += 100;
+  if (nameForMatching.includes(queryText) || compactName.includes(compactQuery)) score += 100;
   if (synonymMatches.length > 0) score += 95 + synonymMatches.length * 8;
   if (matchedNameWords.length === queryWords.length) score += 70;
-  if (nameText.startsWith(queryText)) score += 50;
+  if (nameForMatching.startsWith(queryText)) score += 50;
   // Only boost for brand when the full query is in the brand name (user searched for a brand),
   // not for incidental single-word overlap between brand and query.
   if (brandText.includes(queryText)) score += 45;
@@ -173,6 +214,24 @@ export function getFoodSearchScore(food: Food, query: string) {
 
   if (queryWords.length > 1 && matchedSearchWords.length === 1) score -= 45;
   if (matchedSearchWords.length === 0 && !brandText.includes(queryText)) score -= 60;
+
+  // Brand-intent: a bare-brand search ("nutella") wants that brand's products.
+  if (brandIntent) {
+    score += 120;
+    // Among a brand's products, strongly prefer its flagship — the one in a base/staple food
+    // category ("Nut & Seed Butters" → spread), not its cookie/cereal/snack spin-offs or the
+    // bundles/derivatives that merely name-drop the brand. Category is taxonomy, not a food name.
+    if (BASE_FOOD_CATEGORY_TERMS.some((term) => categoryText.includes(term))) score += 150;
+  }
+
+  // Combo/bundle penalty — graduated and capped so it reorders without burying a real match.
+  const comboSignals = countComboSignals(food.name);
+  if (comboSignals > 0) score -= Math.min(comboSignals * 20, 50);
+
+  // Conciseness tiebreaker — tiny per-word decrement; only decides near-ties, favouring the
+  // shortest (usually the base) product. Negligible against the +12/+16-per-word match signals.
+  const nameWordCount = nameText.split(/\s+/).filter(Boolean).length;
+  score -= nameWordCount * 2;
 
   return score;
 }
@@ -263,7 +322,9 @@ export function getBrandDisplayName(brand: string | null | undefined) {
   return brand ? formatDisplayName(brand) : "Generic";
 }
 
-export const WORKER_BASE_URL = "https://jessica-worker.snack-bunker.workers.dev";
+// Defaults to the deployed worker; override with VITE_WORKER_URL (e.g. a local `wrangler dev`).
+export const WORKER_BASE_URL =
+  import.meta.env.VITE_WORKER_URL ?? "https://jessica-worker.snack-bunker.workers.dev";
 
 export const foodDetailCache = new Map<number, FoodDetail>();
 
@@ -521,9 +582,11 @@ export async function searchFoodsGrouped(
   // Local DB foods
   const localResults = await searchLocalFoods(query);
 
-  // USDA packaged foods — only when caller has enabled it
+  // USDA packaged foods — only when enabled AND the local DB had no match.
+  // A local hit short-circuits the network call entirely (predictable + offline-friendly);
+  // the user flips the toggle off to force USDA when they know local is missing something.
   let usdaResults: Food[] = [];
-  if (usdaEnabled) {
+  if (usdaEnabled && localResults.length === 0) {
     const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
     const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
     const localIds = new Set(localResults.map(f => f.id));
