@@ -849,7 +849,7 @@ async function getUsdaImportCandidates(query: string) {
   if (cached) return cached;
 
   try {
-    const groups = await searchFoodsGrouped(query, [], [], []);
+    const { groups } = await searchFoodsGrouped(query, [], [], []);
     const foods = new Map<number, Food>();
     for (const group of Array.isArray(groups) ? groups : []) {
       if (group.label !== "Packaged") continue;

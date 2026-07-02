@@ -794,7 +794,7 @@ export function useImportFlow({
 
     setIsImportReviewManualSearching(true);
     try {
-      setImportReviewManualGroups(await searchFoodsGrouped(query, customFoods, getRecentFoods(selectedDate), recipes));
+      setImportReviewManualGroups((await searchFoodsGrouped(query, customFoods, getRecentFoods(selectedDate), recipes)).groups);
     } catch (error) {
       appendDebugLog("import-review-manual-search-failed", {
         query,
