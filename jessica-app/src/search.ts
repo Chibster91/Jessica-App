@@ -112,7 +112,7 @@ export function matchesFoodQuery(food: Food, query: string) {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) return true;
 
-  return `${food.name} ${food.brand ?? ""}`.toLowerCase().includes(normalizedQuery);
+  return `${food.name} ${food.brand ?? ""} ${food.brandName ?? ""}`.toLowerCase().includes(normalizedQuery);
 }
 
 export function normalizeSearchText(value: string) {
@@ -121,6 +121,27 @@ export function normalizeSearchText(value: string) {
 
 export function getSearchTokens(value: string) {
   return normalizeSearchText(value).split(/\s+/).filter(Boolean);
+}
+
+/** Whether two normalized words match, tolerating a simple singular/plural difference
+ * ("egg" ↔ "eggs", "tomato" ↔ "tomatoes"). */
+function wordsMatchLoosely(a: string, b: string) {
+  if (a === b) return true;
+  if (a === `${b}s` || b === `${a}s`) return true;
+  if (a === `${b}es` || b === `${a}es`) return true;
+  return false;
+}
+
+/** Whether `word` appears in `text` as a whole word (not a substring — "ice" must not
+ * match "juice"), with singular/plural tolerance. `text` must already be normalized. */
+export function hasWholeWord(text: string, word: string) {
+  return text.split(/\s+/).some((textWord) => wordsMatchLoosely(textWord, word));
+}
+
+/** Whether `phrase` appears in `text` on word boundaries ("ice cream" matches
+ * "ice cream, vanilla" but "rice" does not match "price"). Both must be normalized. */
+export function hasWholePhrase(text: string, phrase: string) {
+  return phrase !== "" && new RegExp(`\\b${phrase}\\b`).test(text);
 }
 
 export function getSearchSynonyms(query: string) {
@@ -183,10 +204,11 @@ export function getFoodSearchScore(food: Food, query: string) {
 
   const compactName = nameForMatching.replace(/\s+/g, "");
   const compactQuery = queryText.replace(/\s+/g, "");
-  const matchedNameWords = queryWords.filter((word) => nameForMatching.includes(word));
-  const matchedSearchWords = queryWords.filter((word) => searchableText.includes(word));
+  // Whole-word matching so "ice" can't collect bonuses from "juice"/"sliced".
+  const matchedNameWords = queryWords.filter((word) => hasWholeWord(nameForMatching, word));
+  const matchedSearchWords = queryWords.filter((word) => hasWholeWord(searchableText, word));
   const synonymMatches = getSearchSynonyms(query).filter(
-    (synonym) => nameText.includes(synonym) || brandText.includes(synonym)
+    (synonym) => hasWholePhrase(nameText, synonym) || hasWholePhrase(brandText, synonym)
   );
   let score = 0;
   
@@ -199,15 +221,17 @@ export function getFoodSearchScore(food: Food, query: string) {
   // products for the same query — the client re-rank would otherwise flatten the worker's tier
   // order, letting a brand named after a staple ("Milk") outrank the real whole food.
   if (isWholeFoodData && allQueryWordsInName) score += 90;
-  if (searchableText.includes(queryText)) score += 130;
+  if (hasWholePhrase(searchableText, queryText)) score += 130;
   if (matchedSearchWords.length === queryWords.length) score += 95;
-  if (nameForMatching.includes(queryText) || compactName.includes(compactQuery)) score += 100;
+  // Compact matching handles squished brand spellings ("cheez it" → "CHEEZ-IT"); multi-word
+  // queries only, so a short single word can't substring-match inside a longer one.
+  if (hasWholePhrase(nameForMatching, queryText) || (queryWords.length > 1 && compactName.includes(compactQuery))) score += 100;
   if (synonymMatches.length > 0) score += 95 + synonymMatches.length * 8;
   if (matchedNameWords.length === queryWords.length) score += 70;
   if (nameForMatching.startsWith(queryText)) score += 50;
   // Only boost for brand when the full query is in the brand name (user searched for a brand),
   // not for incidental single-word overlap between brand and query.
-  if (brandText.includes(queryText)) score += 45;
+  if (hasWholePhrase(brandText, queryText)) score += 45;
   if (brandText && getSearchTokens(brandText).every((word) => queryWords.includes(word))) score += 40;
   score += matchedSearchWords.length * 16;
   score += matchedNameWords.length * 12;
@@ -462,12 +486,23 @@ export function asFoodArray(value: unknown): Food[] {
   return [];
 }
 
+// Session cache of USDA search results, so repeating a search is instant.
+// Only successful lookups are cached; failures always retry.
+const usdaSearchCache = new Map<string, Food[]>();
+
 export async function fetchUsdaFoods(query: string): Promise<Food[]> {
+  const cacheKey = normalizeSearchText(query);
+  const cached = usdaSearchCache.get(cacheKey);
+  if (cached) return cached;
+
   const res = await fetch(
     `${WORKER_BASE_URL}/?query=${encodeURIComponent(query)}`
   );
+  if (!res.ok) throw new Error("USDA search failed.");
 
-  return asFoodArray(await res.json());
+  const foods = asFoodArray(await res.json());
+  usdaSearchCache.set(cacheKey, foods);
+  return foods;
 }
 
 export async function fetchUsdaFoodDetail(foodId: number): Promise<FoodDetail> {
@@ -505,6 +540,17 @@ export async function importRecipeFromUrl(url: string): Promise<ImportedRecipe> 
   return (await res.json()) as ImportedRecipe;
 }
 
+/** Fetch USDA results for a query plus its brand synonyms, in parallel. Individual request
+ * failures are tolerated; `failed` is true only when every request failed. */
+async function fetchUsdaResultSets(query: string): Promise<{ resultSets: Food[][]; failed: boolean }> {
+  const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
+  const settled = await Promise.allSettled(searchQueries.map(fetchUsdaFoods));
+  const resultSets = settled
+    .filter((r): r is PromiseFulfilledResult<Food[]> => r.status === "fulfilled")
+    .map((r) => r.value);
+  return { resultSets, failed: resultSets.length === 0 };
+}
+
 export async function searchUsdaFoodsWithSynonyms(query: string) {
   const localResults = await searchLocalFoods(query);
 
@@ -520,8 +566,7 @@ export async function searchUsdaFoodsWithSynonyms(query: string) {
   }
 
   // Fall through to USDA for packaged/branded foods
-  const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
-  const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
+  const { resultSets } = await fetchUsdaResultSets(query);
 
   for (const foods of resultSets) {
     if (!Array.isArray(foods)) continue;
@@ -548,9 +593,18 @@ export type SearchResultGroup = {
   foods: Food[];
 };
 
+export type SearchFoodsResult = {
+  groups: SearchResultGroup[];
+  /** True when USDA was attempted and every request failed (network/worker error). */
+  usdaError: boolean;
+  /** Why USDA wasn't queried, when it wasn't: toggle off, or a local-DB hit short-circuited it. */
+  usdaSkipped: "disabled" | "local-hit" | null;
+};
+
 /**
  * Returns search results split into labelled groups:
- * "My Foods" (custom foods + recent), "Whole Foods" (local DB), "Packaged" (USDA).
+ * "My Foods" (custom foods + recent), "Whole Foods" (local DB), "Packaged" (USDA),
+ * plus flags describing whether/why the USDA lookup was skipped or failed.
  * Groups with no results are omitted.
  */
 
@@ -560,9 +614,9 @@ export async function searchFoodsGrouped(
   recentFoods: Food[] = [],
   recipes: Recipe[] = [],
   usdaEnabled = true
-): Promise<SearchResultGroup[]> {
+): Promise<SearchFoodsResult> {
   const q = query.trim().toLowerCase();
-  if (!q) return [];
+  if (!q) return { groups: [], usdaError: false, usdaSkipped: null };
   const safeCustomFoods = Array.isArray(customFoods) ? customFoods : [];
   const safeRecentFoods = Array.isArray(recentFoods) ? recentFoods : [];
   const safeRecipes = Array.isArray(recipes) ? recipes : [];
@@ -583,12 +637,14 @@ export async function searchFoodsGrouped(
   const localResults = await searchLocalFoods(query);
 
   // USDA packaged foods — only when enabled AND the local DB had no match.
-  // A local hit short-circuits the network call entirely (predictable + offline-friendly);
-  // the user flips the toggle off to force USDA when they know local is missing something.
+  // A local hit short-circuits the network call entirely (predictable + offline-friendly).
   let usdaResults: Food[] = [];
-  if (usdaEnabled && localResults.length === 0) {
-    const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
-    const resultSets = await Promise.all(searchQueries.map(fetchUsdaFoods));
+  let usdaError = false;
+  const usdaSkipped: SearchFoodsResult["usdaSkipped"] =
+    !usdaEnabled ? "disabled" : localResults.length > 0 ? "local-hit" : null;
+  if (usdaSkipped === null) {
+    const { resultSets, failed } = await fetchUsdaResultSets(query);
+    usdaError = failed;
     const localIds = new Set(localResults.map(f => f.id));
     const usdaById = new Map<number, Food>();
     for (const foods of resultSets) {
@@ -613,5 +669,5 @@ export async function searchFoodsGrouped(
   if (localResults.length > 0) groups.push({ label: "Whole Foods", foods: localResults });
   if (usdaResults.length > 0) groups.push({ label: "Packaged", foods: usdaResults.slice(0, 15) });
 
-  return groups;
+  return { groups, usdaError, usdaSkipped };
 }

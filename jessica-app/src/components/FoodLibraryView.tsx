@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import "../styles/library.css";
 import {
+  applyTypicalServing,
   createClientId,
   getBrandDisplayName,
   getFoodDisplayName,
@@ -64,6 +65,8 @@ export function FoodLibraryView({
         amountUnit: "serving",
         servingLabel: quantity === 1 ? food.servingSize : `${quantity} x ${food.servingSize}`,
         logId: createClientId(),
+        // The log stores a flat nutrition snapshot; the USDA portion detail stays on the library copy.
+        savedDetail: undefined,
       },
     ]);
   }
@@ -254,20 +257,23 @@ export function FoodLibraryView({
           {foodLibraryTab === "database" && dbFoodsByCategory.map(({ cat, foods }) => (
             <div key={cat} className="lib-db-group">
               <div className="lib-db-category-header">{cat}</div>
-              {foods.map(food => (
-                <button
-                  className={`lib-foodrow${nutritionPreview?.food.id === food.id ? " selected" : ""}`}
-                  key={food.id} type="button"
-                  onClick={() => setNutritionPreview({ food, quantity: 1 })}
-                >
-                  <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
-                  <span className="lib-foodrow-main">
-                    <span className="lib-foodrow-name">{getFoodDisplayName(food)}</span>
-                    <span className="lib-foodrow-meta">{cat} · {getFoodServingDisplay(food)}</span>
-                  </span>
-                  <span className="lib-foodrow-cal">{food.calories}<small>cal</small></span>
-                </button>
-              ))}
+              {foods.map(food => {
+                const servingFood = applyTypicalServing(food);
+                return (
+                  <button
+                    className={`lib-foodrow${nutritionPreview?.food.id === food.id ? " selected" : ""}`}
+                    key={food.id} type="button"
+                    onClick={() => setNutritionPreview({ food: servingFood, quantity: 1 })}
+                  >
+                    <span className="lib-foodrow-icon"><img src={getFoodIconUrl(food)} alt="" /></span>
+                    <span className="lib-foodrow-main">
+                      <span className="lib-foodrow-name">{getFoodDisplayName(food)}</span>
+                      <span className="lib-foodrow-meta">{cat} · {getFoodServingDisplay(servingFood)}</span>
+                    </span>
+                    <span className="lib-foodrow-cal">{servingFood.calories}<small>cal</small></span>
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>
@@ -547,7 +553,10 @@ export function FoodLibraryView({
       )}
 
       {nutritionPreview && (() => {
-        const isRecipePreview = "ingredients" in nutritionPreview.food;
+        // A real recipe has an ingredients array; branded USDA foods carry an
+        // `ingredients` *string* (the label's ingredient list), so test the type,
+        // not just the key's presence.
+        const isRecipePreview = Array.isArray((nutritionPreview.food as Recipe).ingredients);
         return (
           <NutritionSheet
             key={nutritionPreview.food.id}

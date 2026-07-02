@@ -145,6 +145,7 @@ export type NutritionAction = {
   label: string;
   onClick: () => void;
   danger?: boolean;
+  disabled?: boolean;
 };
 
 type NutritionSheetProps = {
@@ -226,6 +227,7 @@ export function NutritionSheet({
                         type="button"
                         className={action.danger ? "kit-btn kit-btn--danger" : "kit-btn kit-btn--secondary"}
                         onClick={action.onClick}
+                        disabled={action.disabled}
                       >
                         {action.label}
                       </button>
@@ -256,6 +258,17 @@ export function NutritionSheet({
               <button className="kit-btn kit-btn--primary" onClick={handleAction} disabled={disableAdd}>
                 {logged ? "Save changes" : `Add to ${meal ?? "log"}`}
               </button>
+              {actions?.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  className={action.danger ? "kit-btn kit-btn--danger" : "kit-btn kit-btn--secondary"}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                >
+                  {action.label}
+                </button>
+              ))}
               {logged && onRemove && (
                 <button className="kit-remove-link" onClick={() => setConfirming(true)}>
                   Remove from log

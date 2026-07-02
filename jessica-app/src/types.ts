@@ -24,6 +24,9 @@ export type Food = {
   portionLabel?: string;
   portionScale?: number;
   servingLabel?: string;
+  /** Trimmed USDA detail (portions, label serving, calorie basis) kept on foods saved
+   * from USDA search so portion options keep working offline without a re-fetch. */
+  savedDetail?: FoodDetail;
 };
 
 export type RecipeIngredient = {

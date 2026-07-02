@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useMemo,
   useState,
   type CSSProperties,
@@ -201,7 +202,8 @@ export function LogView(props: LogViewProps) {
   }
   const {
     customFoodScanInputRef, openAddFood, closeAddFood, pendingCategory, activeAddFoodTab, setActiveAddFoodTab,
-    modalQuery, setModalQuery, searchModalFood, modalFoods, selectedFood, setSelectedFood, selectedFoodDetail,
+    modalQuery, setModalQuery, searchModalFood, modalFoodGroups, isSearchingFoods, searchError, searchedQuery,
+    usdaSkipped, selectedFood, setSelectedFood, selectedFoodDetail,
     selectedPortion, isLoadingDetail, selectFood, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm,
     isCustomFormOpen, setIsCustomFormOpen, isBarcodeScanOpen, openBarcodeScan, closeBarcodeScan, saveScannedBarcodeFood,
     isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError,
@@ -214,7 +216,7 @@ export function LogView(props: LogViewProps) {
     filteredRecipes, quantity, addSelectedFood,
     amountUnit, changeAmountUnit, allowedAmountUnits, portionOptions, selectedPortionValue, setSelectedPortionValue,
     portionAmount, setPortionAmount, previewFoodServing, canAddSelectedFood,
-    usdaEnabled, toggleUsda,
+    usdaEnabled, toggleUsda, selectedFoodLibraryState, saveSelectedFoodToLibrary,
   } = useAddFoodModal({ selectedDate, log, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods });
   const sortedRecentFoods = [...recentFoods].sort((a, b) => {
     const dateCompare = String(b.lastLoggedDate ?? "").localeCompare(String(a.lastLoggedDate ?? ""));
@@ -685,47 +687,66 @@ export function LogView(props: LogViewProps) {
 
             {activeAddFoodTab === "search" && (
               <div className="modal-results add-food-results">
-                  {modalFoods.length === 0 && (
-                    <p className="empty-meal">Search for foods from USDA, local foods, custom foods, recipes, and recent logs.</p>
+                  {isSearchingFoods && (
+                    <p className="empty-meal">Searching&hellip;</p>
                   )}
-                  {modalFoods.map((food) => {
-                    const resultDisplay = getModalResultCalories(
-                      food,
-                      selectedFood,
-                      selectedFoodDetail,
-                      selectedPortion,
-                      isLoadingDetail
-                    );
-                    const calorieDisplay = getFoodSearchCalorieDisplay(
-                      food,
-                      resultDisplay.calories,
-                      resultDisplay.servingSize
-                    );
-                    return (
-                      <button
-                        className={`food-card ${selectedFood?.id === food.id ? "selected" : ""}`}
-                        key={food.id}
-                        onClick={() => selectFood(food)}
-                      >
-                        <span className="food-card-title">
-                          <img src={getFoodIconUrl(food)} alt="" />
-                          <strong>{getFoodDisplayName(food)}</strong>
-                        </span>
-                        <span className="food-card-meta-row">
-                          <span className="food-card-brand">
-                            {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
-                          </span>
-                          <span className="food-card-cal">
-                            {resultDisplay.isLoading
-                              ? "Loading..."
-                              : food.isSearchPreview && selectedFood?.id !== food.id
-                                ? resultDisplay.servingSize
-                                : `${calorieDisplay.calories} cal per ${calorieDisplay.serving}`}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                  {!isSearchingFoods && searchError && (
+                    <p className="empty-meal search-error">{searchError}</p>
+                  )}
+                  {!isSearchingFoods && !searchError && modalFoodGroups.length === 0 && (
+                    searchedQuery
+                      ? <p className="empty-meal">No results for &ldquo;{searchedQuery}&rdquo;.</p>
+                      : <p className="empty-meal">Search for foods from USDA, local foods, custom foods, recipes, and recent logs.</p>
+                  )}
+                  {!isSearchingFoods && modalFoodGroups.map((group) => (
+                    <Fragment key={group.label}>
+                      <p className="food-group-label">{group.label}</p>
+                      {group.foods.map((food) => {
+                        const resultDisplay = getModalResultCalories(
+                          food,
+                          selectedFood,
+                          selectedFoodDetail,
+                          selectedPortion,
+                          isLoadingDetail
+                        );
+                        const calorieDisplay = getFoodSearchCalorieDisplay(
+                          food,
+                          resultDisplay.calories,
+                          resultDisplay.servingSize
+                        );
+                        return (
+                          <button
+                            className={`food-card ${selectedFood?.id === food.id ? "selected" : ""}`}
+                            key={`${group.label}-${food.id}`}
+                            onClick={() => selectFood(food)}
+                          >
+                            <span className="food-card-title">
+                              <img src={getFoodIconUrl(food)} alt="" />
+                              <strong>{getFoodDisplayName(food)}</strong>
+                            </span>
+                            <span className="food-card-meta-row">
+                              <span className="food-card-brand">
+                                {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
+                              </span>
+                              <span className="food-card-cal">
+                                {resultDisplay.isLoading
+                                  ? "Loading..."
+                                  : food.isSearchPreview && selectedFood?.id !== food.id && resultDisplay.calories === 0
+                                    ? resultDisplay.servingSize
+                                    : `${calorieDisplay.calories} cal per ${calorieDisplay.serving}`}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </Fragment>
+                  ))}
+                  {!isSearchingFoods && searchedQuery && usdaSkipped === "local-hit" && (
+                    <p className="add-food-usda-hint">USDA search skipped &mdash; found matches in built-in foods.</p>
+                  )}
+                  {!isSearchingFoods && searchedQuery && usdaSkipped === "disabled" && (
+                    <p className="add-food-usda-hint">USDA search is off &mdash; turn it on above to include packaged foods.</p>
+                  )}
               </div>
             )}
 
@@ -1208,6 +1229,13 @@ export function LogView(props: LogViewProps) {
             meal={pendingCategory}
             mode="add"
             initialQuantity={quantity}
+            actions={
+              selectedFoodLibraryState === "saveable"
+                ? [{ label: "☆ Save to My Foods", onClick: saveSelectedFoodToLibrary }]
+                : selectedFoodLibraryState === "saved"
+                  ? [{ label: "✓ In My Foods", onClick: () => {}, disabled: true }]
+                  : undefined
+            }
             unitPicker={{
               amountUnit,
               allowedAmountUnits,

@@ -62,13 +62,16 @@ export function getFoodServingDisplay(
 }
 
 export function getFoodSearchServingDisplay(
-  food: Pick<Food, "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "servingLabel">,
+  food: Pick<Food, "name" | "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "servingLabel">,
   servingSize = food.servingSize
 ) {
   const explicitDisplay = getFoodServingDisplay({ ...food, servingSize });
   const normalizedServing = servingSize.trim().toLowerCase().replace(/\s+/g, "");
 
   if (explicitDisplay !== servingSize && explicitDisplay !== "100g") return explicitDisplay;
+
+  const typical = getSearchTypicalServing({ ...food, servingSize });
+  if (typical) return formatTypicalServingDisplay(typical);
 
   if (food.dataType === "local" && normalizedServing === "100g") {
     switch (food.measurementType) {
@@ -97,6 +100,11 @@ export function getFoodSearchCalorieDisplay(
 
   if (food.portionScale !== undefined && Number.isFinite(food.portionScale)) {
     return { calories: Math.round(food.calories * food.portionScale), serving };
+  }
+
+  const typical = getSearchTypicalServing({ ...food, servingSize });
+  if (typical && serving === formatTypicalServingDisplay(typical)) {
+    return { calories: Math.round((calories * typical.gramWeight) / 100), serving };
   }
 
   if (amountUnit && amountUnit !== "serving") {
@@ -327,6 +335,30 @@ export function getLabelCaloriesPerServing(detail: FoodDetail | null) {
     : null;
 }
 
+/** Trim a USDA FoodDetail down to what portion/calorie math needs, so it can be
+ * stored on a saved food in localStorage. Keeps serving/label/portion data and a
+ * single synthetic Energy entry; drops the full micronutrient list. */
+export function toStorableFoodDetail(detail: FoodDetail): FoodDetail {
+  const energyPer100 = getEnergyCaloriesPer100Units(detail);
+
+  return {
+    id: detail.id,
+    name: detail.name,
+    brand: detail.brand ?? null,
+    category: detail.category ?? null,
+    dataType: detail.dataType ?? null,
+    servingSize: detail.servingSize ?? null,
+    servingSizeValue: detail.servingSizeValue ?? null,
+    servingSizeUnit: detail.servingSizeUnit ?? null,
+    householdServingFullText: detail.householdServingFullText ?? null,
+    labelNutrients: detail.labelNutrients ?? null,
+    nutrients: detail.nutrients,
+    foodPortions: detail.foodPortions ?? [],
+    foodNutrients:
+      energyPer100 !== null ? [{ nutrientName: "Energy", unitName: "kcal", amount: energyPer100 }] : [],
+  };
+}
+
 export function parseServingSize(value: string | number | null | undefined, fallbackUnit = "") {
   if (typeof value === "number" && Number.isFinite(value)) {
     return {
@@ -425,6 +457,447 @@ export function getFoodDensity(food: Pick<Food, "name">): number {
     new RegExp(`\\b${escapeRegExp(keyword)}\\b`).test(name)
   );
   return match?.[1] ?? defaultFoodDensity;
+}
+
+// Typical household servings for foods whose only serving is "100 g" (the local DB and
+// USDA generic entries), so lists can read "per medium apple (182g)" instead of "per 100 g".
+// Gram weights are FNDDS/label-style approximations for at-a-glance display; the portion
+// picker in the add flow remains the precise path. First matching rule wins, so specific
+// rules must come before the general ones they overlap ("sweet potato" before "potato",
+// "bun" before "hot dog", fish canned in oil before "oil"). Keywords match whole words,
+// tolerating plain plurals ("carrot" ~ "carrots", "cherry" ~ "cherries").
+export const typicalServingRules: [keyword: string, gramWeight: number, label: string][] = [
+  // Compound names and overrides that must beat a broader rule below
+  ["soup", 245, "1 cup"],
+  ["broth", 240, "1 cup"],
+  ["stock", 240, "1 cup"],
+  ["mushroom", 70, "1 cup sliced"],
+  ["lemon juice", 15, "1 tbsp"],
+  ["lime juice", 15, "1 tbsp"],
+  ["juice", 240, "1 cup"],
+  ["smoothie", 240, "1 cup"],
+  ["shake", 245, "1 cup"],
+  ["espresso", 30, "1 shot"],
+  ["lemonade", 240, "1 cup"],
+  ["kombucha", 240, "1 cup"],
+  ["kefir", 243, "1 cup"],
+  ["buttermilk", 245, "1 cup"],
+  ["coconut water", 240, "1 cup"],
+  ["sparkling water", 355, "12 oz can"],
+  ["seltzer", 355, "12 oz can"],
+  ["gatorade", 355, "12 oz bottle"],
+  ["energy drink", 250, "1 can"],
+  ["vodka", 42, "1 shot"],
+  ["whiskey", 42, "1 shot"],
+  ["tequila", 42, "1 shot"],
+  ["rum", 42, "1 shot"],
+  ["gin", 42, "1 shot"],
+  ["baking soda", 5, "1 tsp"],
+  ["baking powder", 4, "1 tsp"],
+  ["cocoa", 5, "1 tbsp"],
+  ["coconut sugar", 4, "1 tsp"],
+  ["cornstarch", 8, "1 tbsp"],
+  ["cream of tartar", 3, "1 tsp"],
+  ["yeast", 7, "1 packet"],
+  ["extract", 4, "1 tsp"],
+  ["creamer", 15, "1 tbsp"],
+  ["coffee", 240, "1 cup"],
+  ["tea", 240, "1 cup"],
+  ["vinaigrette", 30, "2 tbsp"],
+  ["vinegar", 15, "1 tbsp"],
+  ["beer", 356, "12 oz can"],
+  ["wine", 147, "5 oz glass"],
+  ["soda", 368, "12 oz can"],
+  ["cola", 368, "12 oz can"],
+  ["chocolate milk", 250, "1 cup"],
+  ["coconut milk", 80, "1/3 cup"],
+  ["milk chocolate", 42, "1 bar"],
+  ["condensed milk", 39, "2 tbsp"],
+  ["evaporated milk", 32, "2 tbsp"],
+  ["protein powder", 31, "1 scoop"],
+  ["powder", 3, "1 tsp"],
+  ["seasoning", 3, "1 tsp"],
+  ["protein bar", 50, "1 bar"],
+  ["trail mix", 38, "1/4 cup"],
+  ["gummy", 40, "1 small bag"],
+  ["pickle", 35, "1 spear"],
+  ["ricotta", 62, "1/4 cup"],
+  ["mascarpone", 28, "2 tbsp"],
+  ["half-and-half", 30, "2 tbsp"],
+  ["skyr", 170, "1 container"],
+  ["ice cream", 66, "1/2 cup"],
+  ["frozen yogurt", 87, "1/2 cup"],
+  ["sour cream", 30, "2 tbsp"],
+  ["cream cheese", 28, "2 tbsp"],
+  ["cottage cheese", 113, "1/2 cup"],
+  ["mac and cheese", 190, "1 cup prepared"],
+  ["taco sauce", 30, "2 tbsp"],
+  ["aioli", 14, "1 tbsp"],
+  ["meatloaf", 112, "1 slice"],
+  ["pizza", 107, "1 slice"],
+  ["sandwich", 150, "1 sandwich"],
+  ["burrito", 217, "1 burrito"],
+  ["taco", 102, "1 taco"],
+  ["fries", 117, "1 medium serving"],
+  ["hash brown", 72, "1 patty"],
+  ["chip", 28, "1 oz"],
+  ["tortilla", 45, "1 tortilla"],
+  ["flour", 30, "1/4 cup"],
+  ["english muffin", 57, "1 muffin"],
+  ["muffin", 113, "1 muffin"],
+  ["rice cake", 9, "1 cake"],
+  ["granola bar", 24, "1 bar"],
+  ["cookie", 30, "2 cookies"],
+  ["brownie", 40, "1 brownie"],
+  ["donut", 60, "1 donut"],
+  ["doughnut", 60, "1 doughnut"],
+  ["cake", 80, "1 slice"],
+  ["pie", 125, "1 slice"],
+  ["banana bread", 60, "1 slice"],
+  ["french toast", 65, "1 slice"],
+  ["bun", 46, "1 bun"],
+  ["noodle", 160, "1 cup cooked"],
+  ["pretzel", 28, "1 oz"],
+  ["popcorn", 24, "3 cups popped"],
+  ["cereal", 30, "1 cup"],
+  ["egg white", 33, "1 large white"],
+  ["egg yolk", 17, "1 yolk"],
+  ["green bean", 125, "1 cup"],
+  ["bean sprout", 52, "1/2 cup"],
+  ["sweet potato", 130, "1 medium"],
+  ["bell pepper", 119, "1 medium pepper"],
+  ["jalapeno", 14, "1 pepper"],
+  ["dried apricot", 35, "5 dried apricots"],
+  ["cranberries, dried", 40, "1/4 cup"],
+  ["figs, dried", 28, "1/4 cup"],
+  ["sun-dried tomato", 27, "1/4 cup"],
+  ["canned tomato", 121, "1/2 cup"],
+  ["tomato paste", 16, "1 tbsp"],
+  ["applesauce", 122, "1/2 cup"],
+  ["guacamole", 30, "2 tbsp"],
+  ["hummus", 30, "2 tbsp"],
+  ["peanut butter", 32, "2 tbsp"],
+  ["almond butter", 32, "2 tbsp"],
+  ["chia", 24, "2 tbsp"],
+  ["flax", 10, "1 tbsp"],
+  ["flaxseed", 10, "1 tbsp"],
+  // Sauces and condiments
+  ["tomato sauce", 122, "1/2 cup"],
+  ["marinara", 125, "1/2 cup"],
+  ["alfredo", 62, "1/4 cup"],
+  ["pesto", 16, "1 tbsp"],
+  ["salsa", 36, "2 tbsp"],
+  ["pico de gallo", 36, "2 tbsp"],
+  ["sriracha", 5, "1 tsp"],
+  ["tamari", 16, "1 tbsp"],
+  ["aminos", 5, "1 tsp"],
+  ["tzatziki", 30, "2 tbsp"],
+  ["chimichurri", 15, "1 tbsp"],
+  ["miracle whip", 15, "1 tbsp"],
+  ["tahini", 15, "1 tbsp"],
+  ["miso", 17, "1 tbsp"],
+  ["molasses", 20, "1 tbsp"],
+  ["agave", 21, "1 tbsp"],
+  ["soy sauce", 16, "1 tbsp"],
+  ["hot sauce", 5, "1 tsp"],
+  ["bbq sauce", 36, "2 tbsp"],
+  ["barbecue sauce", 36, "2 tbsp"],
+  ["teriyaki", 18, "1 tbsp"],
+  ["mustard", 5, "1 tsp"],
+  ["ketchup", 17, "1 tbsp"],
+  ["mayonnaise", 13, "1 tbsp"],
+  ["mayo", 13, "1 tbsp"],
+  ["relish", 15, "1 tbsp"],
+  ["dressing", 30, "2 tbsp"],
+  ["gravy", 57, "1/4 cup"],
+  ["syrup", 20, "1 tbsp"],
+  ["honey", 21, "1 tbsp"],
+  ["jam", 20, "1 tbsp"],
+  ["jelly", 20, "1 tbsp"],
+  ["sauce", 30, "2 tbsp"],
+  // Seafood and meat (fish before "oil" so "canned in oil" doesn't read as oil)
+  ["sardine", 92, "1 can drained"],
+  ["anchovy", 20, "5 fillets"],
+  ["tuna", 85, "3 oz"],
+  ["salmon", 113, "4 oz"],
+  ["cod", 90, "1 fillet"],
+  ["tilapia", 87, "1 fillet"],
+  ["halibut", 85, "3 oz"],
+  ["trout", 85, "3 oz"],
+  ["mahi", 85, "3 oz"],
+  ["catfish", 85, "3 oz"],
+  ["herring", 85, "3 oz"],
+  ["shrimp", 85, "3 oz"],
+  ["scallop", 85, "3 oz"],
+  ["crab", 85, "3 oz"],
+  ["lobster", 85, "3 oz"],
+  ["clam", 85, "3 oz"],
+  ["oyster", 85, "3 oz"],
+  ["mussel", 85, "3 oz"],
+  ["chicken breast", 172, "1 breast"],
+  ["chicken thigh", 111, "1 thigh"],
+  ["chicken drumstick", 72, "1 drumstick"],
+  ["chicken wing", 34, "1 wing"],
+  ["chicken", 85, "3 oz"],
+  ["turkey breast", 85, "3 oz"],
+  ["deli", 56, "2 oz"],
+  ["bacon", 12, "1 slice"],
+  ["ham", 85, "3 oz"],
+  ["hot dog", 45, "1 hot dog"],
+  ["sausage", 68, "1 link"],
+  ["bratwurst", 85, "1 link"],
+  ["kielbasa", 85, "3 oz"],
+  ["salami", 28, "1 oz"],
+  ["pepperoni", 28, "1 oz"],
+  ["bologna", 28, "1 slice"],
+  ["prosciutto", 28, "1 oz"],
+  ["spam", 56, "2 oz"],
+  ["jerky", 28, "1 oz"],
+  ["ground beef", 85, "3 oz"],
+  ["steak", 85, "3 oz"],
+  ["beef", 85, "3 oz"],
+  ["pork rind", 14, "1/2 oz"],
+  ["pork chop", 137, "1 chop"],
+  ["pork", 85, "3 oz"],
+  ["lamb", 85, "3 oz"],
+  ["turkey", 85, "3 oz"],
+  ["bison", 85, "3 oz"],
+  ["venison", 85, "3 oz"],
+  ["duck", 85, "3 oz"],
+  ["rabbit", 85, "3 oz"],
+  ["veal", 85, "3 oz"],
+  ["tofu", 85, "3 oz"],
+  ["tempeh", 84, "3 oz"],
+  ["seitan", 85, "3 oz"],
+  ["natto", 88, "1/2 cup"],
+  ["egg", 50, "1 large egg"],
+  // Oils (after meats, before produce so "olive oil" and "avocado oil" stay a tbsp)
+  ["oil", 14, "1 tbsp"],
+  // Vegetables and fruits
+  ["avocado", 75, "1/2 medium"],
+  ["olive", 15, "5 olives"],
+  ["broccoli", 91, "1 cup chopped"],
+  ["carrot", 61, "1 medium carrot"],
+  ["scallion", 15, "1 scallion"],
+  ["onion", 110, "1 medium onion"],
+  ["garlic", 3, "1 clove"],
+  ["spinach", 30, "1 cup raw"],
+  ["lettuce", 55, "1 cup shredded"],
+  ["kale", 21, "1 cup"],
+  ["arugula", 20, "1 cup"],
+  ["cucumber", 104, "1 cup sliced"],
+  ["zucchini", 124, "1 cup sliced"],
+  ["butternut squash", 205, "1 cup cubed"],
+  ["squash", 130, "1 cup sliced"],
+  ["pumpkin seed", 28, "1 oz"],
+  ["pumpkin", 245, "1 cup"],
+  ["potato", 173, "1 medium potato"],
+  ["black-eyed pea", 86, "1/2 cup cooked"],
+  ["split pea", 98, "1/2 cup cooked"],
+  ["pea", 145, "1 cup"],
+  ["corn", 154, "1 cup"],
+  ["cabbage", 89, "1 cup shredded"],
+  ["cauliflower", 107, "1 cup"],
+  ["brussels sprout", 88, "1 cup"],
+  ["asparagus", 90, "6 spears"],
+  ["celery", 40, "1 stalk"],
+  ["radish", 116, "1 cup sliced"],
+  ["beet", 136, "1 cup"],
+  ["eggplant", 82, "1 cup cubed"],
+  ["turnip", 130, "1 cup cubed"],
+  ["leek", 89, "1 leek"],
+  ["shallot", 40, "1 shallot"],
+  ["bok choy", 70, "1 cup"],
+  ["chard", 36, "1 cup"],
+  ["collard", 36, "1 cup"],
+  ["okra", 100, "1 cup"],
+  ["artichoke heart", 84, "1/2 cup"],
+  ["artichoke", 120, "1 medium"],
+  ["fennel", 87, "1 cup sliced"],
+  ["parsnip", 133, "1 cup sliced"],
+  ["rutabaga", 140, "1 cup cubed"],
+  ["watercress", 34, "1 cup"],
+  ["endive", 50, "1 cup"],
+  ["sauerkraut", 71, "1/2 cup"],
+  ["kimchi", 75, "1/2 cup"],
+  ["roasted red pepper", 38, "1/4 cup"],
+  ["plantain", 137, "1 cup sliced"],
+  ["cassava", 103, "1/2 cup"],
+  ["yam", 136, "1 cup cubed"],
+  ["tomato", 123, "1 medium tomato"],
+  ["apple", 182, "1 medium apple"],
+  ["banana", 118, "1 medium banana"],
+  ["orange", 131, "1 medium orange"],
+  ["strawberry", 152, "1 cup"],
+  ["blueberry", 148, "1 cup"],
+  ["raspberry", 123, "1 cup"],
+  ["blackberry", 144, "1 cup"],
+  ["cherry", 138, "1 cup"],
+  ["berry", 140, "1 cup"],
+  ["grapefruit", 123, "1/2 grapefruit"],
+  ["grape", 151, "1 cup"],
+  ["watermelon", 152, "1 cup diced"],
+  ["cantaloupe", 156, "1 cup"],
+  ["honeydew", 170, "1 cup"],
+  ["pineapple", 165, "1 cup chunks"],
+  ["mango", 165, "1 cup"],
+  ["peach", 150, "1 medium peach"],
+  ["nectarine", 142, "1 medium"],
+  ["pear", 178, "1 medium pear"],
+  ["plum", 66, "1 plum"],
+  ["kiwi", 69, "1 kiwi"],
+  ["pomegranate", 87, "1/2 cup arils"],
+  ["papaya", 145, "1 cup"],
+  ["guava", 55, "1 guava"],
+  ["passionfruit", 18, "1 fruit"],
+  ["dragon fruit", 100, "1/2 fruit"],
+  ["persimmon", 168, "1 fruit"],
+  ["cranberry", 100, "1 cup"],
+  ["coconut", 28, "1 oz shredded"],
+  ["apricot", 35, "1 apricot"],
+  ["fig", 50, "1 large fig"],
+  ["date", 24, "1 medjool date"],
+  ["raisin", 40, "1/4 cup"],
+  ["prune", 40, "4 prunes"],
+  ["tangerine", 88, "1 medium"],
+  ["clementine", 74, "1 clementine"],
+  ["mandarin", 76, "1 medium"],
+  ["lemon", 58, "1 lemon"],
+  ["lime", 67, "1 lime"],
+  // Beans and legumes (before "butter" so "butter beans" stay beans)
+  ["chickpea", 82, "1/2 cup cooked"],
+  ["lentil", 99, "1/2 cup cooked"],
+  ["edamame", 78, "1/2 cup shelled"],
+  ["soybean", 86, "1/2 cup cooked"],
+  ["bean", 86, "1/2 cup cooked"],
+  // Dairy (milk before the oat/almond rules so "oat milk" stays a cup)
+  ["yogurt", 170, "1 container"],
+  ["milk", 244, "1 cup"],
+  ["parmesan", 5, "1 tbsp grated"],
+  ["cheddar", 28, "1 oz"],
+  ["mozzarella", 28, "1 oz"],
+  ["feta", 28, "1 oz"],
+  ["brie", 28, "1 oz"],
+  ["gouda", 28, "1 oz"],
+  ["provolone", 28, "1 oz"],
+  ["havarti", 28, "1 oz"],
+  ["muenster", 28, "1 oz"],
+  ["colby", 28, "1 oz"],
+  ["monterey jack", 28, "1 oz"],
+  ["camembert", 28, "1 oz"],
+  ["romano", 28, "1 oz"],
+  ["paneer", 28, "1 oz"],
+  ["queso fresco", 28, "1 oz"],
+  ["cheese", 28, "1 oz"],
+  ["ghee", 13, "1 tbsp"],
+  // Grains and bakery
+  ["cracker", 16, "5 crackers"],
+  ["oatmeal", 234, "1 cup cooked"],
+  ["oat", 234, "1 cup cooked"],
+  ["rice", 158, "1 cup cooked"],
+  ["pasta", 140, "1 cup cooked"],
+  ["spaghetti", 140, "1 cup cooked"],
+  ["quinoa", 185, "1 cup cooked"],
+  ["couscous", 157, "1 cup cooked"],
+  ["barley", 157, "1 cup cooked"],
+  ["grits", 242, "1 cup cooked"],
+  ["farro", 170, "1 cup cooked"],
+  ["bulgur", 182, "1 cup cooked"],
+  ["millet", 174, "1 cup cooked"],
+  ["polenta", 240, "1 cup cooked"],
+  ["cornmeal", 240, "1 cup cooked"],
+  ["buckwheat", 168, "1 cup cooked"],
+  ["sorghum", 192, "1 cup cooked"],
+  ["amaranth", 246, "1 cup cooked"],
+  ["pita", 64, "1 pita"],
+  ["bagel", 105, "1 bagel"],
+  ["naan", 90, "1 piece"],
+  ["croissant", 57, "1 croissant"],
+  ["pancake", 38, "1 pancake"],
+  ["waffle", 75, "1 waffle"],
+  ["granola", 50, "1/2 cup"],
+  ["bread", 32, "1 slice"],
+  // Nuts and seeds
+  ["peanut", 28, "1 oz"],
+  ["almond", 28, "1 oz"],
+  ["cashew", 28, "1 oz"],
+  ["walnut", 28, "1 oz"],
+  ["pecan", 28, "1 oz"],
+  ["pistachio", 28, "1 oz"],
+  ["macadamia", 28, "1 oz"],
+  ["hazelnut", 28, "1 oz"],
+  ["nut", 28, "1 oz"],
+  ["seed", 28, "1 oz"],
+  // Sweets, baking, and generic fallbacks
+  ["chocolate", 42, "1 bar"],
+  ["butter", 14, "1 tbsp"],
+  ["cream", 15, "1 tbsp"],
+  ["sugar", 4, "1 tsp"],
+  // Herbs, spices, and a generic "ground" spice fallback (ground meats all match above)
+  ["chicory", 30, "1 cup"],
+  ["paprika", 2, "1 tsp"],
+  ["oregano", 1, "1 tsp"],
+  ["basil", 2, "1 tsp"],
+  ["thyme", 1, "1 tsp"],
+  ["rosemary", 1, "1 tsp"],
+  ["cayenne", 2, "1 tsp"],
+  ["red pepper flake", 2, "1 tsp"],
+  ["garam masala", 2, "1 tsp"],
+  ["salt", 6, "1 tsp"],
+  ["ground", 2, "1 tsp"],
+];
+
+export type TypicalServing = { gramWeight: number; label: string };
+
+function typicalServingPattern(keyword: string) {
+  const escaped = escapeRegExp(keyword);
+  const pattern = escaped.endsWith("y") ? `${escaped.slice(0, -1)}(?:y|ies)` : `${escaped}(?:e?s)?`;
+  return new RegExp(`\\b${pattern}\\b`);
+}
+
+const typicalServingMatchers = typicalServingRules.map(([keyword, gramWeight, label]) => ({
+  pattern: typicalServingPattern(keyword),
+  gramWeight,
+  label,
+}));
+
+export function getTypicalServing(food: Pick<Food, "name">): TypicalServing | null {
+  const name = food.name.toLowerCase();
+  const match = typicalServingMatchers.find(({ pattern, label }) =>
+    // Never pin a "cooked" serving onto a dry/raw entry (dry rice vs cooked rice).
+    !(/\bcooked\b/.test(label) && /\b(?:raw|dry|dried|uncooked)\b/.test(name)) &&
+    pattern.test(name)
+  );
+  return match ? { gramWeight: match.gramWeight, label: match.label } : null;
+}
+
+const typicalServingDataTypes = new Set(["local", "foundation", "sr legacy", "survey (fndds)"]);
+
+/** Typical serving for list rows: only foods whose serving is exactly per-100 g/ml qualify
+ * (the local DB and non-branded USDA entries) — branded foods keep their label serving. */
+export function getSearchTypicalServing(
+  food: Pick<Food, "name" | "dataType" | "servingSize">
+): TypicalServing | null {
+  if (!typicalServingDataTypes.has(food.dataType?.toLowerCase() ?? "")) return null;
+
+  const normalizedServing = food.servingSize.trim().toLowerCase().replace(/\s+/g, "");
+  if (normalizedServing !== "100g" && normalizedServing !== "100ml") return null;
+
+  return getTypicalServing(food);
+}
+
+export function formatTypicalServingDisplay(typical: TypicalServing) {
+  const label = typical.label.replace(/^1 /, "");
+  return `${label} (${formatGramWeight(typical.gramWeight)})`;
+}
+
+/** Rescale a per-100 g food to its typical serving for display/logging; returns the food
+ * unchanged when no typical serving applies. */
+export function applyTypicalServing(food: Food): Food {
+  const typical = getSearchTypicalServing(food);
+  return typical
+    ? scaleFoodNutrition(food, typical.gramWeight / 100, formatTypicalServingDisplay(typical))
+    : food;
 }
 
 export const gramsPerOunce = 28.349523125;
@@ -596,6 +1069,15 @@ export function getModalResultCalories(
 ) {
   if (selectedFood?.id !== food.id) {
     if (food.isSearchPreview) {
+      // Previews now carry estimated nutrition from the search response — show it so
+      // results can be compared at a glance. Zero means the record had no usable estimate.
+      if (food.calories > 0) {
+        return {
+          calories: food.calories,
+          servingSize: food.servingSize,
+          isLoading: false,
+        };
+      }
       return {
         calories: 0,
         servingSize: "select to load nutrition",

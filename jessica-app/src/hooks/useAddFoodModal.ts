@@ -7,6 +7,7 @@ import {
   verifyStorageCount,
   getPortionOptions,
   getPreferredHouseholdPortion,
+  getSearchTypicalServing,
   parseServingSize,
   getMeasuredServingBasis,
   getFoodDensity,
@@ -15,6 +16,7 @@ import {
   hasUsableSearchNutrition,
   getFoodForSelectedPortion,
   getCaloriesPerServing,
+  toStorableFoodDetail,
   getRecentFoods,
   matchesFoodQuery,
   getFoodDisplayName,
@@ -27,6 +29,8 @@ import {
   createClientId,
   searchFoodsGrouped,
   fetchUsdaFoodDetail,
+  type SearchFoodsResult,
+  type SearchResultGroup,
   type AddFoodTab,
   type AmountUnit,
   type CustomFoodForm,
@@ -70,7 +74,8 @@ export function useAddFoodModal({
   const customFoodScanInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingCategory, setPendingCategory] = useState<MealCategory | null>(null);
   const [activeAddFoodTab, setActiveAddFoodTab] = useState<AddFoodTab>("search");
-  const [usdaEnabled, setUsdaEnabled] = useState(() => localStorage.getItem("usdaEnabled") === "1");
+  // Defaults ON: anything other than an explicit "0" (user turned it off) enables USDA.
+  const [usdaEnabled, setUsdaEnabled] = useState(() => localStorage.getItem("usdaEnabled") !== "0");
   function toggleUsda() {
     setUsdaEnabled(prev => {
       const next = !prev;
@@ -79,7 +84,12 @@ export function useAddFoodModal({
     });
   }
   const [modalQuery, setModalQuery] = useState("");
-  const [modalFoods, setModalFoods] = useState<Food[]>([]);
+  const [modalFoodGroups, setModalFoodGroups] = useState<SearchResultGroup[]>([]);
+  const [isSearchingFoods, setIsSearchingFoods] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  // The query of the last completed search — distinguishes "no results" from "not searched yet".
+  const [searchedQuery, setSearchedQuery] = useState("");
+  const [usdaSkipped, setUsdaSkipped] = useState<SearchFoodsResult["usdaSkipped"]>(null);
   const [customQuery, setCustomQuery] = useState("");
   const [isCustomFormOpen, setIsCustomFormOpen] = useState(false);
   const [isBarcodeScanOpen, setIsBarcodeScanOpen] = useState(false);
@@ -120,7 +130,11 @@ export function useAddFoodModal({
     setPendingCategory(category);
     setActiveAddFoodTab("search");
     setModalQuery("");
-    setModalFoods([]);
+    setModalFoodGroups([]);
+    setIsSearchingFoods(false);
+    setSearchError("");
+    setSearchedQuery("");
+    setUsdaSkipped(null);
     setCustomQuery("");
     setIsCustomFormOpen(false);
     setIsBarcodeScanOpen(false);
@@ -165,26 +179,62 @@ export function useAddFoodModal({
   }
 
   async function searchModalFood() {
-    if (!modalQuery.trim()) return;
+    const query = modalQuery.trim();
+    if (!query) return;
 
-    const groups = await searchFoodsGrouped(modalQuery, customFoods, getRecentFoods(selectedDate), recipes, usdaEnabled);
-    const foodsById = new Map<number, Food>();
-    for (const group of groups) {
-      for (const food of group.foods) {
-        if (!foodsById.has(food.id)) foodsById.set(food.id, food);
+    setIsSearchingFoods(true);
+    setSearchError("");
+    try {
+      const result = await searchFoodsGrouped(query, customFoods, getRecentFoods(selectedDate), recipes, usdaEnabled);
+      setModalFoodGroups(result.groups);
+      setUsdaSkipped(result.usdaSkipped);
+      if (result.usdaError) {
+        setSearchError(
+          result.groups.length > 0
+            ? "Couldn't reach the USDA food database — showing other matches."
+            : "Couldn't reach the USDA food database. Check your connection and try again."
+        );
       }
+    } catch {
+      setModalFoodGroups([]);
+      setUsdaSkipped(null);
+      setSearchError("Search failed. Check your connection and try again.");
+    } finally {
+      setSearchedQuery(query);
+      setIsSearchingFoods(false);
     }
-    setModalFoods([...foodsById.values()]);
+  }
+
+  /** Re-applies a saved USDA detail (portions, label serving) to a food picked from
+   * My Foods / recents, mirroring the online detail flow without a network fetch. */
+  function applySavedFoodDetail(food: Food): boolean {
+    const detail = food.savedDetail;
+    if (!detail) return false;
+
+    const detailBasis = getMeasuredServingBasis(food);
+    const preferredPortion = getPreferredHouseholdPortion(detail, food.name);
+    const portions = getPortionOptions(detail, food.name);
+
+    setSelectedFoodDetail(detail);
+    setQuantity("1");
+    setPortionAmount(String(preferredPortion?.gramWeight ?? detailBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
+    setAmountUnit(preferredPortion ? "serving" : detailBasis?.unit ?? "serving");
+    setSelectedPortionValue(preferredPortion?.value ?? portions[0]?.value ?? "");
+    setIsLoadingDetail(false);
+    return true;
   }
 
   async function selectFood(food: Food) {
     const measuredBasis = getMeasuredServingBasis(food);
+    const typicalServing = getSearchTypicalServing(food);
     setSelectedFood(food);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
-    setPortionAmount(String(measuredBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
+    setPortionAmount(String(typicalServing?.gramWeight ?? measuredBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
     setAmountUnit(measuredBasis?.unit ?? "serving");
     setDetailError("");
+
+    if (applySavedFoodDetail(food)) return;
 
     if (!food.isSearchPreview && hasUsableSearchNutrition(food)) {
       setIsLoadingDetail(false);
@@ -214,13 +264,15 @@ export function useAddFoodModal({
 
   function selectLocalFood(food: Food) {
     const measuredBasis = getMeasuredServingBasis(food);
+    const typicalServing = getSearchTypicalServing(food);
     setSelectedFood(food);
     setSelectedFoodDetail(null);
     setSelectedPortionValue("");
-    setPortionAmount(String(measuredBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
+    setPortionAmount(String(typicalServing?.gramWeight ?? measuredBasis?.amount ?? parseServingSize(food.servingSize)?.amount ?? 1));
     setAmountUnit(measuredBasis?.unit ?? "serving");
     setDetailError("");
     setIsLoadingDetail(false);
+    applySavedFoodDetail(food);
   }
 
   function changeAmountUnit(unit: AmountUnit) {
@@ -262,6 +314,34 @@ export function useAddFoodModal({
     setIsBarcodeScanOpen(false);
     setActiveAddFoodTab("custom");
     selectLocalFood(food);
+  }
+
+  // "Save to My Foods" for USDA results: hidden for built-in/custom foods and recipes,
+  // "saved" once the food is already in the custom-foods library.
+  const selectedFoodLibraryState: "hidden" | "saveable" | "saved" =
+    !selectedFood ||
+    selectedFood.isSearchPreview ||
+    isLoadingDetail ||
+    !selectedFood.dataType ||
+    selectedFood.dataType === "local"
+      ? "hidden"
+      : customFoods.some((food) => food.id === selectedFood.id)
+        ? "saved"
+        : "saveable";
+
+  function saveSelectedFoodToLibrary() {
+    if (!selectedFood || selectedFoodLibraryState !== "saveable") return;
+
+    const savedFood: Food = {
+      ...selectedFood,
+      isSearchPreview: false,
+      savedDetail:
+        selectedFood.savedDetail ??
+        (selectedFoodDetail ? toStorableFoodDetail(selectedFoodDetail) : undefined),
+    };
+
+    setCustomFoods([savedFood, ...customFoods]);
+    appendDebugLog("usda-food-saved-to-library", { id: savedFood.id, name: savedFood.name });
   }
 
   function openRecipeForm() {
@@ -473,6 +553,8 @@ export function useAddFoodModal({
       ...selectedFoodServing,
       name: getFoodDisplayName(selectedFoodServing),
       brand: selectedFoodServing.brand ? getBrandDisplayName(selectedFoodServing.brand) : selectedFoodServing.brand,
+      // The log stores a flat nutrition snapshot; the USDA portion detail stays on the library copy.
+      savedDetail: undefined,
     };
     const servingLabel =
       effectiveUnit === "serving"
@@ -600,7 +682,11 @@ export function useAddFoodModal({
     modalQuery,
     setModalQuery,
     searchModalFood,
-    modalFoods,
+    modalFoodGroups,
+    isSearchingFoods,
+    searchError,
+    searchedQuery,
+    usdaSkipped,
     selectedFood,
     setSelectedFood,
     selectedFoodDetail,
@@ -669,5 +755,7 @@ export function useAddFoodModal({
     canAddSelectedFood,
     usdaEnabled,
     toggleUsda,
+    selectedFoodLibraryState,
+    saveSelectedFoodToLibrary,
   };
 }

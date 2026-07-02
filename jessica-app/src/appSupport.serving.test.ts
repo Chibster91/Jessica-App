@@ -3,6 +3,11 @@ import {
   parseServingSize,
   getMeasuredServingBasis,
   getFoodDensity,
+  getTypicalServing,
+  getSearchTypicalServing,
+  getFoodSearchCalorieDisplay,
+  formatTypicalServingDisplay,
+  applyTypicalServing,
   convertAmountToBasisUnit,
   getScaleFromServingBasis,
   parseIngredientAmount,
@@ -11,7 +16,10 @@ import {
   parseDecimalInput,
   getItemCalories,
   getLogCategoryTotals,
+  toStorableFoodDetail,
+  getEnergyCaloriesPer100Units,
   type Food,
+  type FoodDetail,
   type LogItem,
 } from "./appSupport";
 
@@ -226,5 +234,164 @@ describe("ingredientServingsFromAmount", () => {
 
   it("passes serving units through unchanged", () => {
     expect(ingredientServingsFromAmount(butter, 2, "serving")).toBe(2);
+  });
+});
+
+describe("getTypicalServing", () => {
+  it("matches whole words including plain plurals and -ies plurals", () => {
+    expect(getTypicalServing({ name: "Carrots" })).toEqual({ gramWeight: 61, label: "1 medium carrot" });
+    expect(getTypicalServing({ name: "Apples, with skin" })).toEqual({ gramWeight: 182, label: "1 medium apple" });
+    expect(getTypicalServing({ name: "Strawberries" })).toEqual({ gramWeight: 152, label: "1 cup" });
+    expect(getTypicalServing({ name: "Cherries, sweet" })).toEqual({ gramWeight: 138, label: "1 cup" });
+  });
+
+  it("prefers specific rules over the general ones they overlap", () => {
+    expect(getTypicalServing({ name: "Sweet potato, baked with skin" })).toEqual({ gramWeight: 130, label: "1 medium" });
+    expect(getTypicalServing({ name: "Green beans" })).toEqual({ gramWeight: 125, label: "1 cup" });
+    expect(getTypicalServing({ name: "Peanut butter, creamy" })).toEqual({ gramWeight: 32, label: "2 tbsp" });
+    expect(getTypicalServing({ name: "Olive oil" })).toEqual({ gramWeight: 14, label: "1 tbsp" });
+    expect(getTypicalServing({ name: "Hot dog bun" })).toEqual({ gramWeight: 46, label: "1 bun" });
+    expect(getTypicalServing({ name: "Bell pepper, orange" })).toEqual({ gramWeight: 119, label: "1 medium pepper" });
+    expect(getTypicalServing({ name: "Tuna, canned in oil" })).toEqual({ gramWeight: 85, label: "3 oz" });
+  });
+
+  it("does not match keywords inside other words", () => {
+    expect(getTypicalServing({ name: "Pineapple" })).toEqual({ gramWeight: 165, label: "1 cup chunks" });
+    expect(getTypicalServing({ name: "Grapefruit" })).toEqual({ gramWeight: 123, label: "1/2 grapefruit" });
+    expect(getTypicalServing({ name: "Popcorn, air-popped" })).toEqual({ gramWeight: 24, label: "3 cups popped" });
+    expect(getTypicalServing({ name: "Goat cheese" })).toEqual({ gramWeight: 28, label: "1 oz" });
+  });
+
+  it("never pins a cooked serving onto a dry or raw entry", () => {
+    expect(getTypicalServing({ name: "White rice, long-grain, cooked" })).toEqual({ gramWeight: 158, label: "1 cup cooked" });
+    expect(getTypicalServing({ name: "Rice, white, raw" })).toBeNull();
+    expect(getTypicalServing({ name: "Pasta, dry" })).toBeNull();
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(getTypicalServing({ name: "Starfruit" })).toBeNull();
+  });
+});
+
+describe("getSearchTypicalServing", () => {
+  it("applies to per-100g local and USDA generic foods", () => {
+    expect(getSearchTypicalServing({ name: "Apples, with skin", dataType: "local", servingSize: "100 g" }))
+      .toEqual({ gramWeight: 182, label: "1 medium apple" });
+    expect(getSearchTypicalServing({ name: "Broccoli, raw", dataType: "SR Legacy", servingSize: "100 g" }))
+      .toEqual({ gramWeight: 91, label: "1 cup chopped" });
+    expect(getSearchTypicalServing({ name: "Egg, whole, cooked, scrambled", dataType: "Survey (FNDDS)", servingSize: "100 g" }))
+      .toEqual({ gramWeight: 50, label: "1 large egg" });
+  });
+
+  it("leaves branded foods and non-100g servings alone", () => {
+    expect(getSearchTypicalServing({ name: "Cheddar cheese", dataType: "Branded", servingSize: "100 g" })).toBeNull();
+    expect(getSearchTypicalServing({ name: "Cheddar cheese", dataType: "local", servingSize: "28 g" })).toBeNull();
+    expect(getSearchTypicalServing({ name: "Cheddar cheese", servingSize: "100 g" })).toBeNull();
+  });
+});
+
+describe("formatTypicalServingDisplay", () => {
+  it("drops a leading count of 1 and appends the gram weight", () => {
+    expect(formatTypicalServingDisplay({ gramWeight: 182, label: "1 medium apple" })).toBe("medium apple (182g)");
+    expect(formatTypicalServingDisplay({ gramWeight: 86, label: "1/2 cup cooked" })).toBe("1/2 cup cooked (86g)");
+    expect(formatTypicalServingDisplay({ gramWeight: 32, label: "2 tbsp" })).toBe("2 tbsp (32g)");
+  });
+});
+
+describe("getFoodSearchCalorieDisplay with typical servings", () => {
+  it("rescales per-100g generic foods to the typical serving", () => {
+    const apple: Food = {
+      id: 1, name: "Apples, with skin", brand: null, dataType: "local",
+      servingSize: "100 g", calories: 52, protein: 0.3, carbs: 14, fat: 0.2,
+    };
+    expect(getFoodSearchCalorieDisplay(apple)).toEqual({ calories: 95, serving: "medium apple (182g)" });
+  });
+
+  it("keeps branded foods on their label serving", () => {
+    const brandedCheese: Food = {
+      id: 2, name: "Cheddar cheese", brand: "Tillamook", dataType: "Branded",
+      servingSize: "100 g", calories: 403, protein: 23, carbs: 3, fat: 33,
+    };
+    expect(getFoodSearchCalorieDisplay(brandedCheese)).toEqual({ calories: 403, serving: "100 g" });
+  });
+});
+
+describe("applyTypicalServing", () => {
+  it("rescales nutrition and serving size for matching foods", () => {
+    const apple: Food = {
+      id: 1, name: "Apples, with skin", brand: null, dataType: "local",
+      servingSize: "100 g", calories: 52, protein: 0.3, carbs: 14, fat: 0.2, fiber: 2.4, sodium: 1,
+    };
+    const scaled = applyTypicalServing(apple);
+    expect(scaled.servingSize).toBe("medium apple (182g)");
+    expect(scaled.calories).toBe(95);
+    expect(scaled.carbs).toBeCloseTo(25.48, 2);
+    expect(scaled.fiber).toBeCloseTo(4.368, 3);
+  });
+
+  it("returns the food unchanged when no rule applies", () => {
+    const starfruit: Food = {
+      id: 3, name: "Starfruit", brand: null, dataType: "local",
+      servingSize: "100 g", calories: 31, protein: 1, carbs: 7, fat: 0.3,
+    };
+    expect(applyTypicalServing(starfruit)).toBe(starfruit);
+  });
+});
+
+describe("toStorableFoodDetail", () => {
+  const fullDetail: FoodDetail = {
+    id: 173944,
+    name: "Yogurt, Greek, plain, whole milk",
+    brand: null,
+    dataType: "SR Legacy",
+    servingSize: null,
+    householdServingFullText: null,
+    labelNutrients: null,
+    nutrients: { calories: 97, protein: 9, carbs: 3.9, fat: 5, fiber: 0, sodium: 35 },
+    foodPortions: [
+      { id: 1, amount: 1, gramWeight: 245, measureUnit: { name: "cup" } },
+      { id: 2, amount: 1, gramWeight: 170, modifier: "container" },
+    ],
+    foodNutrients: [
+      { nutrientName: "Energy", unitName: "kcal", amount: 97 },
+      { nutrientName: "Protein", unitName: "g", amount: 9 },
+      { nutrientName: "Vitamin B-12", unitName: "ug", amount: 0.75 },
+    ],
+  };
+
+  it("keeps portions, label data, and the nutrients summary", () => {
+    const stored = toStorableFoodDetail(fullDetail);
+    expect(stored.foodPortions).toHaveLength(2);
+    expect(stored.foodPortions?.[0].gramWeight).toBe(245);
+    expect(stored.nutrients?.calories).toBe(97);
+    expect(stored.dataType).toBe("SR Legacy");
+  });
+
+  it("replaces the full nutrient list with a single Energy entry", () => {
+    const stored = toStorableFoodDetail(fullDetail);
+    expect(stored.foodNutrients).toHaveLength(1);
+    expect(stored.foodNutrients?.[0]).toEqual({ nutrientName: "Energy", unitName: "kcal", amount: 97 });
+    // Portion calorie math reads energy per 100 units from the stored detail.
+    expect(getEnergyCaloriesPer100Units(stored)).toBe(97);
+  });
+
+  it("stores an empty nutrient list when the detail has no kcal energy entry", () => {
+    const stored = toStorableFoodDetail({ ...fullDetail, foodNutrients: [] });
+    expect(stored.foodNutrients).toEqual([]);
+  });
+
+  it("keeps branded label serving fields used for calorie-per-serving math", () => {
+    const branded = toStorableFoodDetail({
+      ...fullDetail,
+      dataType: "Branded",
+      servingSize: "32",
+      servingSizeUnit: "g",
+      householdServingFullText: "2 tbsp",
+      labelNutrients: { calories: { value: 190 } },
+    });
+    expect(branded.servingSize).toBe("32");
+    expect(branded.servingSizeUnit).toBe("g");
+    expect(branded.householdServingFullText).toBe("2 tbsp");
+    expect(branded.labelNutrients?.calories?.value).toBe(190);
   });
 });
