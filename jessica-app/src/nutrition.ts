@@ -538,6 +538,29 @@ export const typicalServingRules: [keyword: string, gramWeight: number, label: s
   ["sandwich", 150, "1 sandwich"],
   ["burrito", 217, "1 burrito"],
   ["taco", 102, "1 taco"],
+  // Composite salads: these are multi-ingredient dishes, so they must beat the
+  // single-ingredient rules below (a potato salad is not measured in "medium
+  // potatoes", nor an egg salad in "large eggs"). Kept below "sandwich" so
+  // "chicken salad sandwich" still reads as a sandwich, and specific enough that
+  // "salad dressing" falls through to the dressing rule.
+  ["potato salad", 125, "1/2 cup"],
+  ["macaroni salad", 120, "1/2 cup"],
+  ["pasta salad", 120, "1/2 cup"],
+  ["egg salad", 110, "1/2 cup"],
+  ["tuna salad", 102, "1/2 cup"],
+  ["chicken salad", 120, "1/2 cup"],
+  ["ham salad", 110, "1/2 cup"],
+  ["seafood salad", 115, "1/2 cup"],
+  ["crab salad", 115, "1/2 cup"],
+  ["bean salad", 120, "1/2 cup"],
+  ["coleslaw", 90, "1/2 cup"],
+  ["cole slaw", 90, "1/2 cup"],
+  ["fruit salad", 175, "1 cup"],
+  ["caesar salad", 100, "1 cup"],
+  ["cobb salad", 120, "1 cup"],
+  ["garden salad", 70, "1 cup"],
+  ["green salad", 70, "1 cup"],
+  ["side salad", 70, "1 cup"],
   ["fries", 117, "1 medium serving"],
   ["hash brown", 72, "1 patty"],
   ["chip", 28, "1 oz"],

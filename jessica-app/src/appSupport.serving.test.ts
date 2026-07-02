@@ -271,6 +271,25 @@ describe("getTypicalServing", () => {
   it("returns null when nothing matches", () => {
     expect(getTypicalServing({ name: "Starfruit" })).toBeNull();
   });
+
+  it("measures composite salads as a dish, not by a single ingredient", () => {
+    // Regression: "potato salad with egg" was reading as "1 large egg", and
+    // "potato salad" as "1 medium potato".
+    expect(getTypicalServing({ name: "Potato salad with egg" })).toEqual({ gramWeight: 125, label: "1/2 cup" });
+    expect(getTypicalServing({ name: "Potato salad, home-prepared" })).toEqual({ gramWeight: 125, label: "1/2 cup" });
+    expect(getTypicalServing({ name: "Egg salad" })).toEqual({ gramWeight: 110, label: "1/2 cup" });
+    expect(getTypicalServing({ name: "Tuna salad" })).toEqual({ gramWeight: 102, label: "1/2 cup" });
+    expect(getTypicalServing({ name: "Coleslaw" })).toEqual({ gramWeight: 90, label: "1/2 cup" });
+    expect(getTypicalServing({ name: "Fruit salad" })).toEqual({ gramWeight: 175, label: "1 cup" });
+  });
+
+  it("keeps salad-word dishes distinct from their look-alikes", () => {
+    // A chicken *salad sandwich* is still a sandwich; a *caesar salad* with
+    // chicken is a salad; *salad dressing* is a dressing.
+    expect(getTypicalServing({ name: "Chicken salad sandwich" })).toEqual({ gramWeight: 150, label: "1 sandwich" });
+    expect(getTypicalServing({ name: "Chicken caesar salad" })).toEqual({ gramWeight: 100, label: "1 cup" });
+    expect(getTypicalServing({ name: "Ranch salad dressing" })).toEqual({ gramWeight: 30, label: "2 tbsp" });
+  });
 });
 
 describe("getSearchTypicalServing", () => {
