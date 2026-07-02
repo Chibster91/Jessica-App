@@ -1624,6 +1624,30 @@ button {
   margin: 0;
 }
 
+.empty-meal.search-error {
+  color: var(--danger-text);
+}
+
+.food-group-label {
+  color: var(--fg-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 10px 0 4px;
+}
+
+.food-group-label:first-child {
+  margin-top: 0;
+}
+
+.add-food-usda-hint {
+  color: var(--fg-2);
+  font-size: 0.75rem;
+  padding: 8px 2px 2px;
+  margin: 0;
+}
+
 .add-food-screen {
   position: fixed;
   inset: 0;

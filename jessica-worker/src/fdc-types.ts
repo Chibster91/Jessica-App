@@ -38,6 +38,10 @@ export interface FdcSearchResultFood {
   additionalDescriptions?: string;
   score?: number;
   foodNutrients?: FdcSearchNutrient[];
+  // Present in real API responses for Branded foods; not in spec:
+  servingSize?: number;
+  servingSizeUnit?: string;
+  householdServingFullText?: string;
   // Present in real API responses for Foundation/SR Legacy foods; not in spec:
   foodCategory?: string;
   // Branded foods carry their category here instead of foodCategory:

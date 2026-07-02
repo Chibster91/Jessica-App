@@ -105,3 +105,36 @@ describe("getFoodSearchScore — conciseness tiebreaker (Task 5c)", () => {
     );
   });
 });
+
+describe("getFoodSearchScore — whole-word matching", () => {
+  it("does not credit substring matches inside longer words", () => {
+    const rice = food({ name: "Rice, white, cooked", dataType: "sr legacy" });
+    const juice = food({ name: "Juice, orange, raw", dataType: "sr legacy" });
+
+    expect(getFoodSearchScore(rice, "rice")).toBeGreaterThan(getFoodSearchScore(juice, "rice"));
+    // "rice" appears in "juice" only as a substring — no whole-word credit at all.
+    expect(getFoodSearchScore(juice, "rice")).toBeLessThan(0);
+  });
+
+  it("tolerates singular/plural differences", () => {
+    const eggs = food({ name: "Eggs, Grade A, Large", dataType: "foundation" });
+    const unrelated = food({ name: "Oatmeal, plain", dataType: "foundation" });
+
+    expect(getFoodSearchScore(eggs, "egg")).toBeGreaterThan(getFoodSearchScore(unrelated, "egg"));
+    expect(getFoodSearchScore(eggs, "egg")).toBeGreaterThan(100);
+  });
+
+  it("still collapses multi-word brand spellings via compact matching", () => {
+    const cheezIt = food({ name: "CHEEZ-IT Baked Snack Crackers", brand: "Kellogg", dataType: "Branded" });
+
+    expect(getFoodSearchScore(cheezIt, "cheez it")).toBeGreaterThan(100);
+  });
+
+  it("keeps the real whole food above unrelated partial-word matches", () => {
+    const wholeMilk = food({ name: "Milk, whole, 3.25% milkfat", dataType: "foundation" });
+    const milkshake = food({ name: "Buttermilk biscuit mix", dataType: "Branded", brand: "Some Co" });
+
+    const ranked = rankSearchResults([milkshake, wholeMilk], "milk");
+    expect(ranked[0]).toBe(wholeMilk);
+  });
+});

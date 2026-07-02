@@ -1,6 +1,8 @@
 import type { FdcFoodDetail, FdcFoodNutrient, FdcSearchResponse, FdcSearchResultFood } from "./fdc-types";
 
 const DETAIL_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
+const SEARCH_CACHE_TTL_MS = 1000 * 60 * 60;
+const SEARCH_CACHE_MAX_ENTRIES = 500;
 // Total merged-result cap, and the slots guaranteed to each tier before leftovers are shared.
 const SEARCH_RESULT_LIMIT = 25;
 const SEARCH_TIER_MIN = 10;
@@ -85,6 +87,7 @@ export type WorkerFood = {
 };
 
 const detailCache = new Map<string, DetailCacheEntry>();
+const searchCache = new Map<string, CacheEntry<WorkerFood[]>>();
 const barcodeCache = new Map<string, CacheEntry<BarcodeProduct>>();
 const recipeCache = new Map<string, CacheEntry<ImportedRecipe>>();
 
@@ -136,18 +139,14 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
     return missingUsdaApiKey();
   }
 
-  const requests = expandSearchRequests(query);
-  // Settle each request independently so one failure (e.g. USDA's 400 for a dataType with no
-  // matches) can't sink the whole search; only surface an error if every request failed.
-  const settled: SettledSearch[] = await Promise.all(
-    requests.map((request) =>
-      searchUsdaFoods(request, apiKey).then(
-        (response): SettledSearch => ({ ok: true, tier: request.tier, response }),
-        (error): SettledSearch => ({ ok: false, error })
-      )
-    )
-  );
+  const searchCacheKey = normalizeSearchForMatching(query);
+  const cachedSearch = searchCache.get(searchCacheKey);
+  if (cachedSearch && cachedSearch.expiresAt > Date.now()) {
+    return json(cachedSearch.value, 200, SEARCH_CACHE_TTL_MS / 1000);
+  }
+  searchCache.delete(searchCacheKey);
 
+  const settled = await runSearchRequests(expandSearchRequests(query), apiKey);
   const fulfilled = settled.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok);
   if (fulfilled.length === 0) {
     const error = (settled.find((r) => !r.ok) as Extract<SettledSearch, { ok: false }> | undefined)?.error;
@@ -157,12 +156,15 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
     throw error;
   }
 
-  // Tag each raw result with the tier of the request that produced it; drop experimental.
-  const tagged = fulfilled.flatMap((r) =>
-    (r.response.foods ?? [])
-      .filter((food: FdcSearchResultFood) => !isExperimentalFood(food))
-      .map((food: FdcSearchResultFood) => ({ food, tier: r.tier }))
-  );
+  let tagged = collectTaggedFoods(fulfilled);
+
+  // Strict retrieval found nothing (typo, plural, stray adjective) — one relaxed retry
+  // without requireAllWords. Only runs when the strict pass succeeded but came back empty,
+  // so strict results always win when they exist.
+  if (tagged.length === 0) {
+    const loose = await runSearchRequests(looseSearchRequests(query), apiKey);
+    tagged = collectTaggedFoods(loose.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok));
+  }
 
   const nutritionQualityById = new Map<number, number>(
     tagged.map(({ food }) => [food.fdcId, nutritionQualityScore(food)])
@@ -170,8 +172,9 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
 
   // Map to WorkerFood, dedup by fdcId, score within tier.
   const seen = new Set<number | string>();
-  const ranked: { food: WorkerFood; tier: number; score: number }[] = [];
+  const ranked: RankedWorkerFood[] = [];
   for (const { food: raw, tier } of tagged) {
+    const preview = buildPreviewNutrition(raw);
     const food: WorkerFood = {
       id: raw.fdcId,
       name: raw.description,
@@ -181,11 +184,13 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
       category: raw.brandedFoodCategory ?? raw.foodCategory ?? null,
       ingredients: raw.ingredients ?? null,
       dataType: raw.dataType,
-      servingSize: "Details required",
-      calories: 0,
-      protein: 0,
-      carbs: 0,
-      fat: 0,
+      servingSize: preview.servingSize,
+      calories: preview.calories,
+      protein: preview.protein,
+      carbs: preview.carbs,
+      fat: preview.fat,
+      fiber: preview.fiber,
+      sodium: preview.sodium,
       isSearchPreview: true,
     };
     if (isExperimentalFood(food)) continue;
@@ -202,11 +207,140 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
   // Tier-aware cap: Tier 1 (quality) ranked above Tier 2 (branded), but both tiers are
   // guaranteed slots so neither starves the other before the client re-ranks — leaving room
   // for client scoring to promote a strong branded brand-intent match above weak Tier 1 noise.
-  const tier1 = ranked.filter((r) => r.tier === 1).sort((a, b) => b.score - a.score);
-  const tier2 = ranked.filter((r) => r.tier === 2).sort((a, b) => b.score - a.score);
+  const tier1 = dedupeTierByNameAndBrand(ranked.filter((r) => r.tier === 1));
+  const tier2 = dedupeTierByNameAndBrand(ranked.filter((r) => r.tier === 2));
   const foods: WorkerFood[] = applyTierCap(tier1, tier2).map((r) => r.food);
 
-  return json(foods);
+  if (searchCache.size >= SEARCH_CACHE_MAX_ENTRIES) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey !== undefined) searchCache.delete(oldestKey);
+  }
+  searchCache.set(searchCacheKey, { expiresAt: Date.now() + SEARCH_CACHE_TTL_MS, value: foods });
+
+  return json(foods, 200, SEARCH_CACHE_TTL_MS / 1000);
+}
+
+type RankedWorkerFood = { food: WorkerFood; tier: number; score: number };
+
+/** Settle each request independently so one failure (e.g. USDA's 400 for a dataType with no
+ * matches) can't sink the whole search; callers surface an error only if every request failed. */
+function runSearchRequests(requests: SearchRequest[], apiKey: string): Promise<SettledSearch[]> {
+  return Promise.all(
+    requests.map((request) =>
+      searchUsdaFoods(request, apiKey).then(
+        (response): SettledSearch => ({ ok: true, tier: request.tier, response }),
+        (error): SettledSearch => ({ ok: false, error })
+      )
+    )
+  );
+}
+
+/** Tag each raw result with the tier of the request that produced it; drop experimental foods
+ * and records with no calorie data at all (useless to a tracker — they'd show as "0 cal"). */
+function collectTaggedFoods(
+  fulfilled: Extract<SettledSearch, { ok: true }>[]
+): { food: FdcSearchResultFood; tier: number }[] {
+  return fulfilled.flatMap((r) =>
+    (r.response.foods ?? [])
+      .filter((food: FdcSearchResultFood) => !isExperimentalFood(food) && hasEnergyData(food))
+      .map((food: FdcSearchResultFood) => ({ food, tier: r.tier }))
+  );
+}
+
+/** Fallback requests for the relaxed retry: just the base tiers, no requireAllWords. */
+function looseSearchRequests(query: string): SearchRequest[] {
+  return [
+    { query, tier: 1, dataType: TIER1_CORE_DATA_TYPES },
+    { query, tier: 1, dataType: TIER1_SURVEY_DATA_TYPE },
+    { query, tier: 2, dataType: TIER2_DATA_TYPES },
+  ];
+}
+
+type PreviewNutrition = {
+  servingSize: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sodium: number;
+};
+
+/** Build list-preview nutrition from the search response itself, so results show calories
+ * without a detail round-trip. Search nutrients are per 100 g/ml; Branded results also carry
+ * the label serving size, so scale to per-serving when that serving is a plain weight/volume.
+ * Values are estimates for at-a-glance comparison — tapping a result still fetches full detail. */
+function buildPreviewNutrition(raw: FdcSearchResultFood): PreviewNutrition {
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const per100: PreviewNutrition = {
+    servingSize: "100 g",
+    calories: Math.round(getNutrientValue(raw, ENERGY_NAMES, "KCAL")),
+    protein: round1(getNutrientValue(raw, "Protein")),
+    carbs: round1(getNutrientValue(raw, "Carbohydrate, by difference")),
+    fat: round1(getNutrientValue(raw, "Total lipid (fat)")),
+    fiber: round1(getNutrientValue(raw, "Fiber, total dietary")),
+    sodium: Math.round(getNutrientValue(raw, "Sodium, Na")),
+  };
+
+  const unit = normalizeServingUnit(raw.servingSizeUnit);
+  const amount = typeof raw.servingSize === "number" && Number.isFinite(raw.servingSize) && raw.servingSize > 0
+    ? raw.servingSize
+    : null;
+  if (!amount || (unit !== "g" && unit !== "ml")) return per100;
+
+  const factor = amount / 100;
+  return {
+    servingSize: `${Number(amount.toFixed(1))} ${unit}`,
+    calories: Math.round(per100.calories * factor),
+    protein: round1(per100.protein * factor),
+    carbs: round1(per100.carbs * factor),
+    fat: round1(per100.fat * factor),
+    fiber: round1(per100.fiber * factor),
+    sodium: Math.round(per100.sodium * factor),
+  };
+}
+
+const DATA_TYPE_DEDUP_PRIORITY: Record<string, number> = {
+  foundation: 3,
+  "sr legacy": 2,
+  "survey (fndds)": 1,
+};
+
+/** Dedup key for a food name: drop comma segments that only repeat words from the
+ * leading segment ("HAZELNUT SPREAD WITH COCOA, COCOA" → "hazelnut spread with cocoa"),
+ * so USDA's stutter-named duplicates of one product collapse to a single key. */
+function nameDedupKey(name: string): string {
+  const [first, ...rest] = name.split(",").map((segment) => normalizeSearchForMatching(segment)).filter(Boolean);
+  if (!first) return normalizeSearchForMatching(name);
+  const firstWords = new Set(first.split(/\s+/));
+  const kept = [first];
+  for (const segment of rest) {
+    if (!segment.split(/\s+/).every((word) => firstWords.has(word))) kept.push(segment);
+  }
+  return kept.join(" ");
+}
+
+/** Collapse near-duplicate records — the same food name under the same brand — keeping the
+ * best-scored copy (score already includes nutrition-data quality). On a tie, prefer USDA's
+ * higher-quality dataset (Foundation over SR Legacy over Survey). Runs within a tier so a
+ * Branded product can never absorb a whole food that shares its name. */
+function dedupeTierByNameAndBrand(entries: RankedWorkerFood[]): RankedWorkerFood[] {
+  const byKey = new Map<string, RankedWorkerFood>();
+  for (const entry of entries) {
+    const brandKey = normalizeSearchForMatching(entry.food.brandName ?? entry.food.brand ?? "");
+    const key = `${nameDedupKey(entry.food.name)}|${brandKey}`;
+    const existing = byKey.get(key);
+    if (
+      !existing ||
+      entry.score > existing.score ||
+      (entry.score === existing.score &&
+        (DATA_TYPE_DEDUP_PRIORITY[normalizeSearchForMatching(entry.food.dataType)] ?? 0) >
+          (DATA_TYPE_DEDUP_PRIORITY[normalizeSearchForMatching(existing.food.dataType)] ?? 0))
+    ) {
+      byKey.set(key, entry);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.score - a.score);
 }
 
 async function searchUsdaFoods(request: SearchRequest, apiKey: string): Promise<FdcSearchResponse> {
@@ -319,7 +453,7 @@ async function handleDetail(url: URL, env: WorkerEnv): Promise<Response> {
     },
     foodNutrients: food.foodNutrients || [],
     isSearchPreview: false,
-  });
+  }, 200, DETAIL_CACHE_TTL_MS / 1000);
 }
 
 async function fetchUsdaFoodDetail(id: string, apiKey: string): Promise<FdcFoodDetail> {
@@ -607,12 +741,10 @@ function hasEnergyData(food: FdcSearchResultFood): boolean {
   });
 }
 
-/** Ranking adjustment that sinks records with no calorie data and rewards
- * nutritionally complete records, so the trustworthy duplicate surfaces first. */
+/** Ranking adjustment that rewards nutritionally complete records, so the trustworthy
+ * duplicate surfaces first. (Records with no calorie data at all never reach ranking —
+ * collectTaggedFoods drops them outright.) */
 function nutritionQualityScore(food: FdcSearchResultFood): number {
-  // A record with no calorie data at all is useless to a tracker; bury it
-  // beneath any usable result rather than showing a misleading "0 cal".
-  if (!hasEnergyData(food)) return -500;
   return Math.min(countPopulatedSearchNutrients(food), 15) * 2;
 }
 
@@ -893,11 +1025,11 @@ function mapRecipeNode(node: JsonLdNode): ImportedRecipe {
   };
 }
 
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "content-type": "application/json",
-    },
-  });
+function json(data: unknown, status = 200, cacheSeconds?: number): Response {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  // Let the browser's HTTP cache reuse successful lookups; errors stay uncached.
+  if (cacheSeconds && status === 200) {
+    headers["Cache-Control"] = `public, max-age=${Math.round(cacheSeconds)}`;
+  }
+  return new Response(JSON.stringify(data), { status, headers });
 }
