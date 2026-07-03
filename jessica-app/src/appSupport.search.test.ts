@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFoodSearchScore, rankSearchResults, type Food } from "./appSupport";
+import { getFoodSearchScore, rankSearchResults, matchesLocalFoodQuery, type Food } from "./appSupport";
 
 // Minimal Food factory — only the fields getFoodSearchScore reads matter.
 function food(overrides: Partial<Food>): Food {
@@ -136,5 +136,27 @@ describe("getFoodSearchScore — whole-word matching", () => {
 
     const ranked = rankSearchResults([milkshake, wholeMilk], "milk");
     expect(ranked[0]).toBe(wholeMilk);
+  });
+});
+
+describe("matchesLocalFoodQuery — typo tolerance without short-word collisions", () => {
+  it("does not match brand searches against look-alike 4-letter whole foods", () => {
+    // Regression: "coke"↔"cake" and "coca"↔"cola" were matching, which hijacked
+    // the search away from USDA-branded sodas toward the local DB.
+    expect(matchesLocalFoodQuery("Cake flour", "Baking", "coke")).toBe(false);
+    expect(matchesLocalFoodQuery("Soda, cola", "Beverages", "coca cola")).toBe(false);
+    expect(matchesLocalFoodQuery("Beets", "Vegetables", "beef")).toBe(false);
+  });
+
+  it("still matches exact, prefix, and substring queries", () => {
+    expect(matchesLocalFoodQuery("Soda, cola", "Beverages", "cola")).toBe(true);
+    expect(matchesLocalFoodQuery("Chocolate milk, whole", "Dairy", "choc")).toBe(true);
+    expect(matchesLocalFoodQuery("Broccoli", "Vegetables", "broccoli")).toBe(true);
+  });
+
+  it("keeps typo tolerance for 5+ letter words", () => {
+    expect(matchesLocalFoodQuery("Broccoli", "Vegetables", "brocoli")).toBe(true);
+    expect(matchesLocalFoodQuery("Spinach", "Vegetables", "spinch")).toBe(true);
+    expect(matchesLocalFoodQuery("Tomato, roma", "Vegetables", "tomatoe")).toBe(true);
   });
 });

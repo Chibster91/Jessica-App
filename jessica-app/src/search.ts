@@ -376,7 +376,11 @@ function tokenMatchesWords(token: string, words: string[]): boolean {
     if (w === token) return true;
     if (w.startsWith(token)) return true;
     if (w.includes(token)) return true;
-    if (token.length >= 4 && Math.abs(w.length - token.length) <= 2 && levenshtein(token, w) <= 1) return true;
+    // Typo tolerance, but only for 5+ letter tokens: at length 4 an edit-distance
+    // of 1 collides too easily with unrelated real words ("coke"↔"cake",
+    // "coca"↔"cola", "beef"↔"beet"), which then wrongly short-circuits the USDA
+    // search away from the brand the user actually typed.
+    if (token.length >= 5 && Math.abs(w.length - token.length) <= 2 && levenshtein(token, w) <= 1) return true;
   }
   return false;
 }
