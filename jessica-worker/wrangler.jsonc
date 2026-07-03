@@ -13,6 +13,14 @@
 	"upload_source_maps": true,
 	"compatibility_flags": [
 		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "FOODS_DB",
+			"database_name": "jessica-foods",
+			"database_id": "1e71f2a3-e587-4dde-ab96-22f9fab22653",
+			"migrations_dir": "migrations"
+		}
 	]
 	/**
 	 * Smart Placement

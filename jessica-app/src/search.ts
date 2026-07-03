@@ -177,23 +177,47 @@ function countComboSignals(rawName: string): number {
   return signals;
 }
 
+/** Comma segments of a generic USDA name that merely credit the manufacturer
+ * ("Beverages, The COCA-COLA company, DASANI, water…"). Such segments must not
+ * collect name-match bonuses — the user searching "coca cola" wants the drink,
+ * not every product the company makes. */
+const CORPORATE_SEGMENT_RE = /\b(company|co|inc|incorporated|corp|corporation|brands|bottling|llc|ltd)\b/i;
+
+function stripManufacturerSegments(name: string): string {
+  const segments = name.split(",");
+  if (segments.length < 2) return name;
+  const kept = segments.filter((segment, index) => index === 0 || !CORPORATE_SEGMENT_RE.test(segment));
+  return kept.join(",");
+}
+
 export function getFoodSearchScore(food: Food, query: string) {
   const queryText = normalizeSearchText(query);
   const queryWords = getSearchTokens(query);
   if (!queryText || queryWords.length === 0) return 0;
 
-  const nameText = normalizeSearchText(food.name);
+  const dataTypeText = normalizeSearchText(food.dataType ?? "");
+  // Non-branded (generic USDA) names drop manufacturer segments before any
+  // matching, so "The COCA-COLA company" in a DASANI entry earns nothing for
+  // the query "coca cola". Branded names keep theirs — there the brand IS the product.
+  const rawName = dataTypeText === "branded" ? String(food.name ?? "") : stripManufacturerSegments(String(food.name ?? ""));
+  const nameText = normalizeSearchText(rawName);
   const brandText = normalizeSearchText(food.brand ?? "");
   const brandNameText = normalizeSearchText(food.brandName ?? "");
   const categoryText = normalizeSearchText(food.category ?? "");
-  const dataTypeText = normalizeSearchText(food.dataType ?? "");
   // Include brandName + category (servingSize was the constant "details required" — dead noise).
   // This lets a bare-brand query match via the existing substring/word signals below.
   const searchableText = `${nameText} ${brandText} ${brandNameText} ${categoryText}`.trim();
 
-  // Brand-intent: the user typed a bare brand name ("nutella"). Only for Branded foods with a
-  // real brandName, so it never touches a Foundation/whole food.
-  const brandIntent = dataTypeText === "branded" && brandNameText !== "" && queryText === brandNameText;
+  // Brand-intent: the query is brand-flavored. Only for Branded foods with a real brandName, so
+  // it never touches a Foundation/whole food. Fires when the query IS the brand, contains the
+  // brand as a phrase, the worker's D1 brands table flagged it, or a brand synonym maps to it.
+  const brandIntent =
+    dataTypeText === "branded" &&
+    brandNameText !== "" &&
+    (queryText === brandNameText ||
+      food.brandMatch === true ||
+      hasWholePhrase(queryText, brandNameText) ||
+      getSearchSynonyms(query).some((synonym) => synonym === brandNameText));
   // Under brand-intent, a product name that merely echoes its own brand ("Nutella & Go!…") is not
   // evidence it's the right product — strip the brand words so the name-position bonuses below
   // reward the actual food name, not brand-stuffing. Otherwise match against the full name.

@@ -43,6 +43,21 @@ describe("parseServingSize", () => {
     expect(parseServingSize("1 container")).toEqual({ amount: 1, unit: "container" });
   });
 
+  it("converts fluid ounces and liters to ml", () => {
+    expect(parseServingSize("12 fl oz")).toEqual({ amount: 354.9, unit: "ml" });
+    expect(parseServingSize("12 FL OZ can")).toEqual({ amount: 354.9, unit: "ml" });
+    expect(parseServingSize("8 fluid ounces")).toEqual({ amount: 236.6, unit: "ml" });
+    expect(parseServingSize("1 liter")).toEqual({ amount: 1000, unit: "ml" });
+    expect(parseServingSize("2 Liters")).toEqual({ amount: 2000, unit: "ml" });
+    expect(parseServingSize("1.25 L")).toEqual({ amount: 1250, unit: "ml" });
+  });
+
+  it("keeps plain weight ounces as oz and does not misread lb/large as liters", () => {
+    expect(parseServingSize("12 oz")).toEqual({ amount: 12, unit: "oz" });
+    expect(parseServingSize("1 lb")).toEqual({ amount: 1, unit: "lb" });
+    expect(parseServingSize("1 large")).toEqual({ amount: 1, unit: "large" });
+  });
+
   it("returns null for unparseable or non-positive sizes", () => {
     expect(parseServingSize("Details required")).toBeNull();
     expect(parseServingSize("0 g")).toBeNull();

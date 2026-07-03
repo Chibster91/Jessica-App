@@ -1,4 +1,5 @@
 import type { FdcFoodDetail, FdcFoodNutrient, FdcSearchResponse, FdcSearchResultFood } from "./fdc-types";
+import { searchBrandedD1, getFoodDetailD1, type D1SearchResult } from "./d1Search";
 
 const DETAIL_CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const SEARCH_CACHE_TTL_MS = 1000 * 60 * 60;
@@ -14,6 +15,12 @@ const USDA_SEARCH_PAGE_SIZE = 50;
 const TIER1_CORE_DATA_TYPES = "Foundation,SR Legacy";
 const TIER1_SURVEY_DATA_TYPE = "Survey (FNDDS)";
 const TIER2_DATA_TYPES = "Branded";
+// D1-first branded tier: when the canonical D1 database returns at least this
+// many results, the live USDA Branded requests are skipped entirely.
+const D1_TIER2_MIN_RESULTS = 5;
+// Canonical D1 entries are the deduped/cleaned copies — nudge them above raw
+// live duplicates of the same product when both appear in a fallback merge.
+const D1_CANONICAL_BONUS = 20;
 const UNIT_LABELS: Record<string, string> = {
   MLT: "ml",
   GRM: "g",
@@ -84,6 +91,10 @@ export type WorkerFood = {
   fiber?: number;
   sodium?: number;
   isSearchPreview?: boolean;
+  /** True for canonical entries served from D1 (deduped offline pipeline). */
+  canonical?: boolean;
+  /** True when the query matched this food's brand in the D1 brands table. */
+  brandMatch?: boolean;
 };
 
 const detailCache = new Map<string, DetailCacheEntry>();
@@ -146,9 +157,29 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
   }
   searchCache.delete(searchCacheKey);
 
-  const settled = await runSearchRequests(expandSearchRequests(query), apiKey);
+  // D1-first branded tier: the canonical database answers in parallel with the
+  // live Tier-1 requests; live Branded requests only fire when D1 comes up
+  // short (or errors), so common packaged foods never hit USDA's raw listings.
+  const d1Promise: Promise<D1SearchResult | null> = env.FOODS_DB
+    ? searchBrandedD1(env.FOODS_DB, query).catch((error) => {
+        console.error("D1 branded search failed; falling back to live USDA", error);
+        return null;
+      })
+    : Promise.resolve(null);
+
+  const allRequests = expandSearchRequests(query);
+  const tier1Requests = allRequests.filter((request) => request.tier === 1);
+  const tier2Requests = allRequests.filter((request) => request.tier === 2);
+
+  const [d1Result, tier1Settled] = await Promise.all([d1Promise, runSearchRequests(tier1Requests, apiKey)]);
+  const d1Foods = d1Result?.foods ?? [];
+  const useLiveTier2 = d1Foods.length < D1_TIER2_MIN_RESULTS;
+  const settled = useLiveTier2
+    ? tier1Settled.concat(await runSearchRequests(tier2Requests, apiKey))
+    : tier1Settled;
+
   const fulfilled = settled.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok);
-  if (fulfilled.length === 0) {
+  if (fulfilled.length === 0 && d1Foods.length === 0) {
     const error = (settled.find((r) => !r.ok) as Extract<SettledSearch, { ok: false }> | undefined)?.error;
     if (isUsdaRequestError(error)) {
       return json({ error: error.message, status: error.status, detail: error.detail }, error.status);
@@ -160,8 +191,8 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
 
   // Strict retrieval found nothing (typo, plural, stray adjective) — one relaxed retry
   // without requireAllWords. Only runs when the strict pass succeeded but came back empty,
-  // so strict results always win when they exist.
-  if (tagged.length === 0) {
+  // so strict results always win when they exist. D1 hits count as results.
+  if (tagged.length === 0 && d1Foods.length === 0) {
     const loose = await runSearchRequests(looseSearchRequests(query), apiKey);
     tagged = collectTaggedFoods(loose.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok));
   }
@@ -170,9 +201,20 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
     tagged.map(({ food }) => [food.fdcId, nutritionQualityScore(food)])
   );
 
-  // Map to WorkerFood, dedup by fdcId, score within tier.
+  // Map to WorkerFood, dedup by fdcId, score within tier. D1 canonicals go in
+  // first so a raw live copy of the same fdcId is skipped by `seen`, and get a
+  // flat bonus so live near-duplicates of the same product rank below them.
   const seen = new Set<number | string>();
   const ranked: RankedWorkerFood[] = [];
+  for (const { food, quality } of d1Foods) {
+    if (seen.has(food.id)) continue;
+    seen.add(food.id);
+    ranked.push({
+      food,
+      tier: 2,
+      score: rankSearchResult(food, query) + Math.min(quality, 15) * 2 + D1_CANONICAL_BONUS,
+    });
+  }
   for (const { food: raw, tier } of tagged) {
     const preview = buildPreviewNutrition(raw);
     const food: WorkerFood = {
@@ -397,6 +439,20 @@ async function handleDetail(url: URL, env: WorkerEnv): Promise<Response> {
 
   if (!/^\d+$/.test(id)) {
     return json({ error: "id must be a numeric FDC ID." }, 400);
+  }
+
+  // D1-first: canonical foods carry their own detail (per-serving nutrition +
+  // package-size portions). A miss falls through to live USDA — canonical ids
+  // are real FDC ids, so the fallback always resolves.
+  if (env.FOODS_DB) {
+    try {
+      const canonicalDetail = await getFoodDetailD1(env.FOODS_DB, Number(id));
+      if (canonicalDetail) {
+        return json(canonicalDetail, 200, DETAIL_CACHE_TTL_MS / 1000);
+      }
+    } catch (error) {
+      console.error("D1 detail lookup failed; falling back to live USDA", error);
+    }
   }
 
   const apiKey = getUsdaApiKey(env);

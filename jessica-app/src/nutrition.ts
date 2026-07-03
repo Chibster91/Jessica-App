@@ -370,6 +370,25 @@ export function parseServingSize(value: string | number | null | undefined, fall
   if (typeof value !== "string") return null;
 
   const trimmedValue = value.trim();
+
+  // Volume units that need conversion, checked before the plain-unit pattern:
+  // "12 fl oz" would otherwise parse as unit "fl", and liters aren't a
+  // MeasuredAmountUnit — both convert to ml here so downstream math is unchanged.
+  const flOzMeasure = trimmedValue.match(/([\d.]+)\s*(?:fl\.?\s*oz\.?|fluid\s+ounces?)\b/i);
+  if (flOzMeasure) {
+    const amount = Number(flOzMeasure[1]);
+    if (Number.isFinite(amount) && amount > 0) {
+      return { amount: Math.round(amount * 29.5735 * 10) / 10, unit: "ml" };
+    }
+  }
+  const literMeasure = trimmedValue.match(/([\d.]+)\s*(?:liters?|litres?|l)\b/i);
+  if (literMeasure) {
+    const amount = Number(literMeasure[1]);
+    if (Number.isFinite(amount) && amount > 0) {
+      return { amount: amount * 1000, unit: "ml" };
+    }
+  }
+
   const embeddedMeasure = trimmedValue.match(/([\d.]+)\s*(ml|milliliter|milliliters|g|gram|grams|oz|ounce|ounces)\b/i);
 
   if (embeddedMeasure) {

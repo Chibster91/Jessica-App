@@ -27,6 +27,10 @@ export type Food = {
   /** Trimmed USDA detail (portions, label serving, calorie basis) kept on foods saved
    * from USDA search so portion options keep working offline without a re-fetch. */
   savedDetail?: FoodDetail;
+  /** True for canonical entries served from the worker's D1 database. */
+  canonical?: boolean;
+  /** Worker hint: the query matched this food's brand in the D1 brands table. */
+  brandMatch?: boolean;
 };
 
 export type RecipeIngredient = {

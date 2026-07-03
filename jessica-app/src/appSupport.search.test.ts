@@ -160,3 +160,45 @@ describe("matchesLocalFoodQuery — typo tolerance without short-word collisions
     expect(matchesLocalFoodQuery("Tomato, roma", "Vegetables", "tomatoe")).toBe(true);
   });
 });
+
+describe("getFoodSearchScore — manufacturer-name clutter and broader brand-intent", () => {
+  const brandedCoke = food({
+    name: "Coca-Cola",
+    brand: "The Coca-Cola Company",
+    brandName: "Coca-Cola",
+    category: "Soda",
+    dataType: "Branded",
+  });
+  const dasani = food({
+    name: "Beverages, The COCA-COLA company, DASANI, water, bottled, non-carbonated",
+    category: "Beverages",
+    dataType: "sr legacy",
+  });
+
+  it("generic entries naming their manufacturer lose to the actual brand product", () => {
+    const ranked = rankSearchResults([dasani, brandedCoke], "coca cola");
+    expect(ranked[0]).toBe(brandedCoke);
+    // The DASANI entry gets no whole-phrase credit for "coca cola" at all.
+    expect(getFoodSearchScore(dasani, "coca cola")).toBeLessThan(100);
+  });
+
+  it("manufacturer stripping does not hurt the entry's own product words", () => {
+    expect(getFoodSearchScore(dasani, "dasani water")).toBeGreaterThan(150);
+  });
+
+  it("brand-intent fires on the worker's D1 brandMatch hint", () => {
+    const hinted = food({ ...brandedCoke, brandMatch: true });
+    expect(getFoodSearchScore(hinted, "coke zero")).toBeGreaterThan(
+      getFoodSearchScore(brandedCoke, "coke zero")
+    );
+  });
+
+  it("brand-intent fires when the query contains the brand as a phrase", () => {
+    const cherry = food({ ...brandedCoke, name: "Cherry Coca-Cola" });
+    expect(getFoodSearchScore(cherry, "coca cola cherry")).toBeGreaterThan(200);
+  });
+
+  it("brand-intent fires via brand synonyms (coke → coca cola)", () => {
+    expect(getFoodSearchScore(brandedCoke, "coke")).toBeGreaterThan(150);
+  });
+});
