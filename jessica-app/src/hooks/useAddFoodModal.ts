@@ -409,6 +409,54 @@ export function useAddFoodModal({
     });
   }
 
+  function addCustomFoodAsIs() {
+    setCustomFoodSaveError("");
+    appendDebugLog("custom-food-add-as-is-click", {
+      name: customFoodForm.name.trim(),
+      servingSize: customFoodForm.servingSize,
+      servingUnit: customFoodForm.servingUnit,
+      calories: customFoodForm.calories,
+      protein: customFoodForm.protein,
+      carbs: customFoodForm.carbs,
+      fat: customFoodForm.fat,
+    });
+
+    if (!pendingCategory) return;
+
+    const customFood = parseCustomFood(customFoodForm);
+    if (!customFood) {
+      const message = "Could not add food. Check name, serving size, serving unit, calories, and macro numbers.";
+      setCustomFoodSaveError(message);
+      appendDebugLog("custom-food-add-as-is-invalid", { form: customFoodForm });
+      return;
+    }
+
+    const logItem: LogItem = {
+      ...customFood,
+      category: pendingCategory,
+      quantity: 1,
+      amount: 1,
+      amountUnit: "serving",
+      servingLabel: customFood.servingSize,
+      logId: createClientId(),
+    };
+
+    setLog([...log, logItem]);
+    setTopFoods((prev) => {
+      const existing = prev.find((f) => f.name === customFood.name);
+      const updated = existing
+        ? prev.map((f) => f.name === customFood.name ? { ...f, count: f.count + 1 } : f)
+        : [...prev, { name: customFood.name, count: 1 }];
+      return updated.sort((a, b) => b.count - a.count).slice(0, 10);
+    });
+    appendDebugLog("custom-food-add-as-is-success", {
+      id: customFood.id,
+      name: customFood.name,
+      category: pendingCategory,
+    });
+    closeAddFood();
+  }
+
   async function scanCustomFoodLabel(file: File | undefined) {
     if (!file) {
       setCustomFoodOcrError("No image was selected.");
@@ -712,6 +760,7 @@ export function useAddFoodModal({
     setCustomFoodForm,
     customFoodSaveError,
     createCustomFood,
+    addCustomFoodAsIs,
     filteredCustomFoods,
     recipeQuery,
     setRecipeQuery,

@@ -207,7 +207,7 @@ export function LogView(props: LogViewProps) {
     selectedPortion, isLoadingDetail, selectFood, selectLocalFood, customQuery, setCustomQuery, openCustomFoodForm,
     isCustomFormOpen, setIsCustomFormOpen, isBarcodeScanOpen, openBarcodeScan, closeBarcodeScan, saveScannedBarcodeFood,
     isScanningCustomFood, scanCustomFoodLabel, customFoodOcrError,
-    customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, filteredCustomFoods,
+    customFoodOcrText, customFoodForm, setCustomFoodForm, customFoodSaveError, createCustomFood, addCustomFoodAsIs, filteredCustomFoods,
     recipeQuery, setRecipeQuery, openRecipeForm, isRecipeFormOpen, setIsRecipeFormOpen, recipeForm, setRecipeForm,
     recipeTotals, recipeIngredientQuery, setRecipeIngredientQuery, searchRecipeIngredientFoods,
     isSearchingRecipeIngredients, recipeIngredientOptions, pendingRecipeIngredient, setPendingRecipeIngredient,
@@ -967,7 +967,19 @@ export function LogView(props: LogViewProps) {
                           createCustomFood();
                         }}
                       >
-                        Save food
+                        Save as custom food
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onPointerDown={(event) => logTapProbe("custom-food-add-as-is-button", "pointerdown", event)}
+                        onTouchStart={(event) => logTapProbe("custom-food-add-as-is-button", "touchstart", event)}
+                        onClick={(event) => {
+                          logTapProbe("custom-food-add-as-is-button", "click", event);
+                          addCustomFoodAsIs();
+                        }}
+                      >
+                        Add as-is
                       </button>
                       <button type="button" onClick={() => setIsCustomFormOpen(false)}>
                         Cancel
