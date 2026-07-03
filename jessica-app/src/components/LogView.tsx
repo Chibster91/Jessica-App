@@ -967,7 +967,7 @@ export function LogView(props: LogViewProps) {
                           createCustomFood();
                         }}
                       >
-                        Save as custom food
+                        Save to custom and add
                       </button>
                       <button
                         type="button"
@@ -979,7 +979,7 @@ export function LogView(props: LogViewProps) {
                           addCustomFoodAsIs();
                         }}
                       >
-                        Add as-is
+                        Add As-is
                       </button>
                       <button type="button" onClick={() => setIsCustomFormOpen(false)}>
                         Cancel

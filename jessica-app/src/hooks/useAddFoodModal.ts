@@ -361,6 +361,31 @@ export function useAddFoodModal({
     setIsRecipeFormOpen(true);
   }
 
+  function addFoodSnapshotToLog(food: Food) {
+    if (!pendingCategory) return false;
+
+    const logItem: LogItem = {
+      ...food,
+      category: pendingCategory,
+      quantity: 1,
+      amount: 1,
+      amountUnit: "serving",
+      servingLabel: food.servingSize,
+      logId: createClientId(),
+    };
+
+    setLog((current) => [...current, logItem]);
+    setTopFoods((prev) => {
+      const existing = prev.find((f) => f.name === food.name);
+      const updated = existing
+        ? prev.map((f) => f.name === food.name ? { ...f, count: f.count + 1 } : f)
+        : [...prev, { name: food.name, count: 1 }];
+      return updated.sort((a, b) => b.count - a.count).slice(0, 10);
+    });
+
+    return true;
+  }
+
   function createCustomFood() {
     setCustomFoodSaveError("");
     appendDebugLog("custom-food-save-click", {
@@ -393,20 +418,20 @@ export function useAddFoodModal({
       return;
     }
 
+    if (!addFoodSnapshotToLog(customFood)) return;
+
     setCustomFoods(nextCustomFoods);
     setCustomFoodForm(emptyCustomFoodForm);
     setCustomFoodOcrText("");
     setCustomFoodOcrError("");
     setCustomFoodSaveError("");
-    setIsCustomFormOpen(false);
-    setActiveAddFoodTab("custom");
-    selectLocalFood(customFood);
     appendDebugLog("custom-food-save-success", {
       id: customFood.id,
       name: customFood.name,
       count: nextCustomFoods.length,
       persisted: storageOk && verified,
     });
+    closeAddFood();
   }
 
   function addCustomFoodAsIs() {
@@ -421,8 +446,6 @@ export function useAddFoodModal({
       fat: customFoodForm.fat,
     });
 
-    if (!pendingCategory) return;
-
     const customFood = parseCustomFood(customFoodForm);
     if (!customFood) {
       const message = "Could not add food. Check name, serving size, serving unit, calories, and macro numbers.";
@@ -431,24 +454,8 @@ export function useAddFoodModal({
       return;
     }
 
-    const logItem: LogItem = {
-      ...customFood,
-      category: pendingCategory,
-      quantity: 1,
-      amount: 1,
-      amountUnit: "serving",
-      servingLabel: customFood.servingSize,
-      logId: createClientId(),
-    };
+    if (!addFoodSnapshotToLog(customFood)) return;
 
-    setLog([...log, logItem]);
-    setTopFoods((prev) => {
-      const existing = prev.find((f) => f.name === customFood.name);
-      const updated = existing
-        ? prev.map((f) => f.name === customFood.name ? { ...f, count: f.count + 1 } : f)
-        : [...prev, { name: customFood.name, count: 1 }];
-      return updated.sort((a, b) => b.count - a.count).slice(0, 10);
-    });
     appendDebugLog("custom-food-add-as-is-success", {
       id: customFood.id,
       name: customFood.name,
