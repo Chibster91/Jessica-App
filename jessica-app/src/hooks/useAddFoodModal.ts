@@ -316,18 +316,19 @@ export function useAddFoodModal({
     selectLocalFood(food);
   }
 
-  // "Save to My Foods" for USDA results: hidden for built-in/custom foods and recipes,
-  // "saved" once the food is already in the custom-foods library.
-  const selectedFoodLibraryState: "hidden" | "saveable" | "saved" =
-    !selectedFood ||
-    selectedFood.isSearchPreview ||
-    isLoadingDetail ||
-    !selectedFood.dataType ||
-    selectedFood.dataType === "local"
+  // "Save to My Foods" for USDA results. Permanently hidden for built-in/custom
+  // foods and recipes (no dataType, or the local DB). For a savable USDA food it
+  // shows immediately but stays "loading" (disabled) until the detail fetch
+  // finishes, so the button doesn't pop in and shift the sheet. Then "saved" if
+  // it's already in the library, else "saveable".
+  const selectedFoodLibraryState: "hidden" | "loading" | "saveable" | "saved" =
+    !selectedFood || !selectedFood.dataType || selectedFood.dataType === "local"
       ? "hidden"
-      : customFoods.some((food) => food.id === selectedFood.id)
-        ? "saved"
-        : "saveable";
+      : selectedFood.isSearchPreview || isLoadingDetail
+        ? "loading"
+        : customFoods.some((food) => food.id === selectedFood.id)
+          ? "saved"
+          : "saveable";
 
   function saveSelectedFoodToLibrary() {
     if (!selectedFood || selectedFoodLibraryState !== "saveable") return;

@@ -1234,7 +1234,9 @@ export function LogView(props: LogViewProps) {
                 ? [{ label: "☆ Save to My Foods", onClick: saveSelectedFoodToLibrary }]
                 : selectedFoodLibraryState === "saved"
                   ? [{ label: "✓ In My Foods", onClick: () => {}, disabled: true }]
-                  : undefined
+                  : selectedFoodLibraryState === "loading"
+                    ? [{ label: "☆ Save to My Foods", onClick: () => {}, disabled: true }]
+                    : undefined
             }
             unitPicker={{
               amountUnit,
