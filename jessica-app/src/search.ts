@@ -514,17 +514,17 @@ export function asFoodArray(value: unknown): Food[] {
   return [];
 }
 
-// Session cache of USDA search results, so repeating a search is instant.
+// Session cache of worker search results, so repeating a search is instant.
 // Only successful lookups are cached; failures always retry.
 const usdaSearchCache = new Map<string, Food[]>();
 
-export async function fetchUsdaFoods(query: string): Promise<Food[]> {
-  const cacheKey = normalizeSearchText(query);
+export async function fetchUsdaFoods(query: string, liveUsdaEnabled = true): Promise<Food[]> {
+  const cacheKey = `${liveUsdaEnabled ? "live" : "d1"}:${normalizeSearchText(query)}`;
   const cached = usdaSearchCache.get(cacheKey);
   if (cached) return cached;
 
   const res = await fetch(
-    `${WORKER_BASE_URL}/?query=${encodeURIComponent(query)}`
+    `${WORKER_BASE_URL}/?query=${encodeURIComponent(query)}${liveUsdaEnabled ? "" : "&liveUsda=0"}`
   );
   if (!res.ok) throw new Error("USDA search failed.");
 
@@ -570,9 +570,9 @@ export async function importRecipeFromUrl(url: string): Promise<ImportedRecipe> 
 
 /** Fetch USDA results for a query plus its brand synonyms, in parallel. Individual request
  * failures are tolerated; `failed` is true only when every request failed. */
-async function fetchUsdaResultSets(query: string): Promise<{ resultSets: Food[][]; failed: boolean }> {
+async function fetchUsdaResultSets(query: string, liveUsdaEnabled = true): Promise<{ resultSets: Food[][]; failed: boolean }> {
   const searchQueries = [...new Set([query, ...getSearchSynonyms(query)])];
-  const settled = await Promise.allSettled(searchQueries.map(fetchUsdaFoods));
+  const settled = await Promise.allSettled(searchQueries.map((searchQuery) => fetchUsdaFoods(searchQuery, liveUsdaEnabled)));
   const resultSets = settled
     .filter((r): r is PromiseFulfilledResult<Food[]> => r.status === "fulfilled")
     .map((r) => r.value);
@@ -625,14 +625,15 @@ export type SearchFoodsResult = {
   groups: SearchResultGroup[];
   /** True when USDA was attempted and every request failed (network/worker error). */
   usdaError: boolean;
-  /** Why USDA wasn't queried, when it wasn't: toggle off, or a local-DB hit short-circuited it. */
+  /** Why live USDA wasn't queried, when it wasn't: toggle off, or a local-DB hit short-circuited it. */
   usdaSkipped: "disabled" | "local-hit" | null;
 };
 
 /**
  * Returns search results split into labelled groups:
- * "My Foods" (custom foods + recent), "Whole Foods" (local DB), "Packaged" (USDA),
- * plus flags describing whether/why the USDA lookup was skipped or failed.
+ * "My Foods" (custom foods + recent), "Whole Foods" (local DB), "Packaged" (D1 canonical
+ * database plus live USDA when enabled), plus flags describing whether/why live USDA was
+ * skipped or failed.
  * Groups with no results are omitted.
  */
 
@@ -664,14 +665,17 @@ export async function searchFoodsGrouped(
   // Local DB foods
   const localResults = await searchLocalFoods(query);
 
-  // USDA packaged foods — only when enabled AND the local DB had no match.
-  // A local hit short-circuits the network call entirely (predictable + offline-friendly).
+  // Packaged foods come from the worker. With live USDA on, a local hit still
+  // short-circuits the network call entirely (predictable + offline-friendly).
+  // With live USDA off, we still query the worker in D1-only mode so the
+  // canonical branded database remains available without live USDA API results.
   let usdaResults: Food[] = [];
   let usdaError = false;
   const usdaSkipped: SearchFoodsResult["usdaSkipped"] =
     !usdaEnabled ? "disabled" : localResults.length > 0 ? "local-hit" : null;
-  if (usdaSkipped === null) {
-    const { resultSets, failed } = await fetchUsdaResultSets(query);
+  const shouldFetchPackaged = !usdaEnabled || usdaSkipped === null;
+  if (shouldFetchPackaged) {
+    const { resultSets, failed } = await fetchUsdaResultSets(query, usdaEnabled);
     usdaError = failed;
     const localIds = new Set(localResults.map(f => f.id));
     const usdaById = new Map<number, Food>();

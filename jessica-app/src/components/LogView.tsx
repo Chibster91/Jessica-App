@@ -745,7 +745,7 @@ export function LogView(props: LogViewProps) {
                     <p className="add-food-usda-hint">USDA search skipped &mdash; found matches in built-in foods.</p>
                   )}
                   {!isSearchingFoods && searchedQuery && usdaSkipped === "disabled" && (
-                    <p className="add-food-usda-hint">USDA search is off &mdash; turn it on above to include packaged foods.</p>
+                    <p className="add-food-usda-hint">Live USDA search is off &mdash; showing saved packaged matches only.</p>
                   )}
               </div>
             )}

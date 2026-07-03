@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { getFoodSearchScore, rankSearchResults, matchesLocalFoodQuery, type Food } from "./appSupport";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { getFoodSearchScore, rankSearchResults, matchesLocalFoodQuery, searchFoodsGrouped, type Food } from "./appSupport";
 
 // Minimal Food factory — only the fields getFoodSearchScore reads matter.
 function food(overrides: Partial<Food>): Food {
@@ -15,6 +15,10 @@ function food(overrides: Partial<Food>): Food {
     ...overrides,
   };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const flagshipNutella = food({
   name: "HAZELNUT SPREAD WITH COCOA",
@@ -200,5 +204,34 @@ describe("getFoodSearchScore — manufacturer-name clutter and broader brand-int
 
   it("brand-intent fires via brand synonyms (coke → coca cola)", () => {
     expect(getFoodSearchScore(brandedCoke, "coke")).toBeGreaterThan(150);
+  });
+});
+
+describe("searchFoodsGrouped — USDA toggle", () => {
+  it("keeps D1 canonical packaged results when live USDA is off", async () => {
+    const canonicalCoke = food({
+      id: 754304,
+      name: "Coca-Cola",
+      brand: "The Coca-Cola Company",
+      dataType: "Branded",
+      canonical: true,
+      brandMatch: true,
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("foods.json")) {
+        return Response.json({ foods: [] });
+      }
+      if (url.includes("liveUsda=0")) {
+        return Response.json([canonicalCoke]);
+      }
+      return Response.json([], { status: 500 });
+    });
+
+    const result = await searchFoodsGrouped("coca cola", [], [], [], false);
+
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("liveUsda=0"));
+    expect(result.usdaSkipped).toBe("disabled");
+    expect(result.groups.find((group) => group.label === "Packaged")?.foods).toEqual([canonicalCoke]);
   });
 });

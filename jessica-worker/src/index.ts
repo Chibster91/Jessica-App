@@ -145,12 +145,13 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
   }
 
   const query = url.searchParams.get("query") || "egg";
-  const apiKey = getUsdaApiKey(env);
-  if (!apiKey) {
+  const liveUsdaEnabled = url.searchParams.get("liveUsda") !== "0";
+  const apiKey = liveUsdaEnabled ? getUsdaApiKey(env) : null;
+  if (liveUsdaEnabled && !apiKey) {
     return missingUsdaApiKey();
   }
 
-  const searchCacheKey = normalizeSearchForMatching(query);
+  const searchCacheKey = `${liveUsdaEnabled ? "live" : "d1"}:${normalizeSearchForMatching(query)}`;
   const cachedSearch = searchCache.get(searchCacheKey);
   if (cachedSearch && cachedSearch.expiresAt > Date.now()) {
     return json(cachedSearch.value, 200, SEARCH_CACHE_TTL_MS / 1000);
@@ -171,11 +172,14 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
   const tier1Requests = allRequests.filter((request) => request.tier === 1);
   const tier2Requests = allRequests.filter((request) => request.tier === 2);
 
-  const [d1Result, tier1Settled] = await Promise.all([d1Promise, runSearchRequests(tier1Requests, apiKey)]);
+  const [d1Result, tier1Settled] = await Promise.all([
+    d1Promise,
+    liveUsdaEnabled && apiKey ? runSearchRequests(tier1Requests, apiKey) : Promise.resolve([]),
+  ]);
   const d1Foods = d1Result?.foods ?? [];
-  const useLiveTier2 = d1Foods.length < D1_TIER2_MIN_RESULTS;
+  const useLiveTier2 = liveUsdaEnabled && d1Foods.length < D1_TIER2_MIN_RESULTS;
   const settled = useLiveTier2
-    ? tier1Settled.concat(await runSearchRequests(tier2Requests, apiKey))
+    ? tier1Settled.concat(await runSearchRequests(tier2Requests, apiKey as string))
     : tier1Settled;
 
   const fulfilled = settled.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok);
@@ -184,7 +188,7 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
     if (isUsdaRequestError(error)) {
       return json({ error: error.message, status: error.status, detail: error.detail }, error.status);
     }
-    throw error;
+    if (liveUsdaEnabled) throw error;
   }
 
   let tagged = collectTaggedFoods(fulfilled);
@@ -192,7 +196,7 @@ async function routeRequest(request: Request, env: WorkerEnv): Promise<Response>
   // Strict retrieval found nothing (typo, plural, stray adjective) — one relaxed retry
   // without requireAllWords. Only runs when the strict pass succeeded but came back empty,
   // so strict results always win when they exist. D1 hits count as results.
-  if (tagged.length === 0 && d1Foods.length === 0) {
+  if (liveUsdaEnabled && apiKey && tagged.length === 0 && d1Foods.length === 0) {
     const loose = await runSearchRequests(looseSearchRequests(query), apiKey);
     tagged = collectTaggedFoods(loose.filter((r): r is Extract<SettledSearch, { ok: true }> => r.ok));
   }
