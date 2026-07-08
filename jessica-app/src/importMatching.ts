@@ -776,7 +776,7 @@ export function getImportFoodCandidate(
   return {
     key: `${source}:${food.id}`,
     source,
-    sourceLabel: source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "USDA",
+    sourceLabel: source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "Packaged",
     food,
     score,
     confidence,

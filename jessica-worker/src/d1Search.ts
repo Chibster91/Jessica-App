@@ -1,8 +1,9 @@
-// D1-backed canonical branded-food search. The `foods` table holds one clean
-// entry per real-world product (built offline by scripts/usda-pipeline);
-// `food_tokens` is an inverted index with a static rank so every per-token
-// read is capped; `brands` maps normalized brand phrases to display names for
-// brand-intent hints.
+// D1-backed food search — the only search path, no live external API. The
+// `foods` table holds one clean entry per real-world product (built offline
+// by scripts/food-pipeline from the OpenNutrition dataset); `food_tokens` is
+// an inverted index with a static rank so every per-token read is capped;
+// `brands` maps normalized brand phrases to display names for brand-intent
+// hints.
 
 import type { WorkerFood } from "./index";
 
@@ -31,6 +32,9 @@ type FoodRow = {
   portions_json: string | null;
   quality: number;
   group_size: number;
+  source_id: string | null;
+  barcode: string | null;
+  food_type: string | null;
 };
 
 export type D1SearchResult = {
@@ -132,8 +136,9 @@ function rowToWorkerFood(row: FoodRow, brandToken: string | null): WorkerFood {
     brandName: row.brand_name,
     category: row.category,
     ingredients: row.ingredients,
-    dataType: "Branded",
+    dataType: row.food_type ?? "grocery",
     servingSize: preview.servingSize,
+    householdServing: row.household_serving,
     calories: preview.calories,
     protein: preview.protein,
     carbs: preview.carbs,
@@ -167,9 +172,8 @@ function perServingPreview(row: FoodRow) {
   };
 }
 
-/** Detail response for a canonical food, mirroring the live /detail shape so
- * the client code path is identical. Returns null when the id isn't in D1
- * (caller falls back to live USDA — canonical ids are real FDC ids). */
+/** Detail response for a canonical food. Returns null when the id isn't in
+ * D1 (caller returns a clean "not found" — there's no other source left). */
 export async function getFoodDetailD1(db: D1Database, id: number): Promise<Record<string, unknown> | null> {
   const row = await db.prepare("SELECT * FROM foods WHERE fdc_id = ?1").bind(id).first<FoodRow>();
   if (!row) return null;
@@ -191,7 +195,7 @@ export async function getFoodDetailD1(db: D1Database, id: number): Promise<Recor
     name: row.name,
     brand: row.brand_owner,
     category: row.category,
-    dataType: "Branded",
+    dataType: row.food_type ?? "grocery",
     canonical: true,
     publicationDate: row.publication_date,
     ingredients: row.ingredients,

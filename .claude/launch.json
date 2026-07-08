@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jessica-app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "jessica-app"],
+      "port": 5173
+    },
+    {
+      "name": "jessica-worker",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["wrangler", "dev", "--remote", "--cwd", "jessica-worker"],
+      "port": 8787
+    }
+  ]
+}

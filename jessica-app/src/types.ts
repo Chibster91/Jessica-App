@@ -10,6 +10,10 @@ export type Food = {
   dataType?: string | null;
   source?: string;
   servingSize: string;
+  /** Raw household-serving text from D1 (e.g. "2 tbsp", "1 can") — often just
+   * a restatement of servingSize in g/ml; getFoodSearchServingDisplay decides
+   * whether it's actually useful to show. */
+  householdServing?: string | null;
   calories: number;
   protein: number;
   carbs: number;

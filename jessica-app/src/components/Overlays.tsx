@@ -430,13 +430,6 @@ export function EnterWeightSheet({
   onClose,
 }: EnterWeightSheetProps) {
   const [raw, setRaw] = useState(initialWeight || "");
-  const w = parseFloat(raw) || 0;
-
-  const step = (delta: number) => {
-    const next = Math.round((w + delta) * 10) / 10;
-    const clamped = Math.min(999, Math.max(1, next));
-    setRaw(clamped.toFixed(1));
-  };
 
   const commit = () => {
     const n = parseFloat(raw);
@@ -461,7 +454,6 @@ export function EnterWeightSheet({
       }
     >
       <div className="kit-weighin">
-        <button className="kit-weighin__step" onClick={() => step(-0.2)} aria-label="Decrease">−</button>
         <div className="kit-weighin__val">
           <input
             className="kit-weighin__input"
@@ -475,7 +467,6 @@ export function EnterWeightSheet({
           />
           <span>{unit}</span>
         </div>
-        <button className="kit-weighin__step" onClick={() => step(0.2)} aria-label="Increase">＋</button>
       </div>
       {dateLabel && <p className="kit-weighin__date">{dateLabel}</p>}
     </Sheet>

@@ -760,7 +760,7 @@ export function useImportFlow({
     return {
       key,
       source,
-      sourceLabel: autoCandidate?.sourceLabel ?? (source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "USDA"),
+      sourceLabel: autoCandidate?.sourceLabel ?? (source === "local" ? "Local" : source === "custom" ? "Custom" : source === "recipe" ? "Recipe" : "Packaged"),
       food,
       score: autoCandidate?.score ?? 0,
       confidence: autoCandidate?.confidence ?? "medium",

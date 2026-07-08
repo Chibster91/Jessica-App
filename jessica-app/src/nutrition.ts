@@ -62,7 +62,10 @@ export function getFoodServingDisplay(
 }
 
 export function getFoodSearchServingDisplay(
-  food: Pick<Food, "name" | "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "servingLabel">,
+  food: Pick<
+    Food,
+    "name" | "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "servingLabel" | "householdServing"
+  >,
   servingSize = food.servingSize
 ) {
   const explicitDisplay = getFoodServingDisplay({ ...food, servingSize });
@@ -83,6 +86,9 @@ export function getFoodSearchServingDisplay(
         break;
     }
   }
+
+  const packagedDisplay = getPackagedServingDisplay(food, servingSize);
+  if (packagedDisplay) return packagedDisplay;
 
   return servingSize.trim() || "100g";
 }
@@ -913,10 +919,11 @@ export function getTypicalServing(food: Pick<Food, "name">): TypicalServing | nu
   return match ? { gramWeight: match.gramWeight, label: match.label } : null;
 }
 
-const typicalServingDataTypes = new Set(["local", "foundation", "sr legacy", "survey (fndds)"]);
+const typicalServingDataTypes = new Set(["local", "everyday", "foundation", "sr legacy", "survey (fndds)"]);
 
 /** Typical serving for list rows: only foods whose serving is exactly per-100 g/ml qualify
- * (the local DB and non-branded USDA entries) — branded foods keep their label serving. */
+ * (the local DB and OpenNutrition's generic "everyday" foods) — branded/grocery foods keep
+ * their label serving. */
 export function getSearchTypicalServing(
   food: Pick<Food, "name" | "dataType" | "servingSize">
 ): TypicalServing | null {
@@ -949,6 +956,98 @@ export const mlPerTbsp = 15;
 export const mlPerTsp = 5;
 
 export const mlPerCup = 240;
+
+export const mlPerFlOz = 29.5735;
+
+/** Matches a raw restatement of the underlying weight/volume ("85 g", "240 ml") — not a
+ * genuinely different unit. isRawGramPortionLabel (used for the post-detail portion
+ * dropdown) only covers grams; the search preview also needs to catch ml restatements. */
+function isRawServingLabel(value: string) {
+  return /^\d+(?:\.\d+)?\s*(g|gram|grams|ml|milliliter|milliliters)$/i.test(value.trim());
+}
+
+// Unit words with an exact, density-independent conversion to a basis unit — used only
+// to sanity-check a household serving against serving_size within the SAME family
+// (volume word vs ml-basis, weight word vs g-basis). Deliberately does not attempt
+// cross-family checks (e.g. "cup" against a gram-basis food): density varies far too
+// much across foods for that to distinguish a mislabeled row from a correctly-labeled
+// one (1 cup of cereal ≈ 30g, 1 cup of honey ≈ 340g) — see nutrition.ts's serving-preview
+// plan notes. Cross-family pairs and words with no fixed conversion (can, jar, bar,
+// slice, cookie, ...) are trusted as-is, same as the post-detail portion dropdown.
+const householdVolumeUnitMl: Record<string, number> = {
+  cup: mlPerCup,
+  cups: mlPerCup,
+  tbsp: mlPerTbsp,
+  tablespoon: mlPerTbsp,
+  tablespoons: mlPerTbsp,
+  tsp: mlPerTsp,
+  teaspoon: mlPerTsp,
+  teaspoons: mlPerTsp,
+  "fl oz": mlPerFlOz,
+  "fluid ounce": mlPerFlOz,
+  "fluid ounces": mlPerFlOz,
+};
+
+const gramsPerPound = gramsPerOunce * 16;
+
+const householdWeightUnitG: Record<string, number> = {
+  oz: gramsPerOunce,
+  ounce: gramsPerOunce,
+  ounces: gramsPerOunce,
+  lb: gramsPerPound,
+  lbs: gramsPerPound,
+  pound: gramsPerPound,
+  pounds: gramsPerPound,
+};
+
+function isPlausibleHouseholdServing(
+  amount: number,
+  unitLabel: string,
+  servingSizeAmount: number,
+  servingSizeUnit: "g" | "ml"
+): boolean {
+  const key = unitLabel.trim().toLowerCase();
+  const table = servingSizeUnit === "ml" ? householdVolumeUnitMl : householdWeightUnitG;
+  const perUnit = table[key];
+  if (perUnit === undefined) return true; // cross-family or no fixed conversion: trust as-is
+
+  const ratio = (amount * perUnit) / servingSizeAmount;
+  return ratio >= 0.4 && ratio <= 2.5;
+}
+
+// Below these, an oz/fl-oz fallback reads worse than the plain gram/ml amount
+// (a single condiment packet at "0.2 oz" is less legible than "5 g").
+const minDisplayOz = 0.5;
+const minDisplayFlOz = 1;
+
+function formatOuncesOrFlOz(amount: number, unit: "g" | "ml"): string | null {
+  const converted = unit === "g" ? amount / gramsPerOunce : amount / mlPerFlOz;
+  const floor = unit === "g" ? minDisplayOz : minDisplayFlOz;
+  if (converted < floor) return null;
+
+  const rounded = Number.isInteger(converted) ? converted : Number(converted.toFixed(1));
+  return unit === "g" ? `${rounded} oz` : `${rounded} fl oz`;
+}
+
+/** Preview-list serving display for packaged foods: prefer D1's household serving
+ * ("2 tbsp") when it's a genuine unit (not a gram/ml restatement, and — where
+ * verifiable — not a same-family quantity mismatch), else fall back to oz/fl oz
+ * instead of raw grams/ml. Returns null when servingSize doesn't parse as g/ml
+ * (nothing to convert) or the oz/fl-oz result is below the legibility floor. */
+function getPackagedServingDisplay(food: Pick<Food, "householdServing">, servingSize: string): string | null {
+  const basis = parseServingSize(servingSize);
+  if (!basis || (basis.unit !== "g" && basis.unit !== "ml")) return null;
+
+  const household = food.householdServing?.trim();
+  if (household && !isRawServingLabel(household)) {
+    const parsed = parseHouseholdServingText(household);
+    if (parsed && isPlausibleHouseholdServing(parsed.amount, parsed.unitLabel, basis.amount, basis.unit)) {
+      return parsed.amount === 1 ? parsed.unitLabel : parsed.label;
+    }
+  }
+
+  return formatOuncesOrFlOz(basis.amount, basis.unit);
+}
 
 export function convertAmountToBasisUnit(
   amount: number,

@@ -14,5 +14,5 @@ jessica-app/public/Icons/old icon/
 /googlefonts noto-emoji main svg/
 /FOOD_VAULT_UPDATE/
 /import files/
-scripts/usda-pipeline/data/
-scripts/usda-pipeline/out/
+scripts/food-pipeline/data/
+scripts/food-pipeline/out/

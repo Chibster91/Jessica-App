@@ -146,7 +146,7 @@ describe("getFoodSearchScore — whole-word matching", () => {
 describe("matchesLocalFoodQuery — typo tolerance without short-word collisions", () => {
   it("does not match brand searches against look-alike 4-letter whole foods", () => {
     // Regression: "coke"↔"cake" and "coca"↔"cola" were matching, which hijacked
-    // the search away from USDA-branded sodas toward the local DB.
+    // the search away from packaged/branded sodas toward the local DB.
     expect(matchesLocalFoodQuery("Cake flour", "Baking", "coke")).toBe(false);
     expect(matchesLocalFoodQuery("Soda, cola", "Beverages", "coca cola")).toBe(false);
     expect(matchesLocalFoodQuery("Beets", "Vegetables", "beef")).toBe(false);
@@ -207,13 +207,13 @@ describe("getFoodSearchScore — manufacturer-name clutter and broader brand-int
   });
 });
 
-describe("searchFoodsGrouped — USDA toggle", () => {
-  it("keeps D1 canonical packaged results when live USDA is off", async () => {
+describe("searchFoodsGrouped — packaged search toggle", () => {
+  it("keeps D1 canonical packaged results when the toggle is off", async () => {
     const canonicalCoke = food({
       id: 754304,
       name: "Coca-Cola",
       brand: "The Coca-Cola Company",
-      dataType: "Branded",
+      dataType: "grocery",
       canonical: true,
       brandMatch: true,
     });

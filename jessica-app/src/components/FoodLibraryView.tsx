@@ -65,7 +65,7 @@ export function FoodLibraryView({
         amountUnit: "serving",
         servingLabel: quantity === 1 ? food.servingSize : `${quantity} x ${food.servingSize}`,
         logId: createClientId(),
-        // The log stores a flat nutrition snapshot; the USDA portion detail stays on the library copy.
+        // The log stores a flat nutrition snapshot; the saved portion detail stays on the library copy.
         savedDetail: undefined,
       },
     ]);
@@ -553,7 +553,7 @@ export function FoodLibraryView({
       )}
 
       {nutritionPreview && (() => {
-        // A real recipe has an ingredients array; branded USDA foods carry an
+        // A real recipe has an ingredients array; branded packaged foods carry an
         // `ingredients` *string* (the label's ingredient list), so test the type,
         // not just the key's presence.
         const isRecipePreview = Array.isArray((nutritionPreview.food as Recipe).ingredients);
@@ -663,7 +663,7 @@ export function FoodLibraryView({
           <div className="search-row">
             <input
               value={recipeIngredientQuery}
-              placeholder="Search USDA and custom foods..."
+              placeholder="Search packaged and custom foods..."
               onChange={(e) => setRecipeIngredientQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
             />

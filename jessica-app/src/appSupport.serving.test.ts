@@ -6,6 +6,7 @@ import {
   getTypicalServing,
   getSearchTypicalServing,
   getFoodSearchCalorieDisplay,
+  getFoodSearchServingDisplay,
   formatTypicalServingDisplay,
   applyTypicalServing,
   convertAmountToBasisUnit,
@@ -308,19 +309,89 @@ describe("getTypicalServing", () => {
 });
 
 describe("getSearchTypicalServing", () => {
-  it("applies to per-100g local and USDA generic foods", () => {
+  it("applies to per-100g local, OpenNutrition 'everyday', and legacy USDA generic foods", () => {
     expect(getSearchTypicalServing({ name: "Apples, with skin", dataType: "local", servingSize: "100 g" }))
       .toEqual({ gramWeight: 182, label: "1 medium apple" });
+    expect(getSearchTypicalServing({ name: "Broccoli, raw", dataType: "everyday", servingSize: "100 g" }))
+      .toEqual({ gramWeight: 91, label: "1 cup chopped" });
     expect(getSearchTypicalServing({ name: "Broccoli, raw", dataType: "SR Legacy", servingSize: "100 g" }))
       .toEqual({ gramWeight: 91, label: "1 cup chopped" });
     expect(getSearchTypicalServing({ name: "Egg, whole, cooked, scrambled", dataType: "Survey (FNDDS)", servingSize: "100 g" }))
       .toEqual({ gramWeight: 50, label: "1 large egg" });
   });
 
-  it("leaves branded foods and non-100g servings alone", () => {
+  it("leaves branded/grocery foods and non-100g servings alone", () => {
+    expect(getSearchTypicalServing({ name: "Cheddar cheese", dataType: "grocery", servingSize: "100 g" })).toBeNull();
     expect(getSearchTypicalServing({ name: "Cheddar cheese", dataType: "Branded", servingSize: "100 g" })).toBeNull();
     expect(getSearchTypicalServing({ name: "Cheddar cheese", dataType: "local", servingSize: "28 g" })).toBeNull();
     expect(getSearchTypicalServing({ name: "Cheddar cheese", servingSize: "100 g" })).toBeNull();
+  });
+});
+
+describe("getFoodSearchServingDisplay — packaged (D1) household serving", () => {
+  it("uses a genuine natural household serving instead of raw grams", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Hazelnut Spread", dataType: "grocery", servingSize: "37 g", householdServing: "2 tbsp" })
+    ).toBe("2 tbsp");
+  });
+
+  it("falls through to the oz fallback when household serving is just a gram restatement", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Some Snack", dataType: "grocery", servingSize: "85 g", householdServing: "85 g" })
+    ).toBe("3 oz");
+  });
+
+  it("falls through to the fl oz fallback when household serving is just a milliliter restatement", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Some Drink", dataType: "grocery", servingSize: "240 ml", householdServing: "240 ml" })
+    ).toBe("8.1 fl oz");
+  });
+
+  it("rejects a same-family quantity mismatch (cup on an ml-basis food, way off from 240 ml/cup)", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Mislabeled Wine", dataType: "grocery", servingSize: "45 ml", householdServing: "1 cup" })
+    ).toBe("1.5 fl oz");
+  });
+
+  it("trusts a cross-family pairing (volume word on a gram-basis food) — this is normal for dry goods, not a mismatch", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Cereal", dataType: "grocery", servingSize: "30 g", householdServing: "1 cup" })
+    ).toBe("cup");
+    expect(
+      getFoodSearchServingDisplay({ name: "Honey", dataType: "grocery", servingSize: "340 g", householdServing: "1 cup" })
+    ).toBe("cup");
+  });
+
+  it("trusts count-noun units with no fixed conversion to verify against (amount===1 drops the leading '1', matching getPreferredHouseholdPortion's existing convention)", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Soup", dataType: "grocery", servingSize: "80 g", householdServing: "1 can" })
+    ).toBe("can");
+    expect(
+      getFoodSearchServingDisplay({ name: "Protein Bar", dataType: "grocery", servingSize: "29 g", householdServing: "1 bar" })
+    ).toBe("bar");
+  });
+
+  it("parses fractional household servings (parseHouseholdServingText converts the fraction to decimal)", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Ice Cream", dataType: "grocery", servingSize: "88 g", householdServing: "1/2 cup" })
+    ).toBe("0.5 cup");
+  });
+
+  it("keeps grams/ml below the oz/fl-oz legibility floor instead of showing an unreadable fraction", () => {
+    expect(
+      getFoodSearchServingDisplay({ name: "Condiment Packet", dataType: "grocery", servingSize: "5 g" })
+    ).toBe("5 g");
+    expect(
+      getFoodSearchServingDisplay({ name: "Splash", dataType: "grocery", servingSize: "10 ml" })
+    ).toBe("10 ml");
+  });
+
+  it("falls back to fl oz when there's no household serving at all", () => {
+    expect(getFoodSearchServingDisplay({ name: "Soda", dataType: "grocery", servingSize: "355 ml" })).toBe("12 fl oz");
+  });
+
+  it("falls back to oz for the generic 100g/no-household-serving case, instead of the bare '100 g'", () => {
+    expect(getFoodSearchServingDisplay({ name: "Some Grocery Item", dataType: "grocery", servingSize: "100 g" })).toBe("3.5 oz");
   });
 });
 
@@ -341,12 +412,12 @@ describe("getFoodSearchCalorieDisplay with typical servings", () => {
     expect(getFoodSearchCalorieDisplay(apple)).toEqual({ calories: 95, serving: "medium apple (182g)" });
   });
 
-  it("keeps branded foods on their label serving", () => {
+  it("doesn't rescale calories for a branded food with no household serving, but does relabel the bare '100 g' as oz (intentional: see the packaged-serving-display tests below)", () => {
     const brandedCheese: Food = {
       id: 2, name: "Cheddar cheese", brand: "Tillamook", dataType: "Branded",
       servingSize: "100 g", calories: 403, protein: 23, carbs: 3, fat: 33,
     };
-    expect(getFoodSearchCalorieDisplay(brandedCheese)).toEqual({ calories: 403, serving: "100 g" });
+    expect(getFoodSearchCalorieDisplay(brandedCheese)).toEqual({ calories: 403, serving: "3.5 oz" });
   });
 });
 

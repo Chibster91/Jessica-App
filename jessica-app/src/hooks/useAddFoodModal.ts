@@ -191,8 +191,8 @@ export function useAddFoodModal({
       if (result.usdaError) {
         setSearchError(
           result.groups.length > 0
-            ? "Couldn't reach the USDA food database — showing other matches."
-            : "Couldn't reach the USDA food database. Check your connection and try again."
+            ? "Couldn't reach the packaged food database — showing other matches."
+            : "Couldn't reach the packaged food database. Check your connection and try again."
         );
       }
     } catch {

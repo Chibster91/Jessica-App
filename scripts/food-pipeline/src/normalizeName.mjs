@@ -18,7 +18,7 @@ const CONTAINER_WORDS = new Set([
 
 const COUNT_UNITS = new Set(["pack", "packs", "pk", "ct", "count", "piece", "pieces", "pc", "pcs"]);
 
-function canonicalUnit(rawUnit) {
+export function canonicalUnit(rawUnit) {
   const u = rawUnit.toLowerCase().replace(/\s+/g, " ").replace(/\./g, "").trim();
   if (/^fl\s?oz$|^fluid ounces?$/.test(u)) return "fl oz";
   if (/^ounces?$|^oz$/.test(u)) return "oz";

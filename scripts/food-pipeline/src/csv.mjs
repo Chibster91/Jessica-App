@@ -1,12 +1,13 @@
-// Streaming RFC-4180 CSV parser. USDA bulk files have quoted fields containing
-// commas, escaped quotes ("") and embedded newlines, so a readline split is not
-// enough. Yields one string[] per record; handles LF and CRLF; tolerates a
-// missing trailing newline. Processes chunk-by-chunk so multi-GB files never
-// live in memory.
+// Streaming RFC-4180-style delimited parser. Bulk data files (USDA CSVs,
+// OpenNutrition's TSV) have quoted fields containing the delimiter, escaped
+// quotes ("") and embedded newlines, so a readline split is not enough.
+// Yields one string[] per record; handles LF and CRLF; tolerates a missing
+// trailing newline. Processes chunk-by-chunk so multi-GB files never live in
+// memory. Delimiter defaults to "," (CSV); pass "\t" for TSV.
 
 import { createReadStream } from "node:fs";
 
-export async function* parseCsvStream(stream) {
+export async function* parseCsvStream(stream, delimiter = ",") {
   let field = "";
   let row = [];
   let inQuotes = false;
@@ -38,7 +39,7 @@ export async function* parseCsvStream(stream) {
 
       if (ch === '"' && field === "") {
         inQuotes = true;
-      } else if (ch === ",") {
+      } else if (ch === delimiter) {
         row.push(field);
         field = "";
       } else if (ch === "\n") {
@@ -60,8 +61,8 @@ export async function* parseCsvStream(stream) {
   }
 }
 
-export async function* parseCsvFile(path) {
-  yield* parseCsvStream(createReadStream(path, { encoding: "utf8", highWaterMark: 1 << 20 }));
+export async function* parseCsvFile(path, delimiter = ",") {
+  yield* parseCsvStream(createReadStream(path, { encoding: "utf8", highWaterMark: 1 << 20 }), delimiter);
 }
 
 /** Read the header row and return a name -> column index map (lowercased names). */

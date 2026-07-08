@@ -1,5 +1,5 @@
 import type { ActivityLevel, CalculatorInputs, GoalType, Goals, MacroPreset, Profile, ProfileActivityLevel, ProfileCalculation, ProfileForm, ProfileUnits, WeightUnit } from "./types";
-import { cmToTotalInches, convertWeightValue, formatProfileNumber, kgToLb, lbToKg, parseDecimalInput, poundsPerKilogram } from "./format";
+import { cmToTotalInches, convertWeightValue, formatProfileNumber, getLocalDateString, kgToLb, lbToKg, parseDecimalInput, poundsPerKilogram, shiftDate } from "./format";
 
 export const defaultCalculatorInputs: CalculatorInputs = {
   age: "",
@@ -373,6 +373,17 @@ export function profileToGoals(profile: Profile): Goals {
       rate: profile.weeklyRateKg <= 0.25 ? "mild" : profile.weeklyRateKg >= 0.75 ? "aggressive" : "moderate",
     },
   };
+}
+
+// The single source of truth for "when will I hit my goal weight at my
+// planned weekly rate" — shared by the profile's target-date row and the
+// weight page's goal date so the two can never disagree.
+export function computeGoalDate(profile: Profile): string | null {
+  if (profile.goal === "maintain" || profile.weeklyRateKg <= 0 || !profile.goalWeightKg) return null;
+  if (profile.goal === "lose" && profile.weightKg <= profile.goalWeightKg) return null;
+  if (profile.goal === "gain" && profile.weightKg >= profile.goalWeightKg) return null;
+  const diff = Math.abs(profile.weightKg - profile.goalWeightKg);
+  return shiftDate(getLocalDateString(), Math.ceil((diff / profile.weeklyRateKg) * 7));
 }
 
 export function calculatorInputsToForm(goals: Goals | null): CalculatorInputs {

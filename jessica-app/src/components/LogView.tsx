@@ -640,7 +640,7 @@ export function LogView(props: LogViewProps) {
                 className={`add-food-usda-btn${usdaEnabled ? " is-active" : ""}`}
                 onClick={toggleUsda}
               >
-                USDA {usdaEnabled ? "on" : "off"}
+                Packaged search {usdaEnabled ? "on" : "off"}
               </button>
             </div>
           </div>
@@ -696,11 +696,20 @@ export function LogView(props: LogViewProps) {
                   {!isSearchingFoods && !searchError && modalFoodGroups.length === 0 && (
                     searchedQuery
                       ? <p className="empty-meal">No results for &ldquo;{searchedQuery}&rdquo;.</p>
-                      : <p className="empty-meal">Search for foods from USDA, local foods, custom foods, recipes, and recent logs.</p>
+                      : <p className="empty-meal">Search packaged foods, local foods, custom foods, recipes, and recent logs.</p>
                   )}
                   {!isSearchingFoods && modalFoodGroups.map((group) => (
                     <Fragment key={group.label}>
                       <p className="food-group-label">{group.label}</p>
+                      {group.label === "Packaged" && (
+                        <p className="add-food-attribution">
+                          Packaged food data from{" "}
+                          <a href="https://www.opennutrition.app" target="_blank" rel="noreferrer">OpenNutrition</a>
+                          {" "}&amp;{" "}
+                          <a href="https://world.openfoodfacts.org" target="_blank" rel="noreferrer">Open Food Facts</a>
+                          {" "}(ODbL)
+                        </p>
+                      )}
                       {group.foods.map((food) => {
                         const resultDisplay = getModalResultCalories(
                           food,
@@ -726,7 +735,7 @@ export function LogView(props: LogViewProps) {
                             </span>
                             <span className="food-card-meta-row">
                               <span className="food-card-brand">
-                                {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
+                                {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "Packaged")}
                               </span>
                               <span className="food-card-cal">
                                 {resultDisplay.isLoading
@@ -742,10 +751,10 @@ export function LogView(props: LogViewProps) {
                     </Fragment>
                   ))}
                   {!isSearchingFoods && searchedQuery && usdaSkipped === "local-hit" && (
-                    <p className="add-food-usda-hint">USDA search skipped &mdash; found matches in built-in foods.</p>
+                    <p className="add-food-usda-hint">Packaged search skipped &mdash; found matches in built-in foods.</p>
                   )}
                   {!isSearchingFoods && searchedQuery && usdaSkipped === "disabled" && (
-                    <p className="add-food-usda-hint">Live USDA search is off &mdash; showing saved packaged matches only.</p>
+                    <p className="add-food-usda-hint">Packaged search is off &mdash; showing saved packaged matches only.</p>
                   )}
               </div>
             )}
@@ -1078,7 +1087,7 @@ export function LogView(props: LogViewProps) {
                           <div className="search-row">
                             <input
                               value={recipeIngredientQuery}
-                              placeholder="Search USDA and custom foods..."
+                              placeholder="Search packaged and custom foods..."
                               onChange={(e) => setRecipeIngredientQuery(e.target.value)}
                               onKeyDown={(e) => e.key === "Enter" && searchRecipeIngredientFoods()}
                             />
@@ -1093,7 +1102,7 @@ export function LogView(props: LogViewProps) {
                             )}
 
                             {recipeIngredientOptions.length === 0 && (
-                              <p className="empty-meal">Search USDA, or add custom foods to use as ingredients.</p>
+                              <p className="empty-meal">Search packaged foods, or add custom foods to use as ingredients.</p>
                             )}
 
                             {recipeIngredientOptions.map((food) => {
@@ -1110,7 +1119,7 @@ export function LogView(props: LogViewProps) {
                                   </span>
                                   <span className="food-card-meta-row">
                                     <span className="food-card-brand">
-                                      {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "USDA")}
+                                      {food.brand ? getBrandDisplayName(food.brand) : (food.dataType ?? "Packaged")}
                                     </span>
                                     <span className="food-card-cal">
                                       {food.isSearchPreview ? "Select to load nutrition" : `${food.calories} cal per ${food.servingSize}`}
@@ -1564,7 +1573,7 @@ export function LogView(props: LogViewProps) {
 
             <div className="import-manual-results">
               {importReviewManualGroups.length === 0 && (
-                <p className="empty-meal">Search local foods, custom foods, recipes, and USDA foods.</p>
+                <p className="empty-meal">Search local foods, custom foods, recipes, and packaged foods.</p>
               )}
               {(importReviewManualGroups as ImportManualGroupUi[]).map((group) => (
                 <section className="import-manual-result-group" key={group.label}>

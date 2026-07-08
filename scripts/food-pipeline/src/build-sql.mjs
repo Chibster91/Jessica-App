@@ -89,7 +89,7 @@ class SqlChunker {
 
 const chunker = new SqlChunker(args.sql, "data");
 const FOODS_PREFIX =
-  "INSERT OR REPLACE INTO foods (fdc_id,name,brand_owner,brand_name,category,ingredients,serving_size,serving_size_unit,household_serving,publication_date,calories,protein,carbs,fat,fiber,sodium,sugars,portions_json,quality,group_size) VALUES ";
+  "INSERT OR REPLACE INTO foods (fdc_id,name,brand_owner,brand_name,category,ingredients,serving_size,serving_size_unit,household_serving,publication_date,calories,protein,carbs,fat,fiber,sodium,sugars,portions_json,quality,group_size,source_id,barcode,food_type) VALUES ";
 const TOKENS_PREFIX = "INSERT INTO food_tokens (token,rank,fdc_id) VALUES ";
 const BRANDS_PREFIX = "INSERT OR REPLACE INTO brands (token,brand_name) VALUES ";
 
@@ -111,7 +111,7 @@ for await (const line of rl) {
   const n = c.per100;
   chunker.add(
     FOODS_PREFIX,
-    `(${c.fdcId},${q(c.name)},${q(c.brandOwner)},${q(c.brandName)},${q(c.category)},${q(c.ingredients)},${q(c.servingSize)},${q(c.servingSizeUnit)},${q(c.householdServing)},${q(c.publicationDate)},${q(n.calories ?? 0)},${q(n.protein ?? 0)},${q(n.carbs ?? 0)},${q(n.fat ?? 0)},${q(n.fiber)},${q(n.sodium)},${q(n.sugars)},${q(JSON.stringify(c.portions ?? []))},${c.quality ?? 0},${c.groupSize ?? 1})`
+    `(${c.fdcId},${q(c.name)},${q(c.brandOwner)},${q(c.brandName)},${q(c.category)},${q(c.ingredients)},${q(c.servingSize)},${q(c.servingSizeUnit)},${q(c.householdServing)},${q(c.publicationDate)},${q(n.calories ?? 0)},${q(n.protein ?? 0)},${q(n.carbs ?? 0)},${q(n.fat ?? 0)},${q(n.fiber)},${q(n.sodium)},${q(n.sugars)},${q(JSON.stringify(c.portions ?? []))},${c.quality ?? 0},${c.groupSize ?? 1},${q(c.sourceId)},${q(c.barcode)},${q(c.foodType)})`
   );
   foods++;
   for (const token of c.tokens ?? []) {

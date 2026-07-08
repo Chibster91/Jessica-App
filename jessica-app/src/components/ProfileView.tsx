@@ -3,6 +3,7 @@ import "../styles/profile.css";
 import { loadCycleData, saveCycleData } from "../cycleStorage";
 import { Sheet } from "./Overlays";
 import {
+  computeGoalDate,
   formatEntryDate,
   formatProfileNumber,
   formatWeightValue,
@@ -80,14 +81,6 @@ function computeBmr(profile: Profile): number {
 
 function computeTdee(profile: Profile): number {
   return Math.round(computeBmr(profile) * profileActivityMultipliers[profile.activityLevel]);
-}
-
-function computeGoalDate(profile: Profile): string | null {
-  if (profile.goal === "maintain" || profile.weeklyRateKg <= 0 || !profile.goalWeightKg) return null;
-  if (profile.goal === "lose" && profile.weightKg <= profile.goalWeightKg) return null;
-  if (profile.goal === "gain" && profile.weightKg >= profile.goalWeightKg) return null;
-  const diff = Math.abs(profile.weightKg - profile.goalWeightKg);
-  return shiftDate(getLocalDateString(), Math.ceil((diff / profile.weeklyRateKg) * 7));
 }
 
 // Whole days from `from` to `to` (both "YYYY-MM-DD", parsed as local dates).
@@ -867,7 +860,10 @@ export function ProfileView({
         {infoSheet === "privacy" && (
           <Sheet title="Privacy &amp; data" onClose={() => setInfoSheet(null)}>
             <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
-              FoodVault stores everything — your profile, food logs, recipes, and weight entries — only in this browser&rsquo;s local storage. Nothing is sent to a server except food searches (looked up against the USDA FoodData Central database) and, if you choose to connect it, an optional Google Drive backup. Clearing your browser data or switching devices without backing up will lose anything stored locally.
+              FoodVault stores everything — your profile, food logs, recipes, and weight entries — only in this browser&rsquo;s local storage. Nothing is sent to a server except food searches (looked up against a food database built from{" "}
+              <a href="https://www.opennutrition.app" target="_blank" rel="noreferrer">OpenNutrition</a> and{" "}
+              <a href="https://world.openfoodfacts.org" target="_blank" rel="noreferrer">Open Food Facts</a> data, licensed under the{" "}
+              <a href="https://opendatacommons.org/licenses/odbl/1.0/" target="_blank" rel="noreferrer">Open Database License</a>) and, if you choose to connect it, an optional Google Drive backup. Clearing your browser data or switching devices without backing up will lose anything stored locally.
             </p>
           </Sheet>
         )}

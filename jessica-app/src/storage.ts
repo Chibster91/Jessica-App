@@ -109,14 +109,51 @@ export function verifyStorageCount(key: string, expectedCount: number) {
 
 export const schemaVersionKey = "schemaVersion";
 
-export const currentSchemaVersion = 1;
+export const currentSchemaVersion = 2;
 
 // Storage migrations, keyed by the version they upgrade TO. Version 1 is the
 // baseline stamp for the shapes that existed before versioning; add an entry
 // here (and bump currentSchemaVersion) whenever a stored shape changes, e.g.:
 //   2: () => { const foods = getStorageArray<Food>("customFoods"); ...; setStorageJson("customFoods", upgraded); },
 
-export const storageMigrations: Record<number, (() => void) | undefined> = {};
+// Matches scripts/food-pipeline/src/surrogateId.mjs's SURROGATE_ID_FLOOR: the
+// D1 food database was rebuilt from OpenNutrition with synthetic ids starting
+// here, replacing the old USDA-derived ids (which never reached this high).
+// A stored food with an id below this floor predates that rebuild.
+const PRE_CUTOVER_ID_FLOOR = 100_000_000;
+
+/** A pre-cutover saved food with no cached `savedDetail` and non-positive
+ * calories (e.g. a saved diet soda) would otherwise fall through to a live
+ * `/detail` fetch keyed on its now-meaningless old id (useAddFoodModal.ts's
+ * selectFood: `applySavedFoodDetail` needs `savedDetail`, and the fallback
+ * skip-fetch check `hasUsableSearchNutrition` requires calories > 0). Best
+ * case that fetch 404s; there's no reason to risk it. Stamping an empty
+ * `savedDetail` makes `applySavedFoodDetail` short-circuit unconditionally —
+ * every portion/detail helper it calls already tolerates an empty detail. */
+function neutralizeStaleFoodId(food: Food): Food {
+  if (food.savedDetail) return food;
+  if (!(typeof food.id === "number" && food.id > 0 && food.id < PRE_CUTOVER_ID_FLOOR)) return food;
+  return { ...food, savedDetail: {} };
+}
+
+export const storageMigrations: Record<number, (() => void) | undefined> = {
+  2: () => {
+    saveCustomFoods(getSavedCustomFoods().map(neutralizeStaleFoodId));
+    saveRecipes(
+      getSavedRecipes().map((recipe) => ({
+        ...neutralizeStaleFoodId(recipe),
+        ingredients: recipe.ingredients.map((ingredient) => ({
+          ...ingredient,
+          food: neutralizeStaleFoodId(ingredient.food),
+        })),
+      }))
+    );
+    for (const key of Object.keys(localStorage)) {
+      if (!key.startsWith("log-")) continue;
+      setStorageJson(key, getStorageArray<SavedLogItem>(key).map(neutralizeStaleFoodId));
+    }
+  },
+};
 
 export function runStorageMigrations() {
   let storedVersion: number;
