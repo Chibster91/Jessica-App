@@ -437,7 +437,7 @@ export function EnterWeightSheet({
       const clamped = Math.round(Math.min(999, Math.max(1, n)) * 10) / 10;
       setRaw(clamped.toFixed(1));
     } else {
-      setRaw(w > 0 ? w.toFixed(1) : "");
+      setRaw("");
     }
   };
 
