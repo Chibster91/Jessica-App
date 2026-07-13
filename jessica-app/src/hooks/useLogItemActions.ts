@@ -3,7 +3,8 @@ import {
   setStorageJson,
   getSavedLog,
   getMeasuredServingBasis,
-  getFoodDensity,
+  getAmountUnitsForFood,
+  resolveVolumeDensity,
   convertAmountToBasisUnit,
   getScaleFromServingBasis,
   scaleFoodNutrition,
@@ -29,16 +30,13 @@ function formatAmountLabel(amount: number) {
   return Number.isInteger(amount) ? String(amount) : String(Number(amount.toFixed(2)));
 }
 
+/** Thin wrapper around the shared getAmountUnitsForFood: same rules as the add-food
+ * sheet, plus a safety net for legacy logged items whose stored unit might not fit
+ * the current rules (e.g. logged before this food had derivable portion density). */
 function getEditAmountUnits(item: LogItem | null) {
   if (!item) return ["serving"] as AmountUnit[];
 
-  const units: AmountUnit[] =
-    item.measurementType === "liquid"
-      ? ["serving", "ml", "cup", "tbsp", "tsp"]
-      : item.measurementType === "spoonable"
-      ? ["serving", "g", "oz", "tbsp", "tsp"]
-      : ["serving", "g", "oz"];
-
+  const units = getAmountUnitsForFood(item);
   if (item.amountUnit && !units.includes(item.amountUnit)) units.push(item.amountUnit);
 
   return units;
@@ -133,7 +131,7 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
     const measuredBasis = getMeasuredServingBasis(itemToEdit);
     if (!measuredBasis) return itemToEdit;
 
-    const basisAmount = convertAmountToBasisUnit(amount, editItemAmountUnit, measuredBasis.unit, getFoodDensity(itemToEdit));
+    const basisAmount = convertAmountToBasisUnit(amount, editItemAmountUnit, measuredBasis.unit, resolveVolumeDensity(itemToEdit));
     if (basisAmount === null) return itemToEdit;
 
     const amountScale = getScaleFromServingBasis(itemToEdit, basisAmount);
@@ -168,7 +166,7 @@ export function useLogItemActions({ selectedDate, log, setLog, recipes, setRecip
               const measuredBasis = getMeasuredServingBasis(item);
               if (!measuredBasis) return item;
 
-              const basisAmount = convertAmountToBasisUnit(amount, effectiveUnit, measuredBasis.unit, getFoodDensity(item));
+              const basisAmount = convertAmountToBasisUnit(amount, effectiveUnit, measuredBasis.unit, resolveVolumeDensity(item));
               if (basisAmount === null) return item;
 
               const amountScale = getScaleFromServingBasis(item, basisAmount);

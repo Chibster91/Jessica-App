@@ -358,6 +358,7 @@ export type AmountUnit =
   | "g"
   | "oz"
   | "ml"
+  | "fl oz"
   | "cup"
   | "tbsp"
   | "tsp";

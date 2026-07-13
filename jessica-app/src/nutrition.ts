@@ -96,7 +96,17 @@ export function getFoodSearchServingDisplay(
 export function getFoodSearchCalorieDisplay(
   food: Pick<
     Food,
-    "name" | "calories" | "dataType" | "measurementType" | "servingSize" | "amount" | "amountUnit" | "portionLabel" | "portionScale" | "servingLabel"
+    | "name"
+    | "calories"
+    | "dataType"
+    | "measurementType"
+    | "servingSize"
+    | "amount"
+    | "amountUnit"
+    | "portionLabel"
+    | "portionScale"
+    | "servingLabel"
+    | "householdServing"
   >,
   calories = food.calories,
   servingSize = food.servingSize
@@ -116,7 +126,7 @@ export function getFoodSearchCalorieDisplay(
   if (amountUnit && amountUnit !== "serving") {
     const amount = food.amount && Number.isFinite(food.amount) ? food.amount : 1;
     const basis = getMeasuredServingBasis(food);
-    const basisAmount = basis ? convertAmountToBasisUnit(amount, amountUnit, basis.unit, getFoodDensity(food)) : null;
+    const basisAmount = basis ? convertAmountToBasisUnit(amount, amountUnit, basis.unit, resolveVolumeDensity(food)) : null;
     const scale = basisAmount !== null ? getScaleFromServingBasis(food, basisAmount) : null;
 
     if (scale !== null) {
@@ -1049,6 +1059,53 @@ function getPackagedServingDisplay(food: Pick<Food, "householdServing">, serving
   return formatOuncesOrFlOz(basis.amount, basis.unit);
 }
 
+// Real food densities run roughly 0.2 g/ml (puffed cereal) to ~2.0 g/ml (dense
+// syrups, with margin). Pipeline-ingested data at 326k-row scale will have the
+// occasional typo (a container weight fat-fingered into the serving field); a
+// derived density outside this range is treated as bad data, not a real food.
+const minPortionDensity = 0.2;
+const maxPortionDensity = 2.0;
+
+/** Derives a per-food g/ml density from a genuine volume-unit household serving
+ * (e.g. Nutella's "2 tbsp" = 37g implies ~1.23 g/ml for that specific product).
+ * Cup/tbsp/tsp are exact volume subdivisions of each other, so this one data
+ * point is enough to convert any of them for this food — not a generic
+ * cup-of-anything-is-240g assumption, which is wrong by 10x+ across dry goods.
+ * Returns null when there's nothing to derive from (no household serving, a
+ * raw restatement, a count noun like "can", or an ml-basis food where this
+ * doesn't apply) or when the derived value fails the sanity clamp above —
+ * failing closed to "no volume tabs" beats failing open to bad math. */
+export function getPortionDerivedDensity(food: Pick<Food, "householdServing" | "servingSize">): number | null {
+  const basis = parseServingSize(food.servingSize);
+  if (!basis || basis.unit !== "g") return null;
+
+  const household = food.householdServing?.trim();
+  if (!household || isRawServingLabel(household)) return null;
+
+  const parsed = parseHouseholdServingText(household);
+  if (!parsed) return null;
+
+  const mlPerUnit = householdVolumeUnitMl[parsed.unitLabel.trim().toLowerCase()];
+  if (mlPerUnit === undefined) return null;
+
+  const impliedMl = parsed.amount * mlPerUnit;
+  if (!Number.isFinite(impliedMl) || impliedMl <= 0) return null;
+
+  const density = basis.amount / impliedMl;
+  if (!Number.isFinite(density) || density < minPortionDensity || density > maxPortionDensity) return null;
+
+  return density;
+}
+
+/** Density to use for cup/tbsp/tsp conversions: prefer a real per-product ratio
+ * derived from D1's own household-serving data when available, falling back to
+ * the name-keyword guess table (tuned for the hand-curated local "spoonable"
+ * foods) otherwise. Used at every convertAmountToBasisUnit call site so the
+ * add and edit flows never disagree about the same food's conversion. */
+export function resolveVolumeDensity(food: Pick<Food, "name" | "householdServing" | "servingSize">): number {
+  return getPortionDerivedDensity(food) ?? getFoodDensity(food);
+}
+
 export function convertAmountToBasisUnit(
   amount: number,
   amountUnit: AmountUnit,
@@ -1060,6 +1117,7 @@ export function convertAmountToBasisUnit(
 
   const ml =
     amountUnit === "ml" ? amount :
+    amountUnit === "fl oz" ? amount * mlPerFlOz :
     amountUnit === "tbsp" ? amount * mlPerTbsp :
     amountUnit === "tsp" ? amount * mlPerTsp :
     amountUnit === "cup" ? amount * mlPerCup :
@@ -1550,11 +1608,26 @@ export function recipeIngredientSearchTerm(line: string): string {
     .trim();
 }
 
-/** Unit choices for entering an amount of a food, by its measurement type (mirrors the log editor). */
-export function getAmountUnitsForFood(food: Pick<Food, "measurementType">): AmountUnit[] {
-  if (food.measurementType === "liquid") return ["ml", "cup", "tbsp", "tsp", "serving"];
-  if (food.measurementType === "spoonable") return ["g", "oz", "cup", "tbsp", "tsp", "serving"];
-  return ["g", "oz", "cup", "tbsp", "tsp", "serving"];
+/** Which units make sense for entering an amount of this food. Basis unit (g vs
+ * ml, from servingSize) is the primary signal — reliable for every food, local
+ * and D1 alike, unlike measurementType which is only ever set on the 618
+ * hand-curated local foods. Refined by measurementType when a food has one
+ * (trust the curation), and by whether a real per-product volume density is
+ * derivable from D1's own household-serving data (see getPortionDerivedDensity)
+ * — a g-basis food only gets cup/tbsp/tsp tabs when there's a genuine ratio to
+ * convert with, not a generic density-1 guess. fl oz is deliberately left off
+ * the g-basis family: it reads as a liquid-culture unit even when the same
+ * derived density would make it computable. */
+export function getAmountUnitsForFood(
+  food: Pick<Food, "measurementType" | "servingSize" | "householdServing">
+): AmountUnit[] {
+  if (food.measurementType === "liquid") return ["serving", "ml", "fl oz", "cup", "tbsp", "tsp"];
+  if (food.measurementType === "spoonable") return ["serving", "g", "oz", "cup", "tbsp", "tsp"];
+
+  if (getMeasuredServingBasis(food)?.unit === "ml") return ["serving", "ml", "fl oz", "cup", "tbsp", "tsp"];
+
+  if (getPortionDerivedDensity(food) !== null) return ["serving", "g", "oz", "cup", "tbsp", "tsp"];
+  return ["serving", "g", "oz"];
 }
 
 const ingredientUnitMap: Record<string, { unit: AmountUnit; factor: number }> = {
@@ -1614,7 +1687,7 @@ export function ingredientServingsFromAmount(food: Food, amount: number, unit: A
   if (unit === "serving") return amount;
   const basis = getMeasuredServingBasis(food);
   if (!basis || !basis.amount) return null;
-  const inBasis = convertAmountToBasisUnit(amount, unit, basis.unit, getFoodDensity(food));
+  const inBasis = convertAmountToBasisUnit(amount, unit, basis.unit, resolveVolumeDensity(food));
   if (inBasis === null) return null;
   return inBasis / basis.amount;
 }

@@ -11,6 +11,9 @@ import {
   applyTypicalServing,
   convertAmountToBasisUnit,
   getScaleFromServingBasis,
+  getPortionDerivedDensity,
+  resolveVolumeDensity,
+  getAmountUnitsForFood,
   parseIngredientAmount,
   ingredientServingsFromAmount,
   scaleFoodNutrition,
@@ -108,6 +111,17 @@ describe("convertAmountToBasisUnit", () => {
   it("converts weight to an ml basis through density", () => {
     expect(convertAmountToBasisUnit(50, "g", "ml")).toBeCloseTo(50, 8);
     expect(convertAmountToBasisUnit(71, "g", "ml", 1.42)).toBeCloseTo(50, 8);
+  });
+
+  it("converts fl oz to ml exactly, same as the other volume units", () => {
+    expect(convertAmountToBasisUnit(12, "fl oz", "ml")).toBeCloseTo(354.882, 3);
+    expect(convertAmountToBasisUnit(1, "fl oz", "g")).toBeCloseTo(29.5735, 4);
+  });
+
+  it("converts cup/tbsp/tsp to grams through a derived per-food density, not the water default", () => {
+    // Nutella-shaped: 37g = 2 tbsp implies ~1.2333 g/ml for this specific product.
+    const density = 37 / (2 * 15);
+    expect(convertAmountToBasisUnit(0.5, "cup", "g", density)).toBeCloseTo(148, 0);
   });
 });
 
@@ -392,6 +406,119 @@ describe("getFoodSearchServingDisplay — packaged (D1) household serving", () =
 
   it("falls back to oz for the generic 100g/no-household-serving case, instead of the bare '100 g'", () => {
     expect(getFoodSearchServingDisplay({ name: "Some Grocery Item", dataType: "grocery", servingSize: "100 g" })).toBe("3.5 oz");
+  });
+});
+
+describe("getPortionDerivedDensity", () => {
+  it("derives a real per-product density from a genuine volume household serving", () => {
+    const nutellaShaped: Food = {
+      id: 1, name: "Chocolate Spread", brand: "Generic",
+      servingSize: "37 g", householdServing: "2 tbsp", calories: 200, protein: 2, carbs: 22, fat: 11,
+    };
+    expect(getPortionDerivedDensity(nutellaShaped)).toBeCloseTo(37 / 30, 4);
+  });
+
+  it("returns null for a raw gram/ml restatement — nothing to derive", () => {
+    const food: Food = {
+      id: 2, name: "Some Snack", brand: "Generic",
+      servingSize: "85 g", householdServing: "85 g", calories: 400, protein: 5, carbs: 50, fat: 15,
+    };
+    expect(getPortionDerivedDensity(food)).toBeNull();
+  });
+
+  it("returns null for a count-noun household serving — no fixed conversion to derive from", () => {
+    const food: Food = {
+      id: 3, name: "Soup", brand: "Generic",
+      servingSize: "80 g", householdServing: "1 can", calories: 90, protein: 3, carbs: 12, fat: 2,
+    };
+    expect(getPortionDerivedDensity(food)).toBeNull();
+  });
+
+  it("returns null for ml-basis foods — density derivation is a g-basis-only concern", () => {
+    const food: Food = {
+      id: 4, name: "Soda", brand: "Generic",
+      servingSize: "355 ml", householdServing: "12 fl oz", calories: 140, protein: 0, carbs: 39, fat: 0,
+    };
+    expect(getPortionDerivedDensity(food)).toBeNull();
+  });
+
+  it("clamps an implausible derived density instead of trusting a mistyped source row", () => {
+    // 340g labeled as "1 tsp" (5ml) implies ~68 g/ml — six times denser than lead.
+    const badRow: Food = {
+      id: 5, name: "Mislabeled Product", brand: "Generic",
+      servingSize: "340 g", householdServing: "1 tsp", calories: 500, protein: 5, carbs: 50, fat: 30,
+    };
+    expect(getPortionDerivedDensity(badRow)).toBeNull();
+  });
+});
+
+describe("resolveVolumeDensity", () => {
+  it("prefers the portion-derived density over the name-keyword guess when both are available", () => {
+    // "Chocolate Spread" isn't in the keyword table (would default to 1), but has real portion data.
+    const nutellaShaped: Food = {
+      id: 1, name: "Chocolate Spread", brand: "Generic",
+      servingSize: "37 g", householdServing: "2 tbsp", calories: 200, protein: 2, carbs: 22, fat: 11,
+    };
+    expect(resolveVolumeDensity(nutellaShaped)).toBeCloseTo(37 / 30, 4);
+  });
+
+  it("falls back to the name-keyword guess when there's no derivable portion density", () => {
+    const peanutButter: Food = {
+      id: 6, name: "Creamy Peanut Butter", brand: "Generic",
+      servingSize: "32 g", calories: 190, protein: 7, carbs: 8, fat: 16,
+    };
+    expect(resolveVolumeDensity(peanutButter)).toBe(getFoodDensity(peanutButter));
+  });
+
+  it("gives the identical result across repeated calls for the same food — the add/edit consistency guarantee", () => {
+    const nutellaShaped: Food = {
+      id: 1, name: "Chocolate Spread", brand: "Generic",
+      servingSize: "37 g", householdServing: "2 tbsp", calories: 200, protein: 2, carbs: 22, fat: 11,
+    };
+    const addFlowBasisAmount = convertAmountToBasisUnit(0.5, "cup", "g", resolveVolumeDensity(nutellaShaped));
+    const editFlowBasisAmount = convertAmountToBasisUnit(0.5, "cup", "g", resolveVolumeDensity(nutellaShaped));
+    expect(addFlowBasisAmount).toBe(editFlowBasisAmount);
+    expect(addFlowBasisAmount).toBeCloseTo(148, 0);
+  });
+});
+
+describe("getAmountUnitsForFood", () => {
+  it("offers the full volume family for ml-basis foods, always exact regardless of density", () => {
+    const soda: Food = { id: 4, name: "Soda", brand: "Generic", servingSize: "355 ml", calories: 140, protein: 0, carbs: 39, fat: 0 };
+    expect(getAmountUnitsForFood(soda)).toEqual(["serving", "ml", "fl oz", "cup", "tbsp", "tsp"]);
+  });
+
+  it("offers cup/tbsp/tsp (not fl oz) for a g-basis food with a genuine volume household serving", () => {
+    const nutellaShaped: Food = {
+      id: 1, name: "Chocolate Spread", brand: "Generic",
+      servingSize: "37 g", householdServing: "2 tbsp", calories: 200, protein: 2, carbs: 22, fat: 11,
+    };
+    expect(getAmountUnitsForFood(nutellaShaped)).toEqual(["serving", "g", "oz", "cup", "tbsp", "tsp"]);
+  });
+
+  it("offers only serving/g/oz for a g-basis food with no derivable volume density — no fictional tabs", () => {
+    const cannedSoup: Food = {
+      id: 3, name: "Soup", brand: "Generic",
+      servingSize: "80 g", householdServing: "1 can", calories: 90, protein: 3, carbs: 12, fat: 2,
+    };
+    expect(getAmountUnitsForFood(cannedSoup)).toEqual(["serving", "g", "oz"]);
+
+    const noHouseholdServing: Food = { id: 7, name: "Chicken Breast", brand: "Generic", servingSize: "100 g", calories: 165, protein: 31, carbs: 0, fat: 4 };
+    expect(getAmountUnitsForFood(noHouseholdServing)).toEqual(["serving", "g", "oz"]);
+
+    const clampedDensity: Food = {
+      id: 5, name: "Mislabeled Product", brand: "Generic",
+      servingSize: "340 g", householdServing: "1 tsp", calories: 500, protein: 5, carbs: 50, fat: 30,
+    };
+    expect(getAmountUnitsForFood(clampedDensity)).toEqual(["serving", "g", "oz"]);
+  });
+
+  it("honors an explicit measurementType override on hand-curated local foods", () => {
+    const localLiquid: Food = { id: 8, name: "Whole Milk", brand: null, dataType: "local", measurementType: "liquid", servingSize: "100 g", calories: 61, protein: 3.2, carbs: 4.8, fat: 3.3 };
+    expect(getAmountUnitsForFood(localLiquid)).toEqual(["serving", "ml", "fl oz", "cup", "tbsp", "tsp"]);
+
+    const localSpoonable: Food = { id: 9, name: "Peanut Butter", brand: null, dataType: "local", measurementType: "spoonable", servingSize: "100 g", calories: 588, protein: 25, carbs: 20, fat: 50 };
+    expect(getAmountUnitsForFood(localSpoonable)).toEqual(["serving", "g", "oz", "cup", "tbsp", "tsp"]);
   });
 });
 

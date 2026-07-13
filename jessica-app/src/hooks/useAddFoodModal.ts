@@ -10,7 +10,8 @@ import {
   getSearchTypicalServing,
   parseServingSize,
   getMeasuredServingBasis,
-  getFoodDensity,
+  getAmountUnitsForFood,
+  resolveVolumeDensity,
   convertAmountToBasisUnit,
   getScaleFromServingBasis,
   hasUsableSearchNutrition,
@@ -585,7 +586,7 @@ export function useAddFoodModal({
     const measuredBasis = getMeasuredServingBasis(selectedFood);
     const basisAmount =
       measuredBasis && effectiveUnit !== "serving" && Number.isFinite(amount) && amount > 0
-        ? convertAmountToBasisUnit(amount, effectiveUnit, measuredBasis.unit, getFoodDensity(selectedFood))
+        ? convertAmountToBasisUnit(amount, effectiveUnit, measuredBasis.unit, resolveVolumeDensity(selectedFood))
         : null;
     const amountScale =
       selectedFood && effectiveUnit !== "serving" && basisAmount !== null
@@ -660,17 +661,12 @@ export function useAddFoodModal({
   const rawPortionAmount = Number(portionAmount);
   const rawServingQuantity = Number(quantity);
   const measuredServingBasis = selectedFood ? getMeasuredServingBasis(selectedFood) : null;
-  const allowedAmountUnits: AmountUnit[] =
-    selectedFood?.measurementType === "liquid"
-      ? ["serving", "ml", "cup", "tbsp", "tsp"]
-      : selectedFood?.measurementType === "spoonable"
-        ? ["serving", "g", "oz", "tbsp", "tsp"]
-        : ["serving", "g", "oz"];
+  const allowedAmountUnits: AmountUnit[] = selectedFood ? getAmountUnitsForFood(selectedFood) : ["serving", "g", "oz"];
   const portionAmountInBasisUnits =
     amountUnit === "serving"
       ? selectedPortion?.gramWeight ?? rawPortionAmount
       : measuredServingBasis && selectedFood && Number.isFinite(rawPortionAmount) && rawPortionAmount > 0
-        ? convertAmountToBasisUnit(rawPortionAmount, amountUnit, measuredServingBasis.unit, getFoodDensity(selectedFood))
+        ? convertAmountToBasisUnit(rawPortionAmount, amountUnit, measuredServingBasis.unit, resolveVolumeDensity(selectedFood))
         : null;
   const hasValidPortionAmount =
     amountUnit === "serving" && selectedPortion
