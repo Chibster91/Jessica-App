@@ -126,6 +126,53 @@ export function useImportFlow({
     input.click();
   }
 
+  // Trusts the file's own name and nutrition for every item and logs them straight
+  // away, no matching or review screen. Mirrors importAllAsIs but skips resolution
+  // entirely instead of requiring the review popover to open first.
+  async function quickImportFoodLog(file: File | undefined) {
+    setImportStatus("");
+    setImportErrors([]);
+    setImportFileName(file?.name ?? "");
+
+    if (!file) return;
+
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const result = parseFoodLogImportJson(parsed);
+
+      if (result.ok === false) {
+        setImportDrafts([]);
+        setImportErrors(result.errors);
+        return;
+      }
+
+      if (result.items.length === 0 && result.weightEntries.length === 0) {
+        setImportStatus("No food items or weight entries were found in this import.");
+        return;
+      }
+
+      const resolver: ImportFoodBatchResolver = {
+        byDraftId: new Map(
+          result.items.map((item) => [item.id, buildImportFoodFromDraft(item, createNegativeFoodId())])
+        ),
+        addedFoodIds: new Set<number>(),
+      };
+      skipCustomFoodLibraryRef.current = true;
+      finalizeFoodLogImport(resolver, result.items, result.weightEntries);
+    } catch (error) {
+      setImportDrafts([]);
+      setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
+    }
+  }
+
+  function openQuickImportFilePicker() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.onchange = () => quickImportFoodLog(input.files?.[0]);
+    input.click();
+  }
+
   async function loadFoodLogImportText(text: string, fileName: string) {
     try {
       importCandidateCache.clear();
@@ -527,7 +574,11 @@ export function useImportFlow({
     }
   }
 
-  function finalizeFoodLogImport(resolver: ImportFoodBatchResolver, items: FoodLogImportDraft[] = importDrafts) {
+  function finalizeFoodLogImport(
+    resolver: ImportFoodBatchResolver,
+    items: FoodLogImportDraft[] = importDrafts,
+    weightEntries: WeightImportEntry[] = importWeightEntries
+  ) {
     const importedFoods = getResolvedImportedFoods(items, resolver);
     const { nextLogsByDate, foodRemap, importedCount, skippedDuplicates } = applyImportedFoods(importedFoods);
 
@@ -537,8 +588,8 @@ export function useImportFlow({
       setLog(remapLogFoodIds(nextLogsByDate.get(firstDate) ?? getSavedLog(firstDate), foodRemap));
     }
 
-    if (importWeightEntries.length > 0) {
-      const newWeightEntries: WeightEntry[] = importWeightEntries.map((entry) => ({
+    if (weightEntries.length > 0) {
+      const newWeightEntries: WeightEntry[] = weightEntries.map((entry) => ({
         id: createClientId(),
         date: entry.date,
         weight: entry.weightLb,
@@ -549,7 +600,7 @@ export function useImportFlow({
 
     const parts: string[] = [];
     if (importedCount > 0) parts.push(`${importedCount} food${importedCount === 1 ? "" : "s"}`);
-    if (importWeightEntries.length > 0) parts.push(`${importWeightEntries.length} weight entr${importWeightEntries.length === 1 ? "y" : "ies"}`);
+    if (weightEntries.length > 0) parts.push(`${weightEntries.length} weight entr${weightEntries.length === 1 ? "y" : "ies"}`);
     const duplicateNote = skippedDuplicates > 0 ? ` Skipped ${skippedDuplicates} duplicate item${skippedDuplicates === 1 ? "" : "s"} already logged.` : "";
     setImportStatus(parts.length > 0 ? `Imported ${parts.join(" and ")}.${duplicateNote}` : `No new food items were imported.${duplicateNote}`);
     closeImportPreview();
@@ -942,6 +993,7 @@ export function useImportFlow({
     isImportDayOpen,
     setIsImportDayOpen,
     openImportFilePicker,
+    openQuickImportFilePicker,
     loadFoodLogImportText,
     updateImportDraft,
     removeImportDraft,
