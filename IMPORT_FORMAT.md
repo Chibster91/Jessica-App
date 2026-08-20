@@ -4,6 +4,18 @@ This document is a reference for generating valid JSON import files for the Jess
 
 ---
 
+## How to use a file once you have it
+
+1. Save the JSON your Claude chat gives you as a `.json` file.
+2. In the app: **Log → ⋯ → Import**.
+3. Pick one:
+   - **Quick Import (as-is)** — trusts the file's calories/macros exactly as written, skips food matching, and logs everything immediately. No review screen, no confirmation. This is the fastest path and what you'll want most of the time.
+   - **Import from File** — matches each item against your saved foods/database first and shows a review screen so you can approve, swap, or reject matches before anything is logged. Slower, but lets you reuse existing food entries instead of creating a new inline entry every time.
+
+Either way, a bad file (missing date, negative calories, etc.) gets rejected with a specific error instead of logging anything.
+
+---
+
 ## Two formats
 
 ### Single-day (one day per file)
