@@ -148,8 +148,9 @@ export interface LogViewProps {
   exportDriveLink: string;
   downloadDayExport: () => void;
   uploadDayExportToDrive: () => Promise<void>;
-  openDriveImport: () => Promise<void>;
+  openDriveImport: (quick?: boolean) => Promise<void>;
   isLoadingDriveImport: boolean;
+  isQuickDriveImport: boolean;
   isDriveImportOpen: boolean;
   setIsDriveImportOpen: Dispatch<SetStateAction<boolean>>;
   driveImportStatus: string;
@@ -184,7 +185,7 @@ type ImportManualGroupUi = {
 
 export function LogView(props: LogViewProps) {
   const {
-    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, applyAllImportReview, rejectImportReviewItem, expandImportReviewGroup, importAllAsIs, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, openImportFilePicker, openQuickImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
+    goals, totalCalories, dailyTotals, completedDays, selectedDate, moveSelectedDate, changeSelectedDate, importStatus, importErrors, importDrafts, setIsImportDayOpen, setExportStatus, setIsExportPanelOpen, log, logTapProbe, handleFinishToggle, tapProbeProps, setLog, customFoods, setCustomFoods, recipes, setRecipes, recentFoods, setTopFoods, importSteps, importStepIndex, cancelImportStepper, confirmImportStep, skipImportStep, importStepResults, closeImportSummary, importFileName, importWeightEntries, updateImportDraft, removeImportDraft, removeImportWeightEntry, confirmFoodLogImport, importReviewItems, importReviewSelections, importReviewAppliedSelections, importReviewActions, expandedImportReviewGroups, importReviewRememberedRows, importReviewManualTarget, importReviewManualQuery, setImportReviewManualQuery, importReviewManualGroups, isImportReviewManualSearching, unresolvedImportReviewIds, importResolutionProgress, updateImportReviewSelection, applyImportReviewToSimilar, applyAllImportReview, rejectImportReviewItem, expandImportReviewGroup, importAllAsIs, openImportReviewManualSearch, closeImportReviewManualSearch, searchImportReviewManualFoods, selectImportReviewManualFood, confirmImportReview, isResolvingImport, closeImportPreview, isExportPanelOpen, googleDriveClientId, isUploadingToDrive, setGoogleDriveClientId, exportStatus, exportDriveLink, downloadDayExport, uploadDayExportToDrive, isImportDayOpen, openDriveImport, isLoadingDriveImport, isQuickDriveImport, openImportFilePicker, openQuickImportFilePicker, isDriveImportOpen, setIsDriveImportOpen, driveImportStatus, driveImportFiles, importGoogleDriveFile, bottomNav
   } = props;
   const {
     mealCardRefs, longPressRef, suppressNextClickRef, isLogMenuOpen, setIsLogMenuOpen, expandedMeals, toggleMeal,
@@ -1810,6 +1811,7 @@ export function LogView(props: LogViewProps) {
           <div className="floating-popover confirm-modal" role="dialog" aria-modal="true" aria-labelledby="import-day-title" onClick={(e) => e.stopPropagation()}>
             <h2 id="import-day-title">Import Day</h2>
             <p>Load a food log from a saved JSON file.</p>
+            <p className="modal-hint">Review matches before logging:</p>
             <div className="floating-actions">
               <button
                 type="button"
@@ -1825,16 +1827,25 @@ export function LogView(props: LogViewProps) {
               >
                 Import from File
               </button>
+            </div>
+            <p className="modal-hint">
+              Quick Import (as-is) trusts the file's own calories and macros, skips matching, and logs everything immediately &mdash; no review screen:
+            </p>
+            <div className="floating-actions">
+              <button
+                type="button"
+                onClick={() => { setIsImportDayOpen(false); openDriveImport(true); }}
+                disabled={isLoadingDriveImport}
+              >
+                {isLoadingDriveImport ? "Loading..." : "Quick Import from Drive"}
+              </button>
               <button
                 type="button"
                 onClick={() => { setIsImportDayOpen(false); openQuickImportFilePicker(); }}
               >
-                Quick Import (as-is)
+                Quick Import from File
               </button>
             </div>
-            <p className="modal-hint">
-              Quick Import trusts the file's own calories and macros, skips matching, and logs everything immediately &mdash; no review screen.
-            </p>
             <button type="button" className="secondary-button" onClick={() => setIsImportDayOpen(false)}>
               Cancel
             </button>
@@ -1847,8 +1858,12 @@ export function LogView(props: LogViewProps) {
           <div className="floating-popover drive-import-popover" role="dialog" aria-modal="true" aria-labelledby="drive-import-title">
             <div className="import-preview-header">
               <div>
-                <h2 id="drive-import-title">Import from Drive</h2>
-                <p>Select a JSON file available to Jessica.</p>
+                <h2 id="drive-import-title">{isQuickDriveImport ? "Quick Import from Drive" : "Import from Drive"}</h2>
+                <p>
+                  {isQuickDriveImport
+                    ? "Select a JSON file to log as-is, right away — no review screen."
+                    : "Select a JSON file available to Jessica."}
+                </p>
               </div>
               <button
                 type="button"

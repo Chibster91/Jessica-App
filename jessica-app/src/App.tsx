@@ -171,6 +171,7 @@ function App() {
     openImportFilePicker,
     openQuickImportFilePicker,
     loadFoodLogImportText,
+    quickImportFoodLogText,
     updateImportDraft,
     removeImportDraft,
     removeImportWeightEntry,
@@ -220,6 +221,7 @@ function App() {
     isDriveImportOpen,
     setIsDriveImportOpen,
     isLoadingDriveImport,
+    isQuickDriveImport,
     openDriveImport,
     importGoogleDriveFile,
     uploadDayExportToDrive,
@@ -228,6 +230,7 @@ function App() {
     selectedDate,
     getDayExportFile,
     loadFoodLogImportText,
+    quickImportFoodLogText,
   });
 
   useEffect(() => {
@@ -816,6 +819,7 @@ function App() {
         setIsImportDayOpen,
         openDriveImport,
         isLoadingDriveImport,
+        isQuickDriveImport,
         openImportFilePicker,
         openQuickImportFilePicker,
         isDriveImportOpen,

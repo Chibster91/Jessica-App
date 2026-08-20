@@ -422,6 +422,7 @@ export type OAuthPendingAction = {
   clientId: string;
   fileId?: string;
   fileName?: string;
+  quick?: boolean;
   returnView?: AppView;
   returnDate?: string;
   timestamp: number;

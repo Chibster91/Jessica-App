@@ -26,6 +26,7 @@ type UseDriveBackupArgs = {
   selectedDate: string;
   getDayExportFile: () => File;
   loadFoodLogImportText: (text: string, fileName: string) => Promise<void>;
+  quickImportFoodLogText: (text: string, fileName: string) => Promise<void>;
 };
 
 export function useDriveBackup({
@@ -33,6 +34,7 @@ export function useDriveBackup({
   selectedDate,
   getDayExportFile,
   loadFoodLogImportText,
+  quickImportFoodLogText,
 }: UseDriveBackupArgs) {
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
@@ -44,6 +46,7 @@ export function useDriveBackup({
   const [driveImportStatus, setDriveImportStatus] = useState("");
   const [isDriveImportOpen, setIsDriveImportOpen] = useState(false);
   const [isLoadingDriveImport, setIsLoadingDriveImport] = useState(false);
+  const [isQuickDriveImport, setIsQuickDriveImport] = useState(false);
 
   function loadGoogleIdentityScript() {
     if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -78,7 +81,7 @@ export function useDriveBackup({
 
   async function getGoogleDriveAccessToken(
     clientId: string,
-    pendingAction?: Pick<OAuthPendingAction, "action" | "fileId" | "fileName">
+    pendingAction?: Pick<OAuthPendingAction, "action" | "fileId" | "fileName" | "quick">
   ): Promise<string> {
     if (driveToken && driveToken.expiresAt > Date.now()) return driveToken.value;
 
@@ -195,7 +198,7 @@ export function useDriveBackup({
     }
   }
 
-  async function _doImportDriveFile(token: string, fileId: string, fileName: string) {
+  async function _doImportDriveFile(token: string, fileId: string, fileName: string, quick: boolean) {
     setIsLoadingDriveImport(true);
     setDriveImportStatus(`Loading ${fileName}...`);
     try {
@@ -203,7 +206,12 @@ export function useDriveBackup({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) { clearTokenIfUnauthorized(response); throw new Error(await getGoogleDriveRequestError(response, "file download")); }
-      await loadFoodLogImportText(await response.text(), fileName);
+      const text = await response.text();
+      if (quick) {
+        await quickImportFoodLogText(text, fileName);
+      } else {
+        await loadFoodLogImportText(text, fileName);
+      }
       setDriveImportStatus("");
       setIsDriveImportOpen(false);
       setIsExportPanelOpen(false);
@@ -287,11 +295,12 @@ export function useDriveBackup({
       case "import-list":
         setExportDriveLink("");
         setDriveImportFiles([]);
+        setIsQuickDriveImport(pending.quick ?? false);
         await _doOpenDriveImport(token);
         break;
       case "import-file":
         if (pending.fileId && pending.fileName) {
-          await _doImportDriveFile(token, pending.fileId, pending.fileName);
+          await _doImportDriveFile(token, pending.fileId, pending.fileName, pending.quick ?? false);
         }
         break;
       case "export":
@@ -330,16 +339,17 @@ export function useDriveBackup({
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function openDriveImport() {
+  async function openDriveImport(quick = false) {
     if (isLoadingDriveImport) return;
     const clientId = googleDriveClientId.trim();
     setExportDriveLink("");
     setDriveImportFiles([]);
+    setIsQuickDriveImport(quick);
     if (!clientId) { setExportStatus("Add your Google OAuth Client ID first."); return; }
     localStorage.setItem(googleDriveClientIdKey, clientId);
     setDriveImportStatus("Authorizing with Google...");
     try {
-      const token = await getGoogleDriveAccessToken(clientId, { action: "import-list" });
+      const token = await getGoogleDriveAccessToken(clientId, { action: "import-list", quick });
       await _doOpenDriveImport(token);
     } catch (error) {
       setDriveImportStatus(error instanceof Error ? error.message : "Google Drive import failed.");
@@ -352,8 +362,8 @@ export function useDriveBackup({
     const clientId = googleDriveClientId.trim();
     if (!clientId) { setDriveImportStatus("Add your Google OAuth Client ID first."); return; }
     try {
-      const token = await getGoogleDriveAccessToken(clientId, { action: "import-file", fileId: file.id, fileName: file.name });
-      await _doImportDriveFile(token, file.id, file.name);
+      const token = await getGoogleDriveAccessToken(clientId, { action: "import-file", fileId: file.id, fileName: file.name, quick: isQuickDriveImport });
+      await _doImportDriveFile(token, file.id, file.name, isQuickDriveImport);
     } catch (error) {
       setDriveImportStatus(error instanceof Error ? error.message : "Could not import that Google Drive file.");
       setIsLoadingDriveImport(false);
@@ -391,6 +401,7 @@ export function useDriveBackup({
     isDriveImportOpen,
     setIsDriveImportOpen,
     isLoadingDriveImport,
+    isQuickDriveImport,
     openDriveImport,
     importGoogleDriveFile,
     uploadDayExportToDrive,

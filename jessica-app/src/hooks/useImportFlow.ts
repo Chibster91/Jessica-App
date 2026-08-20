@@ -128,16 +128,15 @@ export function useImportFlow({
 
   // Trusts the file's own name and nutrition for every item and logs them straight
   // away, no matching or review screen. Mirrors importAllAsIs but skips resolution
-  // entirely instead of requiring the review popover to open first.
-  async function quickImportFoodLog(file: File | undefined) {
+  // entirely instead of requiring the review popover to open first. Shared by the
+  // local-file picker and the Drive picker, which both just need to hand it text.
+  async function quickImportFoodLogText(text: string, fileName: string) {
     setImportStatus("");
     setImportErrors([]);
-    setImportFileName(file?.name ?? "");
-
-    if (!file) return;
+    setImportFileName(fileName);
 
     try {
-      const parsed = JSON.parse(await file.text()) as unknown;
+      const parsed = JSON.parse(text) as unknown;
       const result = parseFoodLogImportJson(parsed);
 
       if (result.ok === false) {
@@ -163,6 +162,12 @@ export function useImportFlow({
       setImportDrafts([]);
       setImportErrors([`Could not read JSON: ${error instanceof Error ? error.message : String(error)}`]);
     }
+  }
+
+  async function quickImportFoodLog(file: File | undefined) {
+    setImportFileName(file?.name ?? "");
+    if (!file) return;
+    await quickImportFoodLogText(await file.text(), file.name);
   }
 
   function openQuickImportFilePicker() {
@@ -995,6 +1000,7 @@ export function useImportFlow({
     openImportFilePicker,
     openQuickImportFilePicker,
     loadFoodLogImportText,
+    quickImportFoodLogText,
     updateImportDraft,
     removeImportDraft,
     removeImportWeightEntry,
